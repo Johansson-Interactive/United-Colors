@@ -1,4 +1,4 @@
-import { didCollide } from "../../domain/engine/Collision";
+import { circlesOverlap, didCollide } from "../../domain/engine/Collision";
 import { Dot, resetDotIdCounter } from "../../domain/entities/Dot";
 
 describe("Collision", () => {
@@ -36,5 +36,10 @@ describe("Collision", () => {
 		const a = new Dot(10, 10, 0, 0, "#E91E63", 0, 0);
 		const b = new Dot(10, 10, 0, 0, "#2196F3", 0, 0);
 		expect(didCollide(a, b)).toBe(true);
+	});
+
+	it("circlesOverlap matches didCollide from raw centers and sizes", () => {
+		expect(circlesOverlap(100, 100, 50, 150, 100, 50)).toBe(true); // touching
+		expect(circlesOverlap(100, 100, 50, 151, 100, 50)).toBe(false);
 	});
 });
