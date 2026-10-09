@@ -1,5 +1,5 @@
 import { Asset } from "expo-asset";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import type { AudioPort } from "../domain/types";
 
 /** require() result for bundling; we resolve to URI via expo-asset for reliable playback */
