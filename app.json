@@ -17,7 +17,9 @@
 			"bundleIdentifier": "com.unitedcolors.app",
 			"appleTeamId": "LVDUVZJ2U7",
 			"infoPlist": {
-				"ITSAppUsesNonExemptEncryption": false
+				"ITSAppUsesNonExemptEncryption": false,
+				"NSLocalNetworkUsageDescription": "Allow $(PRODUCT_NAME) to connect to the development server on your local network.",
+				"CADisableMinimumFrameDurationOnPhone": true
 			}
 		},
 		"android": {
