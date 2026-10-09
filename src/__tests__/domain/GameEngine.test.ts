@@ -1,4 +1,4 @@
-import { POINT_DOT_VALUE } from "../../domain/constants";
+import { PLAYER_DOT_SPEED_RATIO, POINT_DOT_VALUE } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import { resetDotIdCounter } from "../../domain/entities/Dot";
 
@@ -130,6 +130,117 @@ describe("GameEngine", () => {
 
 			expect(engine.resume()).toBe(true);
 			expect(engine.stateMachine.phase).toBe("RUNNING");
+		});
+	});
+
+	describe("per-frame player movement", () => {
+		it("advancePlayer moves the player from tilt while RUNNING", () => {
+			const engine = createEngine();
+			engine.startGame();
+			const start = engine.getPlayerPosition();
+			engine.onSensorInput(0.5, 0);
+			engine.advancePlayer(16);
+			const moved = engine.getPlayerPosition();
+			expect(moved.x).toBeGreaterThan(start.x);
+			expect(moved.y).toBe(start.y);
+		});
+
+		it("tick does not move the player", () => {
+			const engine = createEngine();
+			engine.startGame();
+			const start = engine.getPlayerPosition();
+			engine.onSensorInput(0.5, 0.5);
+			engine.tick();
+			expect(engine.getPlayerPosition()).toEqual(start);
+		});
+
+		it("advancePlayer is a no-op when not RUNNING", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.pause();
+			const start = engine.getPlayerPosition();
+			engine.onSensorInput(0.5, 0.5);
+			engine.advancePlayer(16);
+			expect(engine.getPlayerPosition()).toEqual(start);
+		});
+
+		it("defaults to legacy speed and dev override applies now and to new games", () => {
+			const engine = createEngine();
+			expect(engine.getPlayerSpeedRatio()).toBeCloseTo(PLAYER_DOT_SPEED_RATIO);
+			engine.setPlayerSpeedPerDegree(10);
+			engine.startGame();
+			const start = engine.getPlayerPosition();
+			engine.onSensorInput((5 * Math.PI) / 180, 0); // 5 degrees
+			engine.advancePlayer(1000);
+			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(50);
+			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(10);
+		});
+	});
+
+	describe("render frame", () => {
+		it("small dot views carry per-tick displacement that matches the next tick", () => {
+			const engine = createEngine();
+			engine.startKiosk();
+			let small = engine.getFrame().dots.find((d) => d.kind === "small");
+			for (let i = 0; i < 500 && !small; i++) {
+				engine.tick();
+				small = engine.getFrame().dots.find((d) => d.kind === "small");
+			}
+			expect(small).toBeDefined();
+			if (!small) return;
+			const before = small;
+			engine.tick();
+			const after = engine.getFrame().dots.find((d) => d.id === before.id);
+			expect(after?.x).toBeCloseTo(before.x + before.vx);
+			expect(after?.y).toBeCloseTo(before.y + before.vy);
+		});
+
+		it("player view has no velocity (moved per frame instead)", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.onSensorInput(0.5, 0.5);
+			const player = engine.getFrame().dots.find((d) => d.kind === "player");
+			expect(player).toMatchObject({ vx: 0, vy: 0 });
+		});
+	});
+
+	describe("per-frame collisions", () => {
+		function startWithSmallDot() {
+			const engine = createEngine();
+			engine.startGame();
+			for (let i = 0; i < 2000; i++) {
+				const small = engine.getFrame().dots.find((d) => d.kind === "small");
+				if (small) return { engine, small };
+				engine.tick();
+			}
+			throw new Error("no small dot spawned");
+		}
+
+		it("collides with a dot at its between-tick position and reports the change", () => {
+			const { engine, small } = startWithSmallDot();
+			const alpha = 0.5;
+			const player = engine.getPlayerPosition();
+			// Move the player exactly onto where the dot is drawn mid-tick
+			engine.onMovementDelta(
+				small.x + small.vx * alpha - player.x,
+				small.y + small.vy * alpha - player.y,
+			);
+			expect(engine.advancePlayer(0, alpha)).toBe(true);
+
+			const frame = engine.getFrame();
+			if (frame.phase === "RUNNING") {
+				expect(frame.score).toBe(1);
+				// Collected dot disappears from the frame right away, not at the next tick
+				expect(frame.dots.find((d) => d.id === small.id)).toBeUndefined();
+			} else {
+				expect(frame.phase).toBe("GAME_OVER");
+			}
+		});
+
+		it("reports no change when nothing is hit", () => {
+			const engine = createEngine();
+			engine.startGame();
+			expect(engine.advancePlayer(16, 0.5)).toBe(false);
 		});
 	});
 });

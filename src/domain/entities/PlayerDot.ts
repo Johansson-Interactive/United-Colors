@@ -6,50 +6,38 @@ import { Dot } from "./Dot";
  * Bounds-clamped so it cannot leave the screen.
  */
 export class PlayerDot extends Dot {
-	private sensorX = 0;
-	private sensorY = 0;
+	private tiltX = 0;
+	private tiltY = 0;
 
+	/** `speed` in px/s per radian of tilt, stored as `velocity` */
 	constructor(x: number, y: number, color: string, size: number, speed: number) {
 		super(x, y, 0, 0, color, size, speed);
 	}
 
-	/** Called when new sensor data arrives (gyro) */
+	/** Called when new sensor data arrives (gyro tilt in radians) */
 	updateOrientation(x: number, y: number): void {
-		this.sensorX = x * this.velocity;
-		this.sensorY = y * this.velocity;
+		this.tiltX = x;
+		this.tiltY = y;
 	}
 
 	/** Apply a one-shot movement in pixels (e.g. touch drag). Clamped to screen bounds. */
 	applyMovementDelta(dx: number, dy: number, screen: ScreenSize): void {
 		const halfSize = this.size / 2;
-		const newX = Math.max(halfSize, Math.min(screen.width - halfSize, this.x + dx));
-		const newY = Math.max(halfSize, Math.min(screen.height - halfSize, this.y + dy));
-		this.x = newX;
-		this.y = newY;
+		this.x = Math.max(halfSize, Math.min(screen.width - halfSize, this.x + dx));
+		this.y = Math.max(halfSize, Math.min(screen.height - halfSize, this.y + dy));
 	}
 
-	/** Move player based on sensor, clamped to screen bounds */
-	updateWithBounds(screen: ScreenSize): void {
-		const newX = this.x + this.sensorX;
-		const newY = this.y + this.sensorY;
-		const halfSize = this.size / 2;
-
-		// Check X bounds
-		if (newX - halfSize < 0 || newX + halfSize > screen.width) {
-			this.sensorX = 0;
-		}
-
-		// Check Y bounds
-		if (newY - halfSize < 0 || newY + halfSize > screen.height) {
-			this.sensorY = 0;
-		}
-
-		this.x += this.sensorX;
-		this.y += this.sensorY;
+	/**
+	 * Move player over `dtMs` of real time. Velocity follows tilt linearly (legacy), applied
+	 * instantly with no threshold, no acceleration and no smoothing.
+	 */
+	advance(dtMs: number, screen: ScreenSize): void {
+		const scale = (this.velocity * dtMs) / 1000;
+		this.applyMovementDelta(this.tiltX * scale, this.tiltY * scale, screen);
 	}
 
-	/** Override base update -- player uses updateWithBounds instead */
+	/** Override base update -- player uses advance instead */
 	override update(_timeStep: number): void {
-		// no-op: player movement is driven by updateWithBounds
+		// no-op: player movement is driven by advance
 	}
 }

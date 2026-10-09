@@ -1,5 +1,6 @@
 import {
 	GAME_COLORS,
+	GAME_HERTZ,
 	PLAYER_DOT_SIZE_RATIO,
 	PLAYER_DOT_SPEED_RATIO,
 	POINT_DOT_VALUE,
@@ -8,9 +9,11 @@ import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
 import type { AudioPort, DotView, RenderFrame, ScreenSize } from "../types";
-import { didCollide } from "./Collision";
+import { circlesOverlap } from "./Collision";
 import { SpawnSystem } from "./SpawnSystem";
 import { StateMachine } from "./StateMachine";
+
+const DEG_TO_RAD = Math.PI / 180;
 
 export interface GameEngineOptions {
 	density: number;
@@ -34,12 +37,17 @@ export class GameEngine {
 	private screen: ScreenSize;
 	private audio?: AudioPort;
 	private random: () => number;
+	/** Player speed in px/s per radian of tilt */
+	private playerSpeed: number;
+	/** Dot radii at the start of the current tick (for DotView.prevRadius) */
+	private prevRadii = new Map<string, number>();
 
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
 		this.screen = options.screen;
 		this.audio = options.audio;
 		this.random = options.random ?? Math.random;
+		this.playerSpeed = PLAYER_DOT_SPEED_RATIO * this.density * GAME_HERTZ;
 		this.stateMachine = new StateMachine("KIOSK");
 		this.spawnSystem = new SpawnSystem(this.random);
 		this.initPlayer();
@@ -84,6 +92,43 @@ export class GameEngine {
 		this.player.updateOrientation(x, y);
 	}
 
+	/** Player speed as PLAYER_DOT_SPEED_RATIO (legacy units: px/tick/rad per density) */
+	getPlayerSpeedRatio(): number {
+		return this.playerSpeed / (this.density * GAME_HERTZ);
+	}
+
+	/** Player speed in px/s per degree of tilt */
+	getPlayerSpeedPerDegree(): number {
+		return this.playerSpeed * DEG_TO_RAD;
+	}
+
+	/** Override player speed in px/s per degree of tilt (dev tuning); applies now and to new games */
+	setPlayerSpeedPerDegree(pxPerSecondPerDegree: number): void {
+		this.playerSpeed = pxPerSecondPerDegree / DEG_TO_RAD;
+		this.player.velocity = this.playerSpeed;
+	}
+
+	/**
+	 * Move the player from current tilt over `dtMs` of real time, then check collisions
+	 * against the other dots where they are at `alpha` (0..1, fraction of a tick elapsed
+	 * since the last tick) -- the same positions the presentation layer draws.
+	 * Called every rendered frame (not at the 30 Hz tick) for direct, low-latency control,
+	 * and so a fast player cannot pass through a dot between ticks.
+	 * No-op when not RUNNING. Returns true when score or phase changed.
+	 */
+	advancePlayer(dtMs: number, alpha = 0): boolean {
+		if (this.stateMachine.phase !== "RUNNING") return false;
+		this.player.advance(dtMs, this.screen);
+		const score = this.score;
+		this.checkCollisions(alpha);
+		return this.score !== score || this.stateMachine.phase !== "RUNNING";
+	}
+
+	/** Current player position (for per-frame rendering outside the RenderFrame) */
+	getPlayerPosition(): { x: number; y: number } {
+		return { x: this.player.x, y: this.player.y };
+	}
+
 	/** Move player by pixel delta (e.g. touch drag). No-op when not RUNNING. */
 	onMovementDelta(dx: number, dy: number): void {
 		if (this.stateMachine.phase !== "RUNNING") return;
@@ -97,6 +142,9 @@ export class GameEngine {
 
 		const isKiosk = phase === "KIOSK";
 		this.timeStep++;
+		// Dots collected between ticks (per-frame collisions) leave before spawn limits apply
+		this.removeFlaggedDots();
+		this.prevRadii = new Map(this.dots.map((d) => [d.id, d.size / 2]));
 
 		// Spawn small dots
 		const newDot = this.spawnSystem.trySpawnSmallDot(
@@ -122,13 +170,9 @@ export class GameEngine {
 			}
 		}
 
-		// Update all dots
+		// Update all dots (player moves per frame via advancePlayer)
 		for (const dot of this.dots) {
-			if (dot instanceof PlayerDot) {
-				dot.updateWithBounds(this.screen);
-			} else {
-				dot.update(this.timeStep);
-			}
+			dot.update(this.timeStep);
 		}
 
 		// Bounce small dots off screen edges
@@ -139,29 +183,32 @@ export class GameEngine {
 
 		// Check collisions (skip in kiosk)
 		if (!isKiosk) {
-			this.checkCollisions();
+			this.checkCollisions(0);
 		}
 
-		// Remove flagged dots
-		this.dots = this.dots.filter((d) => !d.isFlaggedForRemoval);
-
-		// Clean up point dot reference if removed
-		const pd = this.spawnSystem.getPointDot();
-		if (pd?.isFlaggedForRemoval) {
-			this.spawnSystem.clearPointDot();
-		}
+		this.removeFlaggedDots();
 	}
 
 	/** Produce a RenderFrame for the presentation layer */
 	getFrame(): RenderFrame {
-		const dots: DotView[] = this.dots.map((dot) => ({
-			id: dot.id,
-			x: dot.x,
-			y: dot.y,
-			radius: dot.size / 2,
-			color: dot.color,
-			kind: dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small",
-		}));
+		// Skip dots collected between ticks; they are removed at the next tick
+		const dots: DotView[] = this.dots
+			.filter((dot) => !dot.isFlaggedForRemoval)
+			.map((dot) => {
+				const radius = dot.size / 2;
+				return {
+					id: dot.id,
+					x: dot.x,
+					y: dot.y,
+					radius,
+					prevRadius: this.prevRadii.get(dot.id) ?? radius,
+					color: dot.color,
+					kind: dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small",
+					// Matches Dot.update; 0 for the player (moved per frame) and stationary point dots
+					vx: dot instanceof PlayerDot ? 0 : dot.vx * dot.velocity,
+					vy: dot instanceof PlayerDot ? 0 : dot.vy * dot.velocity,
+				};
+			});
 
 		return {
 			phase: this.stateMachine.phase,
@@ -181,7 +228,7 @@ export class GameEngine {
 			this.screen.height / 2,
 			color,
 			PLAYER_DOT_SIZE_RATIO * this.density,
-			PLAYER_DOT_SPEED_RATIO * this.density,
+			this.playerSpeed,
 		);
 	}
 
@@ -195,12 +242,26 @@ export class GameEngine {
 		}
 	}
 
-	private checkCollisions(): void {
+	private removeFlaggedDots(): void {
+		this.dots = this.dots.filter((d) => !d.isFlaggedForRemoval);
+
+		// Clean up point dot reference if removed
+		const pd = this.spawnSystem.getPointDot();
+		if (pd?.isFlaggedForRemoval) {
+			this.spawnSystem.clearPointDot();
+		}
+	}
+
+	/** Player vs other dots, with other dots advanced `alpha` of a tick along their velocity */
+	private checkCollisions(alpha: number): void {
+		const player = this.player;
 		for (const dot of this.dots) {
-			if (dot === this.player) continue;
+			if (dot === player) continue;
 			if (dot.isFlaggedForRemoval) continue;
 
-			if (!didCollide(this.player, dot)) continue;
+			const x = dot.x + dot.vx * dot.velocity * alpha;
+			const y = dot.y + dot.vy * dot.velocity * alpha;
+			if (!circlesOverlap(player.x, player.y, player.size, x, y, dot.size)) continue;
 
 			if (dot instanceof PointDot) {
 				this.score += POINT_DOT_VALUE;

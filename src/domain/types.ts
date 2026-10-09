@@ -20,8 +20,13 @@ export interface DotView {
 	x: number;
 	y: number;
 	radius: number;
+	/** Radius at the previous tick, for render-side interpolation of size animations */
+	prevRadius: number;
 	color: string;
 	kind: "player" | "small" | "point";
+	/** Displacement per simulation tick (px), for render-side extrapolation between ticks */
+	vx: number;
+	vy: number;
 }
 
 /** Complete frame data emitted by the engine for the presentation layer */
