@@ -1,0 +1,37 @@
+onlyBuiltDependencies:
+  - "@biomejs/biome"
+  - "@shopify/react-native-skia"
+  - esbuild
+
+overrides:
+  abab: npm:@socketregistry/abab@^1
+  es-define-property: npm:@socketregistry/es-define-property@^1
+  es-set-tostringtag: npm:@socketregistry/es-set-tostringtag@^1
+  function-bind: npm:@socketregistry/function-bind@^1
+  gopd: npm:@socketregistry/gopd@^1
+  has-symbols: npm:@socketregistry/has-symbols@^1
+  has-tostringtag: npm:@socketregistry/has-tostringtag@^1
+  hasown: npm:@socketregistry/hasown@^1
+  is-core-module: npm:@socketregistry/is-core-module@^1
+  object-assign: npm:@socketregistry/object-assign@^1
+  path-parse: npm:@socketregistry/path-parse@^1
+  querystringify: npm:@socketregistry/querystringify@^1
+  safe-buffer: npm:@socketregistry/safe-buffer@^1
+  safer-buffer: npm:@socketregistry/safer-buffer@^1
+  # Security: patched versions of transitive deps, kept within their current major
+  "@xmldom/xmldom@>=0.8.0 <0.9.0": ^0.8.15
+  "@xmldom/xmldom@>=0.9.0 <0.10.0": ^0.9.12
+  brace-expansion@1: ^1.1.21
+  brace-expansion@2: ^2.1.7
+  brace-expansion@5: ^5.0.12
+  browserslist@4: ^4.28.7
+  compression@1: ^1.8.2
+  fast-uri@3: ^3.1.8
+  js-yaml@3: ^3.15.2
+  js-yaml@4: ^4.3.2
+  nanoid@3: ^3.3.18
+  postcss@8: ^8.5.23
+  shell-quote: ^1.11.0
+  source-map-js@1: ^1.2.2
+  tar@7: ^7.5.21
+  undici@6: ^6.28.1

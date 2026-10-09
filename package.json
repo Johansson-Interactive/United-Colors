@@ -28,7 +28,7 @@
 	"dependencies": {
 		"@react-native-async-storage/async-storage": "^2.2.0",
 		"@shopify/react-native-skia": "2.2.12",
-		"expo": "~54.0.36",
+		"expo": "~54.0.37",
 		"expo-asset": "~12.0.13",
 		"expo-audio": "~1.1.1",
 		"expo-build-properties": "^1.0.10",
@@ -41,18 +41,7 @@
 		"react-native-reanimated": "~4.1.7",
 		"react-native-safe-area-context": "~5.6.2",
 		"react-native-worklets": "0.5.1",
-		"zustand": "^5.0.14"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"@aspect-build/rules_esbuild",
-			"@aspect-build/rules_jest",
-			"@aspect-build/rules_js",
-			"@aspect-build/rules_ts",
-			"@biomejs/biome",
-			"@shopify/react-native-skia",
-			"esbuild"
-		]
+		"zustand": "^5.0.15"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.2",
