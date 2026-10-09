@@ -4,12 +4,17 @@ import type { SensorPort, SensorSample } from "../domain/types";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Provides SensorSample { x, y, timestampMs } from gyroscope rotation rate.
+ * Provides SensorSample { x, y, timestampMs } from gyro-fused device orientation (radians).
  */
 export class DeviceMotionAdapter implements SensorPort {
 	private subscription: Subscription | null = null;
 	private callback: ((sample: SensorSample) => void) | null = null;
-	private updateIntervalMs = 16; // ~60 Hz sensor polling
+	/**
+	 * 0 = as fast as the platform allows. iOS clamps to Core Motion's max (~100 Hz);
+	 * Android dispatches every display frame. A non-zero value on Android (strict `>` vs
+	 * integer ms) skips frames: 16 ms yields ~30-40 Hz on 60/120 Hz displays.
+	 */
+	private updateIntervalMs = 0;
 
 	start(): void {
 		if (this.subscription) return;
