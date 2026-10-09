@@ -244,12 +244,6 @@ export class GameEngine {
 
 	private removeFlaggedDots(): void {
 		this.dots = this.dots.filter((d) => !d.isFlaggedForRemoval);
-
-		// Clean up point dot reference if removed
-		const pd = this.spawnSystem.getPointDot();
-		if (pd?.isFlaggedForRemoval) {
-			this.spawnSystem.clearPointDot();
-		}
 	}
 
 	/** Player vs other dots, with other dots advanced `alpha` of a tick along their velocity */
@@ -267,7 +261,6 @@ export class GameEngine {
 				this.score += POINT_DOT_VALUE;
 				this.switchPlayerColor();
 				(dot as PointDot).forceRemove();
-				this.spawnSystem.onPointDotCollected();
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
 				dot.flagForRemoval();

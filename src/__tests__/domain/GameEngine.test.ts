@@ -1,4 +1,8 @@
-import { PLAYER_DOT_SPEED_RATIO, POINT_DOT_VALUE } from "../../domain/constants";
+import {
+	PLAYER_DOT_SPEED_RATIO,
+	POINT_DOT_TIME_BETWEEN,
+	POINT_DOT_VALUE,
+} from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import { resetDotIdCounter } from "../../domain/entities/Dot";
 
@@ -105,6 +109,34 @@ describe("GameEngine", () => {
 
 			// Can't assert exact numbers with bouncing/removing, but engine should not crash
 			expect(dots2).toBeGreaterThanOrEqual(0);
+		});
+	});
+
+	describe("point dot respawn", () => {
+		it("waits at least half POINT_DOT_TIME_BETWEEN after a point dot leaves", () => {
+			const engine = new GameEngine({
+				density: 100,
+				// Large screen so small dots rarely reach the stationary player
+				screen: { width: 4000, height: 8000 },
+				random: (() => {
+					let n = 0;
+					return () => ((++n * 9301 + 49297) % 233280) / 233280;
+				})(),
+			});
+			engine.startGame();
+			const hasPointDot = () => engine.getFrame().dots.some((d) => d.kind === "point");
+
+			let ticks = 0;
+			while (!hasPointDot() && ticks++ < 1000) engine.tick();
+			expect(hasPointDot()).toBe(true);
+			while (hasPointDot() && ticks++ < 2000) engine.tick();
+			expect(hasPointDot()).toBe(false);
+
+			for (let i = 0; i < POINT_DOT_TIME_BETWEEN / 2 - 1; i++) {
+				engine.tick();
+				expect(hasPointDot()).toBe(false);
+			}
+			expect(engine.stateMachine.phase).toBe("RUNNING");
 		});
 	});
 

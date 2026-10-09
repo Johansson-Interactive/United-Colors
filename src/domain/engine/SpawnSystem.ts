@@ -43,11 +43,6 @@ export class SpawnSystem {
 		return this.pointDot;
 	}
 
-	/** Set pointDot to null when it's been removed from the world */
-	clearPointDot(): void {
-		this.pointDot = null;
-	}
-
 	/**
 	 * Calculate spawn wait time based on difficulty curve.
 	 * Spawn interval decreases linearly from SMALL_DOT_CREATE_INTERVAL to 0.
@@ -83,6 +78,8 @@ export class SpawnSystem {
 	/**
 	 * Try to spawn or manage a point dot.
 	 * Returns new PointDot or null.
+	 * Like legacy mPointDot, the last point dot stays referenced after removal (faded or
+	 * collected) so the respawn wait counts from its removal; it is only cleared on reset.
 	 */
 	trySpawnPointDot(
 		timeStep: number,
@@ -113,11 +110,6 @@ export class SpawnSystem {
 			return this.pointDot;
 		}
 		return null;
-	}
-
-	/** Called when point dot is collected */
-	onPointDotCollected(): void {
-		this.pointDot = null;
 	}
 
 	private createRandomDot(screen: ScreenSize, density: number): Dot {
