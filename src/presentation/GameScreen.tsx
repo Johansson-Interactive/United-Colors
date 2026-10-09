@@ -1,10 +1,13 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import { createGameStore } from "../application/GameStore";
+import { buildScene, type SceneDot } from "../application/renderScene";
 import { handleGameOver } from "../application/useCases/GameOver";
+import { loadSettings } from "../application/useCases/LoadSettings";
 import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
@@ -14,6 +17,7 @@ import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository
 import { AudioService } from "../infrastructure/AudioService";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
+import { DevSpeedTuner } from "./components/DevSpeedTuner";
 import { HUD } from "./components/HUD";
 import { GameCanvas } from "./GameCanvas";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
@@ -36,8 +40,11 @@ type DevControlMode = "gyro" | "touch" | "pending";
 const GYRO_DETECT_MS = 800;
 
 export const GameScreen: React.FC = () => {
-	const frame = useStore(store, (s) => s.frame);
+	// Subscribe to phase/score only: dot positions never go through React
+	const phase = useStore(store, (s) => s.frame.phase);
+	const score = useStore(store, (s) => s.frame.score);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
+	const scene = useSharedValue<SceneDot[]>([]);
 	const engineRef = useRef<GameEngine | null>(null);
 	const clockRef = useRef<FrameClock | null>(null);
 	const kioskInitializedRef = useRef(false);
@@ -59,15 +66,34 @@ export const GameScreen: React.FC = () => {
 		return engineRef.current;
 	}, []);
 
+	/** Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed) */
+	const drawScene = useCallback(
+		(alpha: number) => {
+			scene.value = buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition());
+		},
+		[getEngine, scene],
+	);
+
 	const startClock = useCallback(() => {
 		if (clockRef.current) clockRef.current.stop();
 		const engine = getEngine();
-		clockRef.current = new FrameClock(() => {
-			engine.tick();
-			store.getState().updateFrame(engine.getFrame());
-		});
+		clockRef.current = new FrameClock(
+			() => {
+				engine.tick();
+				store.getState().updateFrame(engine.getFrame());
+			},
+			(dtMs, alpha) => {
+				// Player moves and collides every rendered frame; other dots are extrapolated
+				// between ticks. Drawn on the UI thread from the shared value -- no React render
+				// per frame unless a collision changed score/phase.
+				if (engine.advancePlayer(dtMs, alpha)) {
+					store.getState().updateFrame(engine.getFrame());
+				}
+				drawScene(alpha);
+			},
+		);
 		clockRef.current.start();
-	}, [getEngine]);
+	}, [getEngine, drawScene]);
 
 	const stopClock = useCallback(() => {
 		clockRef.current?.stop();
@@ -82,6 +108,21 @@ export const GameScreen: React.FC = () => {
 	useEffect(() => {
 		audio.setEnabled(soundEnabled);
 	}, [soundEnabled]);
+
+	// Dev only: live speed tuning from the pause menu
+	const [devSpeed, setDevSpeed] = useState(() => getEngine().getPlayerSpeedPerDegree());
+	const handleDevSpeedChange = useCallback(
+		(pxPerSecondPerDegree: number) => {
+			getEngine().setPlayerSpeedPerDegree(pxPerSecondPerDegree);
+			setDevSpeed(pxPerSecondPerDegree);
+		},
+		[getEngine],
+	);
+
+	// Restore persisted settings
+	useEffect(() => {
+		void loadSettings(store, storage);
+	}, []);
 
 	// Setup sensor and audio (await preload so sounds are ready before game starts)
 	useEffect(() => {
@@ -116,12 +157,12 @@ export const GameScreen: React.FC = () => {
 
 	// Watch for game over
 	useEffect(() => {
-		if (frame.phase === "GAME_OVER") {
+		if (phase === "GAME_OVER") {
 			stopClock();
 			sensor.stop();
 			handleGameOver(getEngine(), store, storage);
 		}
-	}, [frame.phase, getEngine, stopClock]);
+	}, [phase, getEngine, stopClock]);
 
 	const handleLayout = useCallback(
 		(size: ScreenSize) => {
@@ -156,7 +197,9 @@ export const GameScreen: React.FC = () => {
 		stopClock();
 		sensor.stop();
 		pauseGame(getEngine(), store);
-	}, [getEngine, stopClock]);
+		// Frozen at tick positions; resume restarts at alpha 0, so no jump
+		drawScene(0);
+	}, [getEngine, stopClock, drawScene]);
 
 	const handleResume = useCallback(() => {
 		resumeGame(getEngine(), store);
@@ -179,16 +222,13 @@ export const GameScreen: React.FC = () => {
 		<View style={styles.container}>
 			<SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
 				<GameCanvas
-					frame={frame}
+					scene={scene}
 					onLayout={handleLayout}
 					onDragDelta={
 						isDev && devControlMode === "touch"
 							? (dx, dy) => {
-									const engine = engineRef.current;
-									if (engine) {
-										engine.onMovementDelta(dx, dy);
-										store.getState().updateFrame(engine.getFrame());
-									}
+									// Rendered on the next frame
+									engineRef.current?.onMovementDelta(dx, dy);
 								}
 							: undefined
 					}
@@ -199,7 +239,7 @@ export const GameScreen: React.FC = () => {
 						<Text style={styles.devBadgeText}>
 							Control:{" "}
 							{devControlMode === "pending"
-								? frame.phase === "RUNNING"
+								? phase === "RUNNING"
 									? "Checking…"
 									: "—"
 								: devControlMode === "gyro"
@@ -209,14 +249,24 @@ export const GameScreen: React.FC = () => {
 					</View>
 				)}
 
-				{frame.phase === "RUNNING" && <HUD score={frame.score} onPause={handlePause} />}
+				{phase === "RUNNING" && <HUD score={score} onPause={handlePause} />}
 
-				{frame.phase === "KIOSK" && <KioskOverlay onStart={handleStart} />}
+				{phase === "KIOSK" && <KioskOverlay onStart={handleStart} />}
 
-				{frame.phase === "PAUSED" && <PauseOverlay onResume={handleResume} />}
+				{phase === "PAUSED" && (
+					<PauseOverlay onResume={handleResume}>
+						{isDev && (
+							<DevSpeedTuner
+								value={devSpeed}
+								ratio={getEngine().getPlayerSpeedRatio()}
+								onChange={handleDevSpeedChange}
+							/>
+						)}
+					</PauseOverlay>
+				)}
 
-				{frame.phase === "GAME_OVER" && (
-					<GameOverOverlay score={frame.score} onRetry={handleRetry} onBack={handleBack} />
+				{phase === "GAME_OVER" && (
+					<GameOverOverlay score={score} onRetry={handleRetry} onBack={handleBack} />
 				)}
 			</SafeAreaView>
 		</View>

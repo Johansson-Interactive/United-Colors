@@ -1,9 +1,13 @@
 import { GAME_HERTZ } from "../domain/constants";
 
+const MAX_UPDATES_PER_FRAME = 5;
+
 /**
- * Fixed-step simulation clock.
- * Drives the game engine at GAME_HERTZ (30 Hz) regardless of render FPS.
- * Will use requestAnimationFrame on the JS thread.
+ * Fixed-step simulation clock on requestAnimationFrame (JS thread).
+ * `onTick` runs at GAME_HERTZ (30 Hz) regardless of render FPS.
+ * `onFrame` runs once per rendered frame after any ticks, with elapsed ms (clamped) and
+ * `alpha` (0..1, fraction of a tick elapsed since the last tick) for latency-critical work
+ * like player movement and between-tick rendering.
  */
 export class FrameClock {
 	private running = false;
@@ -12,7 +16,10 @@ export class FrameClock {
 	private accumulator = 0;
 	private readonly stepMs = 1000 / GAME_HERTZ;
 
-	constructor(private onTick: () => void) {}
+	constructor(
+		private onTick: () => void,
+		private onFrame?: (dtMs: number, alpha: number) => void,
+	) {}
 
 	start(): void {
 		if (this.running) return;
@@ -39,9 +46,8 @@ export class FrameClock {
 		this.accumulator += dt;
 
 		let updates = 0;
-		const maxUpdates = 5;
 
-		while (this.accumulator >= this.stepMs && updates < maxUpdates) {
+		while (this.accumulator >= this.stepMs && updates < MAX_UPDATES_PER_FRAME) {
 			this.onTick();
 			this.accumulator -= this.stepMs;
 			updates++;
@@ -51,6 +57,11 @@ export class FrameClock {
 		if (this.accumulator > this.stepMs) {
 			this.accumulator = this.stepMs;
 		}
+
+		this.onFrame?.(
+			Math.min(dt, this.stepMs * MAX_UPDATES_PER_FRAME),
+			Math.min(this.accumulator / this.stepMs, 1),
+		);
 
 		this.rafId = requestAnimationFrame(this.loop);
 	};

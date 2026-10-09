@@ -1,36 +1,30 @@
-import { Canvas, Circle, Group, RadialGradient, vec } from "@shopify/react-native-skia";
-import React, { useCallback, useMemo, useRef } from "react";
+import { Canvas, createPicture, Picture, Skia, TileMode, vec } from "@shopify/react-native-skia";
+import type React from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { type LayoutChangeEvent, PanResponder, StyleSheet, View } from "react-native";
-import type { DotView, RenderFrame, ScreenSize } from "../domain/types";
+import { type SharedValue, useDerivedValue } from "react-native-reanimated";
+import type { SceneDot } from "../application/renderScene";
+import type { ScreenSize } from "../domain/types";
 
 interface GameCanvasProps {
-	frame: RenderFrame;
+	/** All dots to draw this frame (player last), written every frame by the frame clock */
+	scene: SharedValue<SceneDot[]>;
 	onLayout: (size: ScreenSize) => void;
 	/** When set (e.g. __DEV__), drag gestures report (dx, dy) for player control */
 	onDragDelta?: (dx: number, dy: number) => void;
 }
 
 const DOT_GLARE_INNER_OPACITY = 0.6;
-
-const DotCircle: React.FC<{ dot: DotView }> = React.memo(({ dot }) => (
-	<Group>
-		<Circle cx={dot.x} cy={dot.y} r={dot.radius} color={dot.color} />
-		<Circle cx={dot.x} cy={dot.y} r={dot.radius * 0.7} opacity={DOT_GLARE_INNER_OPACITY}>
-			<RadialGradient
-				c={vec(dot.x - dot.radius * 0.25, dot.y - dot.radius * 0.25)}
-				r={dot.radius * 0.7}
-				colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
-			/>
-		</Circle>
-	</Group>
-));
+/** Glare circle radius and gradient center, relative to a unit-radius dot */
+const GLARE_RADIUS = 0.7;
+const GLARE_OFFSET = -0.25;
 
 /**
- * Skia-based game canvas that renders all dots from a RenderFrame.
- * Each dot is a Circle with a RadialGradient glare overlay.
- * Player dot is rendered last (on top).
+ * Skia-based game canvas. The whole scene is recorded into one Picture on the UI thread
+ * every frame from the `scene` shared value -- no React reconciliation per frame.
+ * Each dot is a filled circle with a radial-gradient glare overlay.
  */
-export const GameCanvas: React.FC<GameCanvasProps> = ({ frame, onLayout, onDragDelta }) => {
+export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, onDragDelta }) => {
 	const handleLayout = useCallback(
 		(event: LayoutChangeEvent) => {
 			const { width, height } = event.nativeEvent.layout;
@@ -66,17 +60,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ frame, onLayout, onDragD
 		[onDragDelta],
 	);
 
-	// Separate player from other dots so player renders on top
-	const otherDots: DotView[] = [];
-	let playerDot: DotView | null = null;
-
-	for (const dot of frame.dots) {
-		if (dot.kind === "player") {
-			playerDot = dot;
-		} else {
-			otherDots.push(dot);
-		}
-	}
+	const picture = useDerivedValue(() =>
+		createPicture((canvas) => {
+			const fill = Skia.Paint();
+			fill.setAntiAlias(true);
+			// One unit-space glare shader, scaled per dot via the canvas transform
+			const glare = Skia.Paint();
+			glare.setAntiAlias(true);
+			glare.setAlphaf(DOT_GLARE_INNER_OPACITY);
+			glare.setShader(
+				Skia.Shader.MakeRadialGradient(
+					vec(GLARE_OFFSET, GLARE_OFFSET),
+					GLARE_RADIUS,
+					[Skia.Color("rgba(255,255,255,0.5)"), Skia.Color("rgba(255,255,255,0)")],
+					null,
+					TileMode.Clamp,
+				),
+			);
+			for (const dot of scene.value) {
+				if (dot.radius <= 0) continue;
+				fill.setColor(Skia.Color(dot.color));
+				canvas.drawCircle(dot.x, dot.y, dot.radius, fill);
+				canvas.save();
+				canvas.translate(dot.x, dot.y);
+				canvas.scale(dot.radius, dot.radius);
+				canvas.drawCircle(0, 0, GLARE_RADIUS, glare);
+				canvas.restore();
+			}
+		}),
+	);
 
 	// When using drag, Canvas must not capture touches so the container gets them
 	const canvasPointerEvents = onDragDelta ? "none" : "auto";
@@ -84,16 +96,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ frame, onLayout, onDragD
 	return (
 		<View style={styles.container} onLayout={handleLayout} {...(panResponder?.panHandlers ?? {})}>
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents={canvasPointerEvents}>
-				<Group>
-					{otherDots.map((dot) => (
-						<DotCircle key={dot.id} dot={dot} />
-					))}
-				</Group>
-				{playerDot && (
-					<Group>
-						<DotCircle dot={playerDot} />
-					</Group>
-				)}
+				<Picture picture={picture} />
 			</Canvas>
 		</View>
 	);
