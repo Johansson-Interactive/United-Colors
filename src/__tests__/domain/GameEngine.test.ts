@@ -145,6 +145,35 @@ describe("GameEngine", () => {
 		});
 	});
 
+	describe("edge bounce", () => {
+		it("a dot spawned overlapping an edge heads back in instead of juddering along it", () => {
+			resetDotIdCounter();
+			const screen = { width: 400, height: 800 };
+			// Player colour (constructor, startKiosk), then a left-edge spawn low enough to
+			// overlap the bottom edge, heading almost straight along it (tiny upward component)
+			const script = [0.5, 0.5, 0, 0.999, 0.99];
+			const engine = new GameEngine({
+				density: 100,
+				screen,
+				random: () => script.shift() ?? 0.5,
+			});
+			engine.startKiosk();
+
+			const small = () => engine.getFrame().dots.find((d) => d.kind === "small");
+			while (!small()) engine.tick();
+			const spawned = small();
+			expect(spawned && spawned.y + spawned.radius).toBeGreaterThan(screen.height);
+
+			for (let i = 0; i < 300; i++) {
+				engine.tick();
+				const dot = small();
+				if (dot && dot.y + dot.radius > screen.height) expect(dot.vy).toBeLessThan(0);
+			}
+			const dot = small();
+			expect(dot && dot.y + dot.radius).toBeLessThanOrEqual(screen.height);
+		});
+	});
+
 	describe("spawn difficulty progression", () => {
 		it("spawn wait time decreases over time", () => {
 			const engine = createEngine();

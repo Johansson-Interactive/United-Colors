@@ -230,14 +230,17 @@ export class GameEngine {
 		);
 	}
 
+	/**
+	 * Point a dot past an edge back inward. Setting the sign (not flipping it) keeps a dot
+	 * that is still past the edge next tick -- e.g. spawned overlapping it -- from
+	 * reversing every tick and juddering along the edge.
+	 */
 	private bounceOffEdges(dot: Dot): void {
 		const halfSize = dot.size / 2;
-		if (dot.x - halfSize < 0 || dot.x + halfSize > this.screen.width) {
-			dot.vx *= -1;
-		}
-		if (dot.y - halfSize < 0 || dot.y + halfSize > this.screen.height) {
-			dot.vy *= -1;
-		}
+		if (dot.x - halfSize < 0) dot.vx = Math.abs(dot.vx);
+		else if (dot.x + halfSize > this.screen.width) dot.vx = -Math.abs(dot.vx);
+		if (dot.y - halfSize < 0) dot.vy = Math.abs(dot.vy);
+		else if (dot.y + halfSize > this.screen.height) dot.vy = -Math.abs(dot.vy);
 	}
 
 	private removeFlaggedDots(): void {
