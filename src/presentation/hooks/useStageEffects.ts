@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
 	useAnimatedStyle,
 	useSharedValue,
@@ -6,7 +6,7 @@ import {
 	withSequence,
 	withTiming,
 } from "react-native-reanimated";
-import type { GameStore } from "../../application/GameStore";
+import type { GameStore, GameStoreState } from "../../application/GameStore";
 import type { GameEngine } from "../../domain/engine/GameEngine";
 import type { GamePhase } from "../../domain/types";
 import { BURST_LIFETIME_MS, type Burst, type BurstInput } from "../effects/Bursts";
@@ -53,30 +53,33 @@ export function useStageEffects(
 	}, []);
 
 	// Score pops and rings where things happen; shake on the final hit
-	useEffect(() => {
-		return store.subscribe((state, previous) => {
-			const delta = state.frame.score - previous.frame.score;
-			const player = state.frame.dots.find((d) => d.kind === "player");
-			if (delta > 0 && state.frame.phase === "RUNNING" && player) {
-				const pos = getEngine().getPlayerPosition();
-				addBurst({ kind: "pop", x: pos.x, y: pos.y, text: `+${delta}`, color: player.color });
-				if (delta >= 5) {
-					addBurst({ kind: "ring", x: pos.x, y: pos.y, color: player.color, size: 80 });
-				}
+	const handleStoreChange = useEffectEvent((state: GameStoreState, previous: GameStoreState) => {
+		const delta = state.frame.score - previous.frame.score;
+		const player = state.frame.dots.find((d) => d.kind === "player");
+		if (delta > 0 && state.frame.phase === "RUNNING" && player) {
+			const pos = getEngine().getPlayerPosition();
+			addBurst({ kind: "pop", x: pos.x, y: pos.y, text: `+${delta}`, color: player.color });
+			if (delta >= 5) {
+				addBurst({ kind: "ring", x: pos.x, y: pos.y, color: player.color, size: 80 });
 			}
-			if (state.frame.phase === "GAME_OVER" && previous.frame.phase !== "GAME_OVER") {
-				const pos = getEngine().getPlayerPosition();
-				addBurst({ kind: "ring", x: pos.x, y: pos.y, color: WHITE, size: 90 });
-				shake.value = withSequence(
-					withTiming(-10, { duration: 40 }),
-					withTiming(9, { duration: 50 }),
-					withTiming(-6, { duration: 50 }),
-					withTiming(3, { duration: 50 }),
-					withTiming(0, { duration: 60 }),
-				);
-			}
-		});
-	}, [store, getEngine, addBurst, shake]);
+		}
+		if (state.frame.phase === "GAME_OVER" && previous.frame.phase !== "GAME_OVER") {
+			const pos = getEngine().getPlayerPosition();
+			addBurst({ kind: "ring", x: pos.x, y: pos.y, color: WHITE, size: 90 });
+			shake.value = withSequence(
+				withTiming(-10, { duration: 40 }),
+				withTiming(9, { duration: 50 }),
+				withTiming(-6, { duration: 50 }),
+				withTiming(3, { duration: 50 }),
+				withTiming(0, { duration: 60 }),
+			);
+		}
+	});
+	// Reads the latest engine getter without resubscribing when it changes
+	useEffect(
+		() => store.subscribe((state, previous) => handleStoreChange(state, previous)),
+		[store],
+	);
 
 	const shakeStyle = useAnimatedStyle(() => ({
 		transform: [{ translateX: shake.value }],
