@@ -16,7 +16,13 @@ function memoryStorage(initial: GameSettings): StoragePort {
 	};
 }
 
-const UNSET: GameSettings = { soundEnabled: true, gyroSensitivity: 1, tiltZero: null };
+const UNSET: GameSettings = {
+	soundEnabled: true,
+	musicEnabled: true,
+	gyroSensitivity: 1,
+	tiltZero: null,
+	tiltZeroDown: null,
+};
 
 describe("tilt zero", () => {
 	it("calibrateTilt stores the pose and keeps the other settings", async () => {
@@ -26,9 +32,23 @@ describe("tilt zero", () => {
 		await calibrateTilt({ x: 0.5, y: -0.3 }, store, storage);
 		expect(store.getState().settings).toEqual({
 			soundEnabled: false,
+			musicEnabled: true,
 			gyroSensitivity: 1,
 			tiltZero: { x: 0.5, y: -0.3 },
+			tiltZeroDown: null,
 		});
+	});
+
+	it("a pose set screen down is kept apart from the screen-up one", async () => {
+		const store = createGameStore();
+		const storage = memoryStorage(UNSET);
+		await calibrateTilt({ x: 0.5, y: -0.3 }, store, storage);
+		await calibrateTilt({ x: 0.1, y: 0.2 }, store, storage, true);
+		expect(store.getState().settings.tiltZero).toEqual({ x: 0.5, y: -0.3 });
+		expect(store.getState().settings.tiltZeroDown).toEqual({ x: 0.1, y: 0.2 });
+		const reloaded = createGameStore();
+		await loadSettings(reloaded, storage);
+		expect(reloaded.getState().settings.tiltZeroDown).toEqual({ x: 0.1, y: 0.2 });
 	});
 
 	it("the pose survives a reload", async () => {
@@ -41,14 +61,22 @@ describe("tilt zero", () => {
 
 	it("bindTiltZero applies the current pose at once and again when it changes", async () => {
 		const store = createGameStore();
-		const seen: (TiltZero | null)[] = [];
-		const unbind = bindTiltZero(store, (zero) => seen.push(zero));
-		expect(seen).toEqual([null]);
+		const seen: [TiltZero | null, TiltZero | null][] = [];
+		const unbind = bindTiltZero(store, (zero, zeroDown) => seen.push([zero, zeroDown]));
+		expect(seen).toEqual([[null, null]]);
 		await calibrateTilt({ x: 0.1, y: 0.2 }, store, memoryStorage(UNSET));
 		store.getState().updateSettings({ soundEnabled: false });
-		expect(seen).toEqual([null, { x: 0.1, y: 0.2 }]);
+		await calibrateTilt({ x: 0.3, y: 0.4 }, store, memoryStorage(UNSET), true);
+		expect(seen).toEqual([
+			[null, null],
+			[{ x: 0.1, y: 0.2 }, null],
+			[
+				{ x: 0.1, y: 0.2 },
+				{ x: 0.3, y: 0.4 },
+			],
+		]);
 		unbind();
-		await calibrateTilt({ x: 0.3, y: 0.4 }, store, memoryStorage(UNSET));
-		expect(seen).toHaveLength(2);
+		await calibrateTilt({ x: 0.5, y: 0.6 }, store, memoryStorage(UNSET));
+		expect(seen).toHaveLength(3);
 	});
 });
