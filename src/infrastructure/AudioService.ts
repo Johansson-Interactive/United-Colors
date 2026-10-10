@@ -45,7 +45,8 @@ export class AudioService implements GameAudio {
 	private effects: Partial<Record<SoundName, SoundEffect>> = {};
 	private music: MusicChannel | null = null;
 	private musicCue: MusicCue = { track: null, volume: 0 };
-	private muted = false;
+	private effectsMuted = false;
+	private musicMuted = false;
 	private loading: Promise<void> | null = null;
 	/** Bumped on dispose so a load still in flight knows its results are stale */
 	private generation = 0;
@@ -81,9 +82,13 @@ export class AudioService implements GameAudio {
 		this.music?.setCue(cue);
 	}
 
-	setMuted(muted: boolean): void {
-		this.muted = muted;
+	setEffectsMuted(muted: boolean): void {
+		this.effectsMuted = muted;
 		for (const effect of Object.values(this.effects)) effect.setMuted(muted);
+	}
+
+	setMusicMuted(muted: boolean): void {
+		this.musicMuted = muted;
 		this.music?.setMuted(muted);
 	}
 
@@ -101,7 +106,7 @@ export class AudioService implements GameAudio {
 		const loops: Loop[] = [];
 		try {
 			// Effects and music mix with the player's own music rather than taking audio focus
-			// (Android) or stopping it (iOS); the in-game sound toggle silences both
+			// (Android) or stopping it (iOS); the in-game toggles silence each
 			await setAudioModeAsync({
 				playsInSilentMode: true,
 				shouldPlayInBackground: false,
@@ -126,8 +131,8 @@ export class AudioService implements GameAudio {
 			});
 			const music = new MusicChannel(byTrack as Record<MusicTrack, Loop>);
 
-			for (const effect of Object.values(created)) effect.setMuted(this.muted);
-			music.setMuted(this.muted);
+			for (const effect of Object.values(created)) effect.setMuted(this.effectsMuted);
+			music.setMuted(this.musicMuted);
 			music.setCue(this.musicCue);
 			this.effects = created;
 			this.music = music;

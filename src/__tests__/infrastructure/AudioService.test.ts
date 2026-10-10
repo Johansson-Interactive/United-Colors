@@ -79,8 +79,8 @@ describe("AudioService", () => {
 	it("plays both effects after an off/on toggle", async () => {
 		const audio = new AudioService(sources, music);
 		await audio.load();
-		audio.setMuted(true);
-		audio.setMuted(false);
+		audio.setEffectsMuted(true);
+		audio.setEffectsMuted(false);
 		audio.playCollect();
 		audio.playPointSpawn();
 		await flush();
@@ -91,7 +91,7 @@ describe("AudioService", () => {
 	it("applies a mute set before loading finished", async () => {
 		const audio = new AudioService(sources, music);
 		const loading = audio.load();
-		audio.setMuted(true);
+		audio.setEffectsMuted(true);
 		await loading;
 		audio.playCollect();
 		await flush();
@@ -135,7 +135,7 @@ describe("AudioService", () => {
 			vi.advanceTimersByTime(2000);
 			expect(loop?.volume).toBe(0.5);
 
-			audio.setMuted(true);
+			audio.setMusicMuted(true);
 			expect(loop?.pause).toHaveBeenCalled();
 			expect(loop?.volume).toBe(0);
 		} finally {
@@ -145,10 +145,30 @@ describe("AudioService", () => {
 
 	it("keeps music silent when muted before loading", async () => {
 		const audio = new AudioService(sources, music);
-		audio.setMuted(true);
+		audio.setMusicMuted(true);
 		audio.setMusic({ track: "game", volume: 1 });
 		await audio.load();
 		expect(players.every((p) => p.play.mock.calls.length === 0)).toBe(true);
+	});
+
+	it("mutes effects and music independently", async () => {
+		const audio = new AudioService(sources, music);
+		audio.setMusic({ track: "menu", volume: 0.5 });
+		audio.setEffectsMuted(true);
+		await audio.load();
+		audio.playCollect();
+		await flush();
+		expect(players.slice(0, EFFECT_PLAYERS).every((p) => p.play.mock.calls.length === 0)).toBe(
+			true,
+		);
+		expect(menuLoop()?.play).toHaveBeenCalledTimes(1);
+
+		audio.setEffectsMuted(false);
+		audio.setMusicMuted(true);
+		audio.playCollect();
+		await flush();
+		expect(players.slice(0, EFFECT_PLAYERS).some((p) => p.play.mock.calls.length > 0)).toBe(true);
+		expect(menuLoop()?.pause).toHaveBeenCalled();
 	});
 
 	it("plays the game-over stinger as an effect", async () => {

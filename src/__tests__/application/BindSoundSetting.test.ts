@@ -3,7 +3,7 @@ import { createGameStore } from "../../application/GameStore";
 import { bindSoundSetting } from "../../application/useCases/BindSoundSetting";
 
 function fakeAudio() {
-	const muted: boolean[] = [];
+	const calls: string[] = [];
 	const audio: GameAudio = {
 		load: async () => {},
 		dispose: () => {},
@@ -12,44 +12,49 @@ function fakeAudio() {
 		playPointSpawn: () => {},
 		playGameOver: () => {},
 		setMusic: () => {},
-		setMuted: (value) => muted.push(value),
+		setEffectsMuted: (muted) => calls.push(`effects:${muted}`),
+		setMusicMuted: (muted) => calls.push(`music:${muted}`),
 	};
-	return { audio, muted };
+	return { audio, calls };
 }
 
 describe("bindSoundSetting", () => {
-	it("applies the current setting immediately", () => {
+	it("applies the current settings immediately", () => {
 		const store = createGameStore();
 		store.getState().updateSettings({ soundEnabled: false });
-		const { audio, muted } = fakeAudio();
+		const { audio, calls } = fakeAudio();
 		bindSoundSetting(store, audio);
-		expect(muted).toEqual([true]);
+		expect(calls).toEqual(["effects:true", "music:false"]);
 	});
 
-	it("follows every off/on toggle", () => {
+	it("follows each switch on its own", () => {
 		const store = createGameStore();
-		const { audio, muted } = fakeAudio();
+		const { audio, calls } = fakeAudio();
 		bindSoundSetting(store, audio);
+		calls.length = 0;
 		store.getState().updateSettings({ soundEnabled: false });
+		store.getState().updateSettings({ musicEnabled: false });
 		store.getState().updateSettings({ soundEnabled: true });
-		expect(muted).toEqual([false, true, false]);
+		expect(calls).toEqual(["effects:true", "music:true", "effects:false"]);
 	});
 
 	it("ignores unrelated store updates", () => {
 		const store = createGameStore();
-		const { audio, muted } = fakeAudio();
+		const { audio, calls } = fakeAudio();
 		bindSoundSetting(store, audio);
+		calls.length = 0;
 		store.getState().setHighScore(10);
 		store.getState().updateSettings({ gyroSensitivity: 2, tiltZero: null });
-		expect(muted).toEqual([false]);
+		expect(calls).toEqual([]);
 	});
 
 	it("stops following after unsubscribe", () => {
 		const store = createGameStore();
-		const { audio, muted } = fakeAudio();
+		const { audio, calls } = fakeAudio();
 		const unbind = bindSoundSetting(store, audio);
 		unbind();
-		store.getState().updateSettings({ soundEnabled: false });
-		expect(muted).toEqual([false]);
+		calls.length = 0;
+		store.getState().updateSettings({ soundEnabled: false, musicEnabled: false });
+		expect(calls).toEqual([]);
 	});
 });

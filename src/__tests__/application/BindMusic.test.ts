@@ -12,7 +12,8 @@ function fakeAudio() {
 		playPointSpawn: () => {},
 		playGameOver: () => calls.push("gameOver"),
 		setMusic: (cue) => calls.push(cue),
-		setMuted: () => {},
+		setEffectsMuted: () => {},
+		setMusicMuted: () => {},
 	};
 	return { audio, calls };
 }

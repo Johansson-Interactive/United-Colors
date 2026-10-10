@@ -16,8 +16,10 @@ export interface MusicCue {
 export interface GameAudio extends AudioPort {
 	/** Load sounds; safe to call repeatedly and again after dispose */
 	load(): Promise<void>;
-	/** Muting stops anything already playing and silences later plays, music included */
-	setMuted(muted: boolean): void;
+	/** Muting effects stops any already playing and silences later plays */
+	setEffectsMuted(muted: boolean): void;
+	/** Muting music stops the loops; unmuting resumes the current cue */
+	setMusicMuted(muted: boolean): void;
 	/** Fade the music towards a cue; a cue set before loading finishes applies once loaded */
 	setMusic(cue: MusicCue): void;
 	/** One-shot stinger when a run ends */

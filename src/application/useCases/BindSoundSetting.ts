@@ -1,12 +1,17 @@
 import type { GameAudio } from "../GameAudio";
 import type { GameStore } from "../GameStore";
 
-/** Keep audio muting in step with the sound setting; returns the unsubscribe */
+/** Keep effect and music muting in step with their settings; returns the unsubscribe */
 export function bindSoundSetting(store: GameStore, audio: GameAudio): () => void {
-	audio.setMuted(!store.getState().settings.soundEnabled);
+	const { soundEnabled, musicEnabled } = store.getState().settings;
+	audio.setEffectsMuted(!soundEnabled);
+	audio.setMusicMuted(!musicEnabled);
 	return store.subscribe((state, previous) => {
 		if (state.settings.soundEnabled !== previous.settings.soundEnabled) {
-			audio.setMuted(!state.settings.soundEnabled);
+			audio.setEffectsMuted(!state.settings.soundEnabled);
+		}
+		if (state.settings.musicEnabled !== previous.settings.musicEnabled) {
+			audio.setMusicMuted(!state.settings.musicEnabled);
 		}
 	});
 }
