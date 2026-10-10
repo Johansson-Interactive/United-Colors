@@ -1,12 +1,13 @@
 import { createGameStore } from "../../application/GameStore";
+import { loadHighScore } from "../../application/useCases/LoadHighScore";
 import { loadSettings } from "../../application/useCases/LoadSettings";
 import { updateSettings } from "../../application/useCases/UpdateSettings";
 import type { GameSettings, StoragePort } from "../../domain/types";
 
-function memoryStorage(initial: GameSettings): StoragePort {
+function memoryStorage(initial: GameSettings, highScore = 0): StoragePort {
 	let settings = initial;
 	return {
-		loadHighScore: async () => 0,
+		loadHighScore: async () => highScore,
 		saveHighScore: async () => {},
 		loadSettings: async () => settings,
 		saveSettings: async (s) => {
@@ -28,5 +29,11 @@ describe("settings use cases", () => {
 		const store = createGameStore();
 		await loadSettings(store, storage);
 		expect(store.getState().settings.gyroSensitivity).toBe(2);
+	});
+
+	it("loadHighScore restores the persisted best into the store", async () => {
+		const store = createGameStore();
+		await loadHighScore(store, memoryStorage({ soundEnabled: true, gyroSensitivity: 1 }, 42));
+		expect(store.getState().highScore).toBe(42);
 	});
 });
