@@ -6,6 +6,7 @@ import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { LevelGate } from "../components/LevelGate";
+import { SoundMenu } from "../components/SoundMenu";
 import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
 import type { LevelGatePhase } from "../tilt/levelGate";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
@@ -18,7 +19,9 @@ interface PauseOverlayProps {
 	/** Open the settle bowl to set the level pose again */
 	onCalibrate: () => void;
 	soundEnabled: boolean;
+	musicEnabled: boolean;
 	onToggleSound: () => void;
+	onToggleMusic: () => void;
 	/** Extra content below the controls (e.g. dev tools) */
 	children?: React.ReactNode;
 }
@@ -34,7 +37,9 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	onQuit,
 	onCalibrate,
 	soundEnabled,
+	musicEnabled,
 	onToggleSound,
+	onToggleMusic,
 	children,
 }) => {
 	const tiltAvailable = useTiltAvailable();
@@ -88,22 +93,19 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				/>
 			</View>
 
-			<View style={styles.sound}>
-				<IconDot
-					size={44}
-					icon={soundEnabled ? "sound-on" : "sound-off"}
-					onPress={onToggleSound}
-					accessibilityLabel={soundEnabled ? "Mute sound" : "Unmute sound"}
-					color={soundEnabled ? WHITE : "rgba(244,246,251,0.45)"}
-				/>
-			</View>
+			<SoundMenu
+				soundEnabled={soundEnabled}
+				musicEnabled={musicEnabled}
+				onToggleSound={onToggleSound}
+				onToggleMusic={onToggleMusic}
+			/>
 		</Animated.View>
 	);
 };
 
 const styles = StyleSheet.create({
 	container: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	top: {
 		alignItems: "center",
@@ -130,11 +132,6 @@ const styles = StyleSheet.create({
 	level: {
 		position: "absolute",
 		left: 20,
-		bottom: 26,
-	},
-	sound: {
-		position: "absolute",
-		right: 20,
 		bottom: 26,
 	},
 });

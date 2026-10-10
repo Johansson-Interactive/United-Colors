@@ -74,6 +74,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const score = useStore(store, (s) => s.frame.score);
 	const highScore = useStore(store, (s) => s.highScore);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
+	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
 	const playerColor = useStore(
 		store,
 		(s) => s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE,
@@ -325,6 +326,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		const settings = store.getState().settings;
 		void updateSettings({ ...settings, soundEnabled: !settings.soundEnabled }, store, storage);
 	}, []);
+	const handleToggleMusic = useCallback(() => {
+		const settings = store.getState().settings;
+		void updateSettings({ ...settings, musicEnabled: !settings.musicEnabled }, store, storage);
+	}, []);
 
 	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
 	// runs under the home indicator, as before; the interface layer also respects the bottom
@@ -368,9 +373,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 						<KioskOverlay
 							highScore={highScore}
 							soundEnabled={soundEnabled}
+							musicEnabled={musicEnabled}
 							onStart={handleStartPress}
 							onCalibrate={handleMenuCalibratePress}
 							onToggleSound={handleToggleSound}
+							onToggleMusic={handleToggleMusic}
 						/>
 					)}
 
@@ -381,7 +388,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 							onQuit={handleQuitPress}
 							onCalibrate={handleCalibratePress}
 							soundEnabled={soundEnabled}
+							musicEnabled={musicEnabled}
 							onToggleSound={handleToggleSound}
+							onToggleMusic={handleToggleMusic}
 						/>
 					)}
 

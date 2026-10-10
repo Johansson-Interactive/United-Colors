@@ -15,6 +15,7 @@ import Animated, {
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
+import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
 import { BOWL_SIZE, CAPTION, TRIO } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
@@ -22,10 +23,12 @@ import { useTiltAvailable } from "../tilt/useTiltAvailable";
 interface KioskOverlayProps {
 	highScore: number;
 	soundEnabled: boolean;
+	musicEnabled: boolean;
 	onStart: (point: PressPoint, color: string) => void;
 	/** Open the settle bowl to set the level pose, in the play dot's current colour */
 	onCalibrate: (color: string) => void;
 	onToggleSound: () => void;
+	onToggleMusic: () => void;
 }
 
 const TITLE_COLS = 35; // "UNITED" / "COLORS": 6 glyphs x 5 + 5 gaps
@@ -45,9 +48,11 @@ function heldColor(cycle: number): string {
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
 	soundEnabled,
+	musicEnabled,
 	onStart,
 	onCalibrate,
 	onToggleSound,
+	onToggleMusic,
 }) => {
 	const { width } = useWindowDimensions();
 	const tiltAvailable = useTiltAvailable();
@@ -119,23 +124,21 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 						color="#F4F6FB"
 					/>
 				</View>
-				<View style={styles.sound}>
-					<IconDot
-						size={44}
-						icon={soundEnabled ? "sound-on" : "sound-off"}
-						onPress={onToggleSound}
-						accessibilityLabel={soundEnabled ? "Mute sound" : "Unmute sound"}
-						color={soundEnabled ? "#F4F6FB" : "rgba(244,246,251,0.45)"}
-					/>
-				</View>
 			</View>
+
+			<SoundMenu
+				soundEnabled={soundEnabled}
+				musicEnabled={musicEnabled}
+				onToggleSound={onToggleSound}
+				onToggleMusic={onToggleMusic}
+			/>
 		</Animated.View>
 	);
 };
 
 const styles = StyleSheet.create({
 	container: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	title: {
 		alignItems: "center",
@@ -161,11 +164,6 @@ const styles = StyleSheet.create({
 	level: {
 		position: "absolute",
 		left: 20,
-		bottom: 26,
-	},
-	sound: {
-		position: "absolute",
-		right: 20,
 		bottom: 26,
 	},
 });
