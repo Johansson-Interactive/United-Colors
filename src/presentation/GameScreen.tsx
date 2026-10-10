@@ -1,28 +1,37 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useSharedValue } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
+import Animated, { useSharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import { createGameStore } from "../application/GameStore";
 import { buildScene, type SceneDot } from "../application/renderScene";
 import { handleGameOver } from "../application/useCases/GameOver";
+import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
+import { updateSettings } from "../application/useCases/UpdateSettings";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { ScreenSize } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
 import { AudioService } from "../infrastructure/AudioService";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
+import { AmbientBackground } from "./components/AmbientBackground";
 import { DevSpeedTuner } from "./components/DevSpeedTuner";
+import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
+import { Bursts } from "./effects/Bursts";
+import { FloodOverlay, useFlood } from "./effects/Flood";
+import { FrostDim } from "./effects/FrostDim";
 import { GameCanvas } from "./GameCanvas";
+import { useStageEffects } from "./hooks/useStageEffects";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
+import { INK, INK_LIFT, WHITE } from "./theme/theme";
 
 const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
 const DEFAULT_DENSITY = 400;
@@ -40,15 +49,24 @@ type DevControlMode = "gyro" | "touch" | "pending";
 const GYRO_DETECT_MS = 800;
 
 export const GameScreen: React.FC = () => {
+	const insets = useSafeAreaInsets();
 	// Subscribe to phase/score only: dot positions never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
 	const score = useStore(store, (s) => s.frame.score);
+	const highScore = useStore(store, (s) => s.highScore);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
+	const playerColor = useStore(
+		store,
+		(s) => s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE,
+	);
 	const scene = useSharedValue<SceneDot[]>([]);
 	const engineRef = useRef<GameEngine | null>(null);
 	const clockRef = useRef<FrameClock | null>(null);
 	const kioskInitializedRef = useRef(false);
 	const screenRef = useRef<ScreenSize>(DEFAULT_SCREEN);
+
+	const flood = useFlood();
+	const previousBestRef = useRef(0);
 
 	// Dev only: prefer gyro, fallback to touch when gyro not available (e.g. simulator)
 	const [devControlMode, setDevControlMode] = useState<DevControlMode>("pending");
@@ -65,6 +83,14 @@ export const GameScreen: React.FC = () => {
 		}
 		return engineRef.current;
 	}, []);
+
+	// Colour wash, frost, shake and bursts react to the store and engine; the flood is the transition
+	const { accent, frost, shakeStyle, bursts } = useStageEffects(
+		store,
+		getEngine,
+		phase,
+		playerColor,
+	);
 
 	/** Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed) */
 	const drawScene = useCallback(
@@ -119,9 +145,10 @@ export const GameScreen: React.FC = () => {
 		[getEngine],
 	);
 
-	// Restore persisted settings
+	// Restore persisted settings and high score
 	useEffect(() => {
 		void loadSettings(store, storage);
+		void loadHighScore(store, storage);
 	}, []);
 
 	// Setup sensor and audio (await preload so sounds are ready before game starts)
@@ -179,6 +206,7 @@ export const GameScreen: React.FC = () => {
 	);
 
 	const handleStart = useCallback(() => {
+		previousBestRef.current = store.getState().highScore;
 		const engine = getEngine();
 		startGame(engine, store);
 		sensor.start();
@@ -207,10 +235,6 @@ export const GameScreen: React.FC = () => {
 		startClock();
 	}, [getEngine, startClock]);
 
-	const handleRetry = useCallback(() => {
-		handleStart();
-	}, [handleStart]);
-
 	const handleBack = useCallback(() => {
 		const engine = getEngine();
 		engine.startKiosk();
@@ -218,57 +242,106 @@ export const GameScreen: React.FC = () => {
 		startClock();
 	}, [getEngine, startClock]);
 
+	// Transitions: a dot grows from under the finger, the scene changes, and it lifts
+	const handleStartPress = useCallback(
+		(point: PressPoint, color: string) => flood.run(color, point.x, point.y, handleStart),
+		[flood, handleStart],
+	);
+	const handleRetryPress = useCallback(
+		(point: PressPoint) => flood.run(playerColor, point.x, point.y, handleStart),
+		[flood, playerColor, handleStart],
+	);
+	const handleBackPress = useCallback(
+		(point: PressPoint) => flood.run(INK_LIFT, point.x, point.y, handleBack),
+		[flood, handleBack],
+	);
+	const handleQuitPress = useCallback(
+		(point: PressPoint) => flood.run(INK_LIFT, point.x, point.y, handleBack),
+		[flood, handleBack],
+	);
+
+	const handleToggleSound = useCallback(() => {
+		const settings = store.getState().settings;
+		void updateSettings({ ...settings, soundEnabled: !settings.soundEnabled }, store, storage);
+	}, []);
+
+	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
+	// runs under the home indicator, as before; the interface layer also respects the bottom
+	const stageInsets = {
+		paddingTop: insets.top,
+		paddingLeft: insets.left,
+		paddingRight: insets.right,
+	};
+	const uiInsets = { ...stageInsets, paddingBottom: insets.bottom };
+
 	return (
 		<View style={styles.container}>
-			<SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-				<GameCanvas
-					scene={scene}
-					onLayout={handleLayout}
-					onDragDelta={
-						isDev && devControlMode === "touch"
-							? (dx, dy) => {
-									// Rendered on the next frame
-									engineRef.current?.onMovementDelta(dx, dy);
-								}
-							: undefined
-					}
-				/>
+			<AmbientBackground accent={accent} frost={frost} />
 
-				{isDev && (
-					<View style={styles.devBadge} pointerEvents="none">
-						<Text style={styles.devBadgeText}>
-							Control:{" "}
-							{devControlMode === "pending"
-								? phase === "RUNNING"
-									? "Checking…"
-									: "—"
-								: devControlMode === "gyro"
-									? "Gyro"
-									: "Touch"}
-						</Text>
-					</View>
-				)}
+			<View style={[styles.inset, stageInsets]}>
+				<Animated.View style={[styles.stage, shakeStyle]}>
+					<GameCanvas
+						scene={scene}
+						frost={frost}
+						onLayout={handleLayout}
+						onDragDelta={
+							isDev && devControlMode === "touch"
+								? (dx, dy) => {
+										// Rendered on the next frame
+										engineRef.current?.onMovementDelta(dx, dy);
+									}
+								: undefined
+						}
+					/>
+					<Bursts bursts={bursts} />
+				</Animated.View>
+			</View>
 
-				{phase === "RUNNING" && <HUD score={score} onPause={handlePause} />}
+			<FrostDim frost={frost} />
 
-				{phase === "KIOSK" && <KioskOverlay onStart={handleStart} />}
+			<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
+				<View style={styles.stage} pointerEvents="box-none">
+					{phase === "RUNNING" && <HUD score={score} color={playerColor} onPause={handlePause} />}
 
-				{phase === "PAUSED" && (
-					<PauseOverlay onResume={handleResume}>
-						{isDev && (
-							<DevSpeedTuner
-								value={devSpeed}
-								ratio={getEngine().getPlayerSpeedRatio()}
-								onChange={handleDevSpeedChange}
-							/>
-						)}
-					</PauseOverlay>
-				)}
+					{phase === "KIOSK" && (
+						<KioskOverlay
+							highScore={highScore}
+							soundEnabled={soundEnabled}
+							onStart={handleStartPress}
+							onToggleSound={handleToggleSound}
+						/>
+					)}
 
-				{phase === "GAME_OVER" && (
-					<GameOverOverlay score={score} onRetry={handleRetry} onBack={handleBack} />
-				)}
-			</SafeAreaView>
+					{phase === "PAUSED" && (
+						<PauseOverlay
+							onResume={handleResume}
+							onQuit={handleQuitPress}
+							soundEnabled={soundEnabled}
+							onToggleSound={handleToggleSound}
+						>
+							{isDev && (
+								<DevSpeedTuner
+									value={devSpeed}
+									ratio={getEngine().getPlayerSpeedRatio()}
+									onChange={handleDevSpeedChange}
+								/>
+							)}
+						</PauseOverlay>
+					)}
+
+					{phase === "GAME_OVER" && (
+						<GameOverOverlay
+							score={score}
+							previousBest={previousBestRef.current}
+							color={playerColor}
+							onRetry={handleRetryPress}
+							onBack={handleBackPress}
+						/>
+					)}
+				</View>
+			</View>
+
+			<FloodOverlay flood={flood} />
 		</View>
 	);
 };
@@ -276,22 +349,12 @@ export const GameScreen: React.FC = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#78B7E3",
+		backgroundColor: INK,
 	},
-	safeArea: {
+	inset: {
+		...StyleSheet.absoluteFillObject,
+	},
+	stage: {
 		flex: 1,
-	},
-	devBadge: {
-		position: "absolute",
-		bottom: 12,
-		left: 12,
-		backgroundColor: "rgba(0,0,0,0.7)",
-		paddingHorizontal: 8,
-		paddingVertical: 4,
-		borderRadius: 6,
-	},
-	devBadgeText: {
-		color: "#8BC34A",
-		fontSize: 12,
 	},
 });

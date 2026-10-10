@@ -1,5 +1,6 @@
 import type React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { GREEN } from "../theme/theme";
 
 interface DevSpeedTunerProps {
 	/** Player speed in px/s per degree of tilt */
@@ -40,14 +41,17 @@ export const DevSpeedTuner: React.FC<DevSpeedTunerProps> = ({ value, ratio, onCh
 const styles = StyleSheet.create({
 	container: {
 		alignItems: "center",
-		padding: 12,
-		borderRadius: 8,
-		backgroundColor: "rgba(0,0,0,0.6)",
+		paddingVertical: 10,
+		paddingHorizontal: 16,
+		borderRadius: 20,
+		backgroundColor: "rgba(255,255,255,0.05)",
+		borderWidth: 1,
+		borderColor: "rgba(139,195,74,0.35)",
 	},
 	label: {
-		fontSize: 12,
-		letterSpacing: 1,
-		color: "#8BC34A",
+		fontSize: 10,
+		letterSpacing: 2,
+		color: GREEN,
 		marginBottom: 8,
 	},
 	row: {
@@ -56,28 +60,28 @@ const styles = StyleSheet.create({
 		gap: 16,
 	},
 	button: {
-		width: 44,
-		height: 44,
-		borderRadius: 22,
+		width: 40,
+		height: 40,
+		borderRadius: 20,
 		borderWidth: 1.5,
-		borderColor: "#8BC34A",
+		borderColor: GREEN,
 		justifyContent: "center",
 		alignItems: "center",
 	},
 	buttonText: {
-		fontSize: 22,
-		color: "#8BC34A",
+		fontSize: 20,
+		color: GREEN,
 	},
 	value: {
 		minWidth: 90,
 		textAlign: "center",
-		fontSize: 16,
-		color: "#fff",
+		fontSize: 15,
+		color: "#F4F6FB",
 		fontVariant: ["tabular-nums"],
 	},
 	hint: {
 		marginTop: 8,
-		fontSize: 11,
-		color: "rgba(255,255,255,0.7)",
+		fontSize: 10,
+		color: "rgba(244,246,251,0.55)",
 	},
 });

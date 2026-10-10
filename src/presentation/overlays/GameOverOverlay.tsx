@@ -1,52 +1,108 @@
 import type React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from "react-native-reanimated";
+import { DotButton, type PressPoint } from "../components/DotButton";
+import { DotMatrixText } from "../components/DotMatrixText";
+import { Confetti } from "../effects/Confetti";
+import { CAPTION, WHITE } from "../theme/theme";
 
 interface GameOverOverlayProps {
 	score: number;
-	onRetry: () => void;
-	onBack: () => void;
+	/** Best score before this run, to recognise a new record */
+	previousBest: number;
+	/** The player's final colour; the result and the retry dot wear it */
+	color: string;
+	onRetry: (point: PressPoint) => void;
+	onBack: (point: PressPoint) => void;
 }
 
-export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({ score, onRetry, onBack }) => {
+const TITLE_COLS = 51; // "GAME OVER"
+
+export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
+	score,
+	previousBest,
+	color,
+	onRetry,
+	onBack,
+}) => {
+	const { width } = useWindowDimensions();
+	const isNewBest = score > previousBest;
+	const best = Math.max(score, previousBest);
+	const titlePitch = Math.max(5, Math.min(7, Math.floor((width - 48) / TITLE_COLS)));
+	const scorePitch = String(score).length > 3 ? 11 : 14;
+
 	return (
-		<View style={styles.container}>
-			<Text style={styles.scoreLabel}>Score: {score}</Text>
-			<TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-				<Text style={styles.buttonText}>RETRY</Text>
-			</TouchableOpacity>
-			<TouchableOpacity style={styles.backButton} onPress={onBack}>
-				<Text style={styles.buttonText}>BACK</Text>
-			</TouchableOpacity>
-		</View>
+		<Animated.View
+			style={styles.container}
+			entering={FadeIn.delay(350).duration(400)}
+			exiting={FadeOut.duration(200)}
+		>
+			{isNewBest ? <Confetti /> : null}
+
+			<View style={styles.top} pointerEvents="none">
+				<DotMatrixText text="GAME OVER" pitch={titlePitch} color={WHITE} />
+			</View>
+
+			<View style={styles.centre} pointerEvents="none">
+				<Animated.View entering={ZoomIn.delay(500).springify().damping(13)}>
+					<DotMatrixText text={String(score)} pitch={scorePitch} color={color} glow />
+				</Animated.View>
+				<Animated.View entering={FadeInDown.delay(800).duration(400)} style={styles.bestRow}>
+					{isNewBest ? (
+						<DotMatrixText text="NEW BEST!" pitch={5} colors={[color, WHITE, color]} glow />
+					) : (
+						<Text style={styles.caption}>best {best}</Text>
+					)}
+				</Animated.View>
+			</View>
+
+			<Animated.View style={styles.actions} entering={FadeInDown.delay(950).duration(450)}>
+				<DotButton
+					size={124}
+					color={color}
+					label="AGAIN"
+					labelPitch={4}
+					onPress={onRetry}
+					accessibilityLabel="Play again"
+				/>
+				<DotButton
+					size={80}
+					color={WHITE}
+					variant="ghost"
+					label="MENU"
+					labelPitch={3}
+					onPress={onBack}
+					accessibilityLabel="Back to menu"
+				/>
+			</Animated.View>
+		</Animated.View>
 	);
 };
 
 const styles = StyleSheet.create({
 	container: {
 		...StyleSheet.absoluteFillObject,
-		justifyContent: "center",
+	},
+	top: {
 		alignItems: "center",
-		backgroundColor: "rgba(0, 0, 0, 0.7)",
+		paddingTop: 44,
 	},
-	scoreLabel: {
-		fontSize: 32,
-		fontWeight: "bold",
-		color: "#fff",
-		marginBottom: 30,
+	centre: {
+		flex: 1,
+		alignItems: "center",
+		justifyContent: "center",
+		gap: 22,
 	},
-	retryButton: {
-		paddingVertical: 12,
-		paddingHorizontal: 20,
-		backgroundColor: "transparent",
-		marginBottom: 8,
+	bestRow: {
+		alignItems: "center",
 	},
-	backButton: {
-		paddingVertical: 12,
-		paddingHorizontal: 20,
-		backgroundColor: "transparent",
+	caption: {
+		...CAPTION,
+		fontSize: 13,
 	},
-	buttonText: {
-		fontSize: 16,
-		color: "#fff",
+	actions: {
+		alignItems: "center",
+		paddingBottom: 48,
+		gap: 26,
 	},
 });
