@@ -1,5 +1,5 @@
 import {
-	PLAYER_DOT_SPEED_RATIO,
+	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
 } from "../../domain/constants";
@@ -55,7 +55,10 @@ describe("GameEngine", () => {
 			zeroed.setTiltZero({ x: 0.5, y: 0.3 });
 			const raw = createEngine();
 			raw.startGame();
-			expect(playerAfter(zeroed, 0.7, 0.1)).toEqual(playerAfter(raw, 0.2, -0.2));
+			const fromZero = playerAfter(zeroed, 0.7, 0.1);
+			const fromRaw = playerAfter(raw, 0.2, -0.2);
+			expect(fromZero.x).toBeCloseTo(fromRaw.x);
+			expect(fromZero.y).toBeCloseTo(fromRaw.y);
 
 			zeroed.setTiltZero(null);
 			const before = zeroed.getPlayerPosition();
@@ -236,16 +239,14 @@ describe("GameEngine", () => {
 			expect(engine.getPlayerPosition()).toEqual(start);
 		});
 
-		it("defaults to legacy speed and dev override applies now and to new games", () => {
+		it("moves PLAYER_SPEED_PER_DEGREE px/s per degree of tilt", () => {
 			const engine = createEngine();
-			expect(engine.getPlayerSpeedRatio()).toBeCloseTo(PLAYER_DOT_SPEED_RATIO);
-			engine.setPlayerSpeedPerDegree(10);
+			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(PLAYER_SPEED_PER_DEGREE);
 			engine.startGame();
 			const start = engine.getPlayerPosition();
-			engine.onSensorInput((5 * Math.PI) / 180, 0); // 5 degrees
+			engine.onSensorInput((1 * Math.PI) / 180, 0); // 1 degree
 			engine.advancePlayer(1000);
-			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(50);
-			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(10);
+			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE);
 		});
 	});
 

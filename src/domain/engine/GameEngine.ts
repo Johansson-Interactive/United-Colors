@@ -1,8 +1,7 @@
 import {
 	GAME_COLORS,
-	GAME_HERTZ,
 	PLAYER_DOT_SIZE_RATIO,
-	PLAYER_DOT_SPEED_RATIO,
+	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_VALUE,
 } from "../constants";
 import type { Dot } from "../entities/Dot";
@@ -49,7 +48,7 @@ export class GameEngine {
 		this.screen = options.screen;
 		this.audio = options.audio;
 		this.random = options.random ?? Math.random;
-		this.playerSpeed = PLAYER_DOT_SPEED_RATIO * this.density * GAME_HERTZ;
+		this.playerSpeed = PLAYER_SPEED_PER_DEGREE / DEG_TO_RAD;
 		this.stateMachine = new StateMachine("KIOSK");
 		this.spawnSystem = new SpawnSystem(this.random);
 		this.initPlayer();
@@ -100,20 +99,9 @@ export class GameEngine {
 		this.player.updateOrientation(zero ? x - zero.x : x, zero ? y - zero.y : y);
 	}
 
-	/** Player speed as PLAYER_DOT_SPEED_RATIO (legacy units: px/tick/rad per density) */
-	getPlayerSpeedRatio(): number {
-		return this.playerSpeed / (this.density * GAME_HERTZ);
-	}
-
 	/** Player speed in px/s per degree of tilt */
 	getPlayerSpeedPerDegree(): number {
 		return this.playerSpeed * DEG_TO_RAD;
-	}
-
-	/** Override player speed in px/s per degree of tilt (dev tuning); applies now and to new games */
-	setPlayerSpeedPerDegree(pxPerSecondPerDegree: number): void {
-		this.playerSpeed = pxPerSecondPerDegree / DEG_TO_RAD;
-		this.player.velocity = this.playerSpeed;
 	}
 
 	/**

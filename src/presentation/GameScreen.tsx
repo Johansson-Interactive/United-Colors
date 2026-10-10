@@ -24,7 +24,6 @@ import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
 import { AmbientBackground } from "./components/AmbientBackground";
-import { DevSpeedTuner } from "./components/DevSpeedTuner";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { Bursts } from "./effects/Bursts";
@@ -159,16 +158,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 			audio.dispose();
 		};
 	}, [audio]);
-
-	// Dev only: live speed tuning from the pause menu
-	const [devSpeed, setDevSpeed] = useState(() => getEngine().getPlayerSpeedPerDegree());
-	const handleDevSpeedChange = useCallback(
-		(pxPerSecondPerDegree: number) => {
-			getEngine().setPlayerSpeedPerDegree(pxPerSecondPerDegree);
-			setDevSpeed(pxPerSecondPerDegree);
-		},
-		[getEngine],
-	);
 
 	// Restore persisted settings and high score
 	useEffect(() => {
@@ -370,15 +359,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 							onCalibrate={handleCalibratePress}
 							soundEnabled={soundEnabled}
 							onToggleSound={handleToggleSound}
-						>
-							{isDev && (
-								<DevSpeedTuner
-									value={devSpeed}
-									ratio={getEngine().getPlayerSpeedRatio()}
-									onChange={handleDevSpeedChange}
-								/>
-							)}
-						</PauseOverlay>
+						/>
 					)}
 
 					{settle && (

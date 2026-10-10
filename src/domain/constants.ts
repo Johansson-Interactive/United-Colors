@@ -28,11 +28,8 @@ export const PLAYER_DOT_SIZE_RATIO = 0.125;
 export const PLAYER_DOT_SIZE_INCREMENT_SMALL = 0.008;
 export const PLAYER_DOT_SIZE_INCREMENT_POINT = 0.02;
 
-/**
- * Player speed (legacy units): px per simulation tick per radian of tilt, x density.
- * Speed follows tilt linearly with no threshold. Tune live in dev builds from the pause menu.
- */
-export const PLAYER_DOT_SPEED_RATIO = 0.3 / (Math.PI / 2.0);
+/** Player speed in px/s per degree of tilt. Speed follows tilt linearly with no threshold. */
+export const PLAYER_SPEED_PER_DEGREE = 40;
 
 /** Difficulty ramp -- spawn interval reaches minimum at this step count */
 export const MAX_TIME_DIFFICULTY = 7200;
