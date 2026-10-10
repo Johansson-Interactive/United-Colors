@@ -27,6 +27,7 @@ describe("buildScene", () => {
 		const [d] = buildScene(frame([dot({ vx: 8, vy: -4 })]), 0.5, PLAYER_POS);
 		expect(d.x).toBe(104);
 		expect(d.y).toBe(98);
+		expect(d.kind).toBe("small");
 	});
 
 	it("draws dots exactly at tick position at alpha 0 and next tick position at alpha 1", () => {
@@ -51,7 +52,7 @@ describe("buildScene", () => {
 			PLAYER_POS,
 		);
 		expect(scene).toHaveLength(2);
-		expect(scene[1]).toEqual({ x: 50, y: 60, radius: 25, color: "#2196F3" });
+		expect(scene[1]).toEqual({ x: 50, y: 60, radius: 25, color: "#2196F3", kind: "player" });
 	});
 
 	it("omits the player when not in the frame (kiosk)", () => {

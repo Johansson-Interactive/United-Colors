@@ -6,6 +6,7 @@ export interface SceneDot {
 	y: number;
 	radius: number;
 	color: string;
+	kind: DotView["kind"];
 }
 
 /**
@@ -41,11 +42,18 @@ export function buildScene(
 			y: dot.y + dot.vy * moveT,
 			radius: dot.prevRadius + (dot.radius - dot.prevRadius) * sizeT,
 			color: dot.color,
+			kind: dot.kind,
 		});
 	}
 
 	if (playerDot) {
-		scene.push({ x: player.x, y: player.y, radius: playerDot.radius, color: playerDot.color });
+		scene.push({
+			x: player.x,
+			y: player.y,
+			radius: playerDot.radius,
+			color: playerDot.color,
+			kind: "player",
+		});
 	}
 
 	return scene;
