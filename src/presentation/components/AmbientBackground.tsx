@@ -46,8 +46,8 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 		() => ({ x: tilt.x.value, y: tilt.y.value, frozen: frost.value > 0.001 }),
 		(current) => {
 			if (current.frozen) return;
-			lightX.value = current.x;
-			lightY.value = current.y;
+			lightX.set(current.x);
+			lightY.set(current.y);
 		},
 	);
 

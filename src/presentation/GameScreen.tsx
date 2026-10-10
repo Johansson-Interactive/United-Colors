@@ -170,8 +170,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		() =>
 			bindTiltZero(store, (zero: TiltZero | null, zeroDown: TiltZero | null) => {
 				getEngine().setTiltZero(zero, zeroDown);
-				tilt.zero.value = zero ?? NO_ZERO;
-				tilt.zeroDown.value = zeroDown ?? NO_ZERO;
+				tilt.zero.set(zero ?? NO_ZERO);
+				tilt.zeroDown.set(zeroDown ?? NO_ZERO);
 			}),
 		[getEngine, tilt],
 	);

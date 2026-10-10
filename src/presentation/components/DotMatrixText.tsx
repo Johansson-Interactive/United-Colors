@@ -78,10 +78,9 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	const phase = useSharedValue(0);
 	useEffect(() => {
 		if (!wave) return;
-		phase.value = 0;
-		phase.value = withRepeat(
-			withTiming(Math.PI * 2, { duration: WAVE_PERIOD_MS, easing: Easing.linear }),
-			-1,
+		phase.set(0);
+		phase.set(
+			withRepeat(withTiming(Math.PI * 2, { duration: WAVE_PERIOD_MS, easing: Easing.linear }), -1),
 		);
 		return () => cancelAnimation(phase);
 	}, [wave, phase]);

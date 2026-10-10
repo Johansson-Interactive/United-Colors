@@ -63,9 +63,8 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	const [startIndex] = useState(() => Math.floor(Math.random() * TRIO.length));
 	const cycle = useSharedValue(0);
 	useEffect(() => {
-		cycle.value = withRepeat(
-			withTiming(3, { duration: COLOR_CYCLE_MS * 3, easing: Easing.linear }),
-			-1,
+		cycle.set(
+			withRepeat(withTiming(3, { duration: COLOR_CYCLE_MS * 3, easing: Easing.linear }), -1),
 		);
 		return () => cancelAnimation(cycle);
 	}, [cycle]);

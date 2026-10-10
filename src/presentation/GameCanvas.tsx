@@ -67,8 +67,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 		(current, previous) => {
 			if (current.frozen !== previous?.frozen) scheduleOnRN(setFrosted, current.frozen);
 			if (current.frozen) return;
-			lightX.value = current.x;
-			lightY.value = current.y;
+			lightX.set(current.x);
+			lightY.set(current.y);
 		},
 	);
 

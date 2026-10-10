@@ -34,16 +34,16 @@ export function useStageEffects(
 	// Frost the scene when it is still; wash the edges in the player's colour when playing
 	useEffect(() => {
 		if (phase === "PAUSED") {
-			frost.value = withTiming(1, { duration: 450 });
+			frost.set(withTiming(1, { duration: 450 }));
 		} else if (phase === "GAME_OVER") {
-			frost.value = withDelay(350, withTiming(0.6, { duration: 700 }));
+			frost.set(withDelay(350, withTiming(0.6, { duration: 700 })));
 		} else {
-			frost.value = withTiming(0, { duration: 300 });
+			frost.set(withTiming(0, { duration: 300 }));
 		}
 	}, [phase, frost]);
 
 	useEffect(() => {
-		accent.value = phase === "KIOSK" ? INK_LIFT : playerColor;
+		accent.set(phase === "KIOSK" ? INK_LIFT : playerColor);
 	}, [phase, playerColor, accent]);
 
 	const addBurst = useCallback((burst: BurstInput) => {
@@ -66,12 +66,14 @@ export function useStageEffects(
 		if (state.frame.phase === "GAME_OVER" && previous.frame.phase !== "GAME_OVER") {
 			const pos = getEngine().getPlayerPosition();
 			addBurst({ kind: "ring", x: pos.x, y: pos.y, color: WHITE, size: 90 });
-			shake.value = withSequence(
-				withTiming(-10, { duration: 40 }),
-				withTiming(9, { duration: 50 }),
-				withTiming(-6, { duration: 50 }),
-				withTiming(3, { duration: 50 }),
-				withTiming(0, { duration: 60 }),
+			shake.set(
+				withSequence(
+					withTiming(-10, { duration: 40 }),
+					withTiming(9, { duration: 50 }),
+					withTiming(-6, { duration: 50 }),
+					withTiming(3, { duration: 50 }),
+					withTiming(0, { duration: 60 }),
+				),
 			);
 		}
 	});

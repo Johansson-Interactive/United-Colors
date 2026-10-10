@@ -22,9 +22,11 @@ export const HUD: React.FC<HUDProps> = ({ score, color, onPause }) => {
 	const bump = useSharedValue(1);
 	useEffect(() => {
 		if (score === 0) return;
-		bump.value = withSequence(
-			withTiming(1.22, { duration: 70 }),
-			withSpring(1, { damping: 9, stiffness: 260 }),
+		bump.set(
+			withSequence(
+				withTiming(1.22, { duration: 70 }),
+				withSpring(1, { damping: 9, stiffness: 260 }),
+			),
 		);
 	}, [score, bump]);
 	const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));

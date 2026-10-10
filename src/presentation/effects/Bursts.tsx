@@ -35,7 +35,7 @@ export const Bursts: React.FC<{ bursts: Burst[] }> = ({ bursts }) => (
 const Pop: React.FC<{ burst: Extract<Burst, { kind: "pop" }> }> = ({ burst }) => {
 	const t = useSharedValue(0);
 	useEffect(() => {
-		t.value = withTiming(1, { duration: BURST_LIFETIME_MS, easing: Easing.out(Easing.cubic) });
+		t.set(withTiming(1, { duration: BURST_LIFETIME_MS, easing: Easing.out(Easing.cubic) }));
 	}, [t]);
 	const style = useAnimatedStyle(() => ({
 		opacity: t.value < 0.6 ? 1 : 1 - (t.value - 0.6) / 0.4,
@@ -56,9 +56,8 @@ const Ring: React.FC<{ burst: Extract<Burst, { kind: "ring" }> }> = ({ burst }) 
 	const t = useSharedValue(0);
 	const size = burst.size ?? 60;
 	useEffect(() => {
-		t.value = withDelay(
-			0,
-			withTiming(1, { duration: BURST_LIFETIME_MS, easing: Easing.out(Easing.quad) }),
+		t.set(
+			withDelay(0, withTiming(1, { duration: BURST_LIFETIME_MS, easing: Easing.out(Easing.quad) })),
 		);
 	}, [t]);
 	const style = useAnimatedStyle(() => ({

@@ -54,7 +54,7 @@ export const Confetti: React.FC = () => {
 
 	const clock = useSharedValue(0);
 	useEffect(() => {
-		clock.value = withTiming(DURATION_MS, { duration: DURATION_MS, easing: Easing.linear });
+		clock.set(withTiming(DURATION_MS, { duration: DURATION_MS, easing: Easing.linear }));
 		return () => cancelAnimation(clock);
 	}, [clock]);
 

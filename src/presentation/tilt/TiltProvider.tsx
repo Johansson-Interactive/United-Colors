@@ -45,10 +45,10 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 
 	useEffect(() => {
 		sensor.onSample((sample) => {
-			rawX.value = sample.x;
-			rawY.value = sample.y;
-			rawFacingDown.value = sample.facingDown;
-			if (!available.value) available.value = true;
+			rawX.set(sample.x);
+			rawY.set(sample.y);
+			rawFacingDown.set(sample.facingDown);
+			if (!available.value) available.set(true);
 		});
 		sensor.start();
 		return () => sensor.stop();
@@ -58,8 +58,8 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
 		const level = rawFacingDown.value ? zeroDown.value : zero.value;
-		x.value += (rawX.value - level.x - x.value) * k;
-		y.value += (rawY.value - level.y - y.value) * k;
+		x.set(x.get() + (rawX.value - level.x - x.value) * k);
+		y.set(y.get() + (rawY.value - level.y - y.value) * k);
 	});
 
 	const value = useMemo<Tilt>(
