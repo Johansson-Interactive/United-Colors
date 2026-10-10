@@ -1,12 +1,12 @@
 import type React from "react";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { LevelGate } from "../components/LevelGate";
-import { CAPTION, WHITE } from "../theme/theme";
+import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
 import type { LevelGatePhase } from "../tilt/levelGate";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
@@ -42,7 +42,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	const caption = !tiltAvailable
 		? "tap the ring to resume"
 		: gatePhase === "leave"
-			? "tip the dot out of the circle\nor tap the ring"
+			? "tip the dot out of the circle\nor tap the ring to continue"
 			: "bring it back and hold level\nor tap the ring";
 	return (
 		<Animated.View
@@ -54,16 +54,16 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />
 			</View>
 
-			<Animated.View style={styles.centre} entering={ZoomIn.springify().damping(14)}>
+			<View style={styles.centre}>
 				<LevelGate
-					size={220}
+					size={BOWL_SIZE}
 					color={color}
 					onLevelHeld={onResume}
 					onTap={onResume}
 					onPhaseChange={setGatePhase}
 				/>
 				<Text style={styles.caption}>{caption}</Text>
-			</Animated.View>
+			</View>
 
 			<View style={styles.footer}>
 				<DotButton

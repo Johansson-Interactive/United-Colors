@@ -1,4 +1,5 @@
 import {
+	GAME_COLORS,
 	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
@@ -25,6 +26,23 @@ function createEngine(seed = 0.5, audio?: AudioPort) {
 }
 
 describe("GameEngine", () => {
+	describe("start colour", () => {
+		const playerColor = (engine: GameEngine) =>
+			engine.getFrame().dots.find((d) => d.kind === "player")?.color;
+
+		it.each(GAME_COLORS)("a game started in %s gives the player that colour", (color) => {
+			const engine = createEngine();
+			engine.startGame(color);
+			expect(playerColor(engine)).toBe(color);
+		});
+
+		it("an unknown colour falls back to a random game colour", () => {
+			const engine = createEngine();
+			engine.startGame("#123456");
+			expect(GAME_COLORS).toContain(playerColor(engine));
+		});
+	});
+
 	describe("tilt zero", () => {
 		function playerAfter(engine: GameEngine, x: number, y: number) {
 			engine.onSensorInput(x, y);

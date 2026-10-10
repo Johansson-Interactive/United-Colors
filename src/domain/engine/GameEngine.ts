@@ -59,14 +59,14 @@ export class GameEngine {
 		this.screen = screen;
 	}
 
-	/** Start a new game (non-kiosk) */
-	startGame(): void {
+	/** Start a new game (non-kiosk); the player takes `color` if it is a game colour */
+	startGame(color?: string): void {
 		this.stateMachine.transition("RUNNING");
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
 		this.spawnSystem.reset();
-		this.initPlayer();
+		this.initPlayer(color);
 		this.dots.push(this.player);
 	}
 
@@ -217,8 +217,10 @@ export class GameEngine {
 		return this.score;
 	}
 
-	private initPlayer(): void {
-		const color = GAME_COLORS[Math.floor(this.random() * GAME_COLORS.length)];
+	private initPlayer(startColor?: string): void {
+		const color =
+			GAME_COLORS.find((c) => c === startColor) ??
+			GAME_COLORS[Math.floor(this.random() * GAME_COLORS.length)];
 		this.player = new PlayerDot(
 			this.screen.width / 2,
 			this.screen.height / 2,

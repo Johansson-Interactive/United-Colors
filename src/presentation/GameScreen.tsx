@@ -52,10 +52,14 @@ type DevControlMode = "gyro" | "touch" | "pending";
 
 const GYRO_DETECT_MS = 800;
 
-/** The settle bowl is open: where play continues afterwards, and the colour of the dot that settles */
+/**
+ * The settle bowl is open: where play continues afterwards, the colour of the dot that settles,
+ * and the level pose it replaces
+ */
 interface SettleRequest {
-	from: "start" | "pause";
+	from: "start" | "pause" | "menu";
 	color: string;
+	zero: TiltZero | null;
 }
 
 interface GameScreenProps {
@@ -220,21 +224,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		[getEngine, startClock],
 	);
 
-	const handleStart = useCallback(() => {
-		previousBestRef.current = store.getState().highScore;
-		const engine = getEngine();
-		startGame(engine, store);
-		sensor.start();
-		if (isDev) {
-			setDevControlMode("pending");
-			if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
-			devGyroTimeoutRef.current = setTimeout(() => {
-				devGyroTimeoutRef.current = null;
-				setDevControlMode((prev) => (prev === "pending" ? "touch" : prev));
-			}, GYRO_DETECT_MS);
-		}
-		startClock();
-	}, [getEngine, startClock]);
+	const handleStart = useCallback(
+		(color: string) => {
+			previousBestRef.current = store.getState().highScore;
+			const engine = getEngine();
+			startGame(engine, store, color);
+			sensor.start();
+			if (isDev) {
+				setDevControlMode("pending");
+				if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
+				devGyroTimeoutRef.current = setTimeout(() => {
+					devGyroTimeoutRef.current = null;
+					setDevControlMode((prev) => (prev === "pending" ? "touch" : prev));
+				}, GYRO_DETECT_MS);
+			}
+			startClock();
+		},
+		[getEngine, startClock],
+	);
 
 	const handlePause = useCallback(() => {
 		stopClock();
@@ -262,21 +269,29 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const handleStartPress = useCallback(
 		(point: PressPoint, color: string) => {
 			if (store.getState().settings.tiltZero) {
-				flood.run(color, point.x, point.y, handleStart);
+				flood.run(color, point.x, point.y, () => handleStart(color));
 			} else {
-				setSettle({ from: "start", color });
+				setSettle({ from: "start", color, zero: null });
 			}
 		},
 		[flood, handleStart],
 	);
 	const handleCalibratePress = useCallback(() => {
-		setSettle({ from: "pause", color: playerColor });
+		setSettle({ from: "pause", color: playerColor, zero: store.getState().settings.tiltZero });
 	}, [playerColor]);
+	const handleMenuCalibratePress = useCallback((color: string) => {
+		setSettle({ from: "menu", color, zero: store.getState().settings.tiltZero });
+	}, []);
 	const handleSettled = useCallback(
 		(zero: TiltZero, point: PressPoint) => {
 			if (!settle) return;
 			void calibrateTilt(zero, store, storage);
-			const next = settle.from === "start" ? handleStart : handleResume;
+			// From the title the pose is only saved; the title comes straight back
+			if (settle.from === "menu") {
+				setSettle(null);
+				return;
+			}
+			const next = settle.from === "start" ? () => handleStart(settle.color) : handleResume;
 			flood.run(settle.color, point.x, point.y, () => {
 				setSettle(null);
 				next();
@@ -287,7 +302,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const handleSettleBack = useCallback(() => setSettle(null), []);
 	const handleSettleSnap = useCallback(() => audio.playCollect(), [audio]);
 	const handleRetryPress = useCallback(
-		(point: PressPoint) => flood.run(playerColor, point.x, point.y, handleStart),
+		(point: PressPoint) => flood.run(playerColor, point.x, point.y, () => handleStart(playerColor)),
 		[flood, playerColor, handleStart],
 	);
 	const handleBackPress = useCallback(
@@ -347,6 +362,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 							highScore={highScore}
 							soundEnabled={soundEnabled}
 							onStart={handleStartPress}
+							onCalibrate={handleMenuCalibratePress}
 							onToggleSound={handleToggleSound}
 						/>
 					)}
@@ -365,6 +381,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 					{settle && (
 						<SettleOverlay
 							color={settle.color}
+							zero={settle.zero}
 							onSettled={handleSettled}
 							onBack={handleSettleBack}
 							onSnap={handleSettleSnap}

@@ -6,7 +6,6 @@ import Animated, {
 	FadeOut,
 	useFrameCallback,
 	useSharedValue,
-	ZoomIn,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { TiltZero } from "../../domain/types";
@@ -14,8 +13,8 @@ import type { PressPoint } from "../components/DotButton";
 import { DotButton } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettleBowl } from "../components/SettleBowl";
-import { CAPTION, WHITE } from "../theme/theme";
-import { INITIAL_SETTLE, type SettlePhase, stepSettle } from "../tilt/settle";
+import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
+import { type SettlePhase, startSettle, stepSettle } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
@@ -23,19 +22,24 @@ interface SettleOverlayProps {
 	/** Colour of the dot that settles, and of the flood it swells into */
 	color: string;
 	/** The pose is set; `point` is where the dot rests on screen, for the flood to grow from */
+	/** The level pose already set, if any; it must be left before a new hold starts */
+	zero: TiltZero | null;
 	onSettled: (zero: TiltZero, point: PressPoint) => void;
 	onBack: () => void;
 	/** The moment the dot comes to rest (a sound belongs here) */
 	onSnap?: () => void;
 }
 
-const BOWL_SIZE = 236;
+const CAPTION_LINE_HEIGHT = 20;
 /** Time for the ring to snap and pulse before the dot swells into the next screen */
 const SNAP_MS = 300;
 
+/** One caption for the whole hold, so it doesn't flicker as a hold starts and breaks */
+const HOLD_CAPTION = "hold it the way you like to play\nkeep still, or tap to set now";
+
 const CAPTIONS: Record<SettlePhase, string> = {
-	moving: "hold it the way you like to play\nkeep still, or tap to set now",
-	settling: "keep still…",
+	moving: HOLD_CAPTION,
+	settling: HOLD_CAPTION,
 	settled: "that’s level",
 };
 
@@ -47,6 +51,7 @@ const CAPTIONS: Record<SettlePhase, string> = {
  */
 export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	color,
+	zero,
 	onSettled,
 	onBack,
 	onSnap,
@@ -54,7 +59,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const tilt = useTilt();
 	const tiltAvailable = useTiltAvailable();
 	const [phase, setPhase] = useState<SettlePhase>("moving");
-	const state = useSharedValue(INITIAL_SETTLE);
+	const state = useSharedValue(startSettle(zero));
 	const bowlRef = useRef<View>(null);
 	const doneRef = useRef(false);
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,9 +134,9 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 			</View>
 
 			<View style={styles.centre} pointerEvents="none">
-				<Animated.View ref={bowlRef} entering={ZoomIn.springify().damping(14)}>
+				<View ref={bowlRef} collapsable={false}>
 					<SettleBowl size={BOWL_SIZE} color={color} state={state} />
-				</Animated.View>
+				</View>
 				<Text style={styles.caption}>{caption}</Text>
 			</View>
 
@@ -166,7 +171,9 @@ const styles = StyleSheet.create({
 	},
 	caption: {
 		...CAPTION,
-		lineHeight: 20,
+		lineHeight: CAPTION_LINE_HEIGHT,
+		// Always reserve two lines so a one-line caption doesn't shift the bowl
+		minHeight: CAPTION_LINE_HEIGHT * 2,
 	},
 	footer: {
 		alignItems: "center",

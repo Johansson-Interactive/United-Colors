@@ -36,7 +36,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 }) => {
 	const tilt = useTilt();
 	const centre = size / 2;
-	const rim = centre - 4;
+	// Inset by half the progress arc's stroke so it isn't clipped
+	const rim = centre - 2;
 	const target = size * 0.17;
 	const bubble = size * 0.085;
 	const travel = rim - bubble - 2;

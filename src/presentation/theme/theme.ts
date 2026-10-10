@@ -13,6 +13,9 @@ export const PINK = GAME_COLORS[0];
 export const BLUE = GAME_COLORS[1];
 export const GREEN = GAME_COLORS[2];
 
+/** Diameter of the big ring shared by the title, level and pause screens */
+export const BOWL_SIZE = 236;
+
 export const MUTED = "rgba(244,246,251,0.55)";
 export const FAINT = "rgba(244,246,251,0.22)";
 

@@ -1,9 +1,11 @@
+import { LEVEL_RAD } from "../../presentation/tilt/levelGate";
 import {
 	INITIAL_SETTLE,
 	SETTLE_HOLD_MS,
 	type SettleState,
 	STILL_RAD,
 	settleEase,
+	startSettle,
 	stepSettle,
 } from "../../presentation/tilt/settle";
 
@@ -83,6 +85,32 @@ describe("settle", () => {
 	it("stays settled and ignores further samples", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
 		expect(stepSettle(s, 2, 2, 16)).toBe(s);
+	});
+
+	it("holding the current level pose does not start a hold", () => {
+		const s = hold(
+			startSettle({ x: 0.6, y: -0.2 }),
+			0.6 + LEVEL_RAD * 0.8,
+			-0.2,
+			SETTLE_HOLD_MS * 2,
+		);
+		expect(s.phase).toBe("moving");
+		expect(s.progress).toBe(0);
+		expect(s.away).not.toBeNull();
+	});
+
+	it("once the hand leaves the current pose, any hold settles, even back at that pose", () => {
+		let s = run(startSettle({ x: 0.6, y: -0.2 }), 0.6, -0.2 + LEVEL_RAD * 1.5, 100);
+		expect(s.away).toBeNull();
+		s = hold(s, 0.6, -0.2, SETTLE_HOLD_MS + 200);
+		expect(s.phase).toBe("settled");
+		expect(s.meanX).toBeCloseTo(0.6, 2);
+		expect(s.meanY).toBeCloseTo(-0.2, 2);
+	});
+
+	it("without a current pose a hold starts straight away", () => {
+		const s = hold(startSettle(null), 0, 0, SETTLE_HOLD_MS + 200);
+		expect(s.phase).toBe("settled");
 	});
 
 	it("eases from 0 to 1", () => {
