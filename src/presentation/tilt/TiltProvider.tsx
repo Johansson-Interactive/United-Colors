@@ -2,6 +2,7 @@ import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import type { SensorPort, TiltZero } from "../../domain/types";
+import { NO_ZERO } from "./tiltZero";
 
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
@@ -20,8 +21,6 @@ export interface Tilt {
 	zeroDown: SharedValue<TiltZero>;
 	available: SharedValue<boolean>;
 }
-
-export const NO_ZERO: TiltZero = { x: 0, y: 0 };
 
 const TiltContext = createContext<Tilt | null>(null);
 

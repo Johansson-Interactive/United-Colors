@@ -36,7 +36,8 @@ import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
 import { INK, INK_LIFT, WHITE } from "./theme/theme";
-import { NO_ZERO, useTilt } from "./tilt/TiltProvider";
+import { useTilt } from "./tilt/TiltProvider";
+import { NO_ZERO } from "./tilt/tiltZero";
 
 const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
 const DEFAULT_DENSITY = 400;
