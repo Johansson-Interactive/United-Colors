@@ -27,6 +27,7 @@ import { Bursts } from "./effects/Bursts";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import { GameCanvas } from "./GameCanvas";
+import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useGameLoop } from "./hooks/useGameLoop";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
@@ -40,13 +41,6 @@ import { NO_ZERO } from "./tilt/tiltZero";
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
 const sensor = new DeviceMotionAdapter();
-
-const isDev = typeof __DEV__ !== "undefined" && __DEV__;
-
-/** Dev only: 'gyro' | 'touch' | 'pending' (waiting for first gyro sample or timeout) */
-type DevControlMode = "gyro" | "touch" | "pending";
-
-const GYRO_DETECT_MS = 800;
 
 /**
  * The settle bowl is open: where play continues afterwards, the colour of the dot that settles,
@@ -81,9 +75,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const [previousBest, setPreviousBest] = useState(0);
 	const [settle, setSettle] = useState<SettleRequest | null>(null);
 
-	// Dev only: prefer gyro, fallback to touch when gyro not available (e.g. simulator)
-	const [devControlMode, setDevControlMode] = useState<DevControlMode>("pending");
-	const devGyroTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// Dev only: prefer gyro, fall back to touch drag when gyro is missing (e.g. simulator)
+	const { touch: devTouch, detectGyro, onGyroSample } = useDevControlMode();
 
 	const { scene, getEngine, peekEngine, setScreen, drawScene, startClock, stopClock } = useGameLoop(
 		store,
@@ -132,15 +125,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	// Reads the latest control mode without resubscribing the sensor when it changes
 	const handleSensorSample = useEffectEvent((sample: SensorSample) => {
 		// Dev: skip feeding the engine while touch is active
-		if (isDev && devControlMode === "touch") return;
-		// Dev: first gyro sample → prefer gyro, cancel touch fallback
-		if (isDev) {
-			if (devGyroTimeoutRef.current) {
-				clearTimeout(devGyroTimeoutRef.current);
-				devGyroTimeoutRef.current = null;
-			}
-			setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
-		}
+		if (devTouch) return;
+		onGyroSample();
 		peekEngine()?.onSensorInput(sample.x, sample.y, sample.facingDown);
 	});
 
@@ -148,7 +134,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	useEffect(() => {
 		sensor.onSample((sample) => handleSensorSample(sample));
 		return () => {
-			if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
 			sensor.stop();
 		};
 	}, []);
@@ -181,17 +166,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 			const engine = getEngine();
 			startGame(engine, store, color);
 			sensor.start();
-			if (isDev) {
-				setDevControlMode("pending");
-				if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
-				devGyroTimeoutRef.current = setTimeout(() => {
-					devGyroTimeoutRef.current = null;
-					setDevControlMode((prev) => (prev === "pending" ? "touch" : prev));
-				}, GYRO_DETECT_MS);
-			}
+			detectGyro();
 			startClock();
 		},
-		[getEngine, startClock],
+		[getEngine, startClock, detectGyro],
 	);
 
 	const handlePause = useCallback(() => {
@@ -302,7 +280,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 						frost={frost}
 						onLayout={handleLayout}
 						onDragDelta={
-							isDev && devControlMode === "touch"
+							devTouch
 								? (dx, dy) => {
 										// Rendered on the next frame
 										peekEngine()?.onMovementDelta(dx, dy);
