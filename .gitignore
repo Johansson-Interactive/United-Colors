@@ -38,3 +38,6 @@ yarn-error.*
 
 # Biome
 .biome/
+
+# Python
+scripts/__pycache__/
