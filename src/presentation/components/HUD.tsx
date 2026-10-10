@@ -43,7 +43,7 @@ export const HUD: React.FC<HUDProps> = ({ score, color, onPause }) => {
 
 const styles = StyleSheet.create({
 	container: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	score: {
 		position: "absolute",

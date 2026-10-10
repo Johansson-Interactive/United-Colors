@@ -84,7 +84,7 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) =
 
 const styles = StyleSheet.create({
 	dot: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 		alignItems: "center",
 		justifyContent: "center",
 	},

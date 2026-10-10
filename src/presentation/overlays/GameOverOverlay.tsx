@@ -81,7 +81,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 
 const styles = StyleSheet.create({
 	container: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	top: {
 		alignItems: "center",
