@@ -24,7 +24,8 @@ interface SettleOverlayProps {
 	/** The pose is set; `point` is where the dot rests on screen, for the flood to grow from */
 	/** The level pose already set, if any; it must be left before a new hold starts */
 	zero: TiltZero | null;
-	onSettled: (zero: TiltZero, point: PressPoint) => void;
+	/** `facingDown`: the side the screen faced, which the pose is for */
+	onSettled: (zero: TiltZero, facingDown: boolean, point: PressPoint) => void;
 	onBack: () => void;
 	/** The moment the dot comes to rest (a sound belongs here) */
 	onSnap?: () => void;
@@ -75,11 +76,11 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 				const bowl = bowlRef.current;
 				if (!bowl) return;
 				bowl.measureInWindow((x, y, width, height) => {
-					onSettled(zero, { x: x + width / 2, y: y + height / 2 });
+					onSettled(zero, tilt.raw.facingDown.value, { x: x + width / 2, y: y + height / 2 });
 				});
 			}, SNAP_MS);
 		},
-		[onSettled, onSnap],
+		[onSettled, onSnap, tilt],
 	);
 
 	useEffect(
@@ -157,7 +158,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 
 const styles = StyleSheet.create({
 	container: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	top: {
 		alignItems: "center",

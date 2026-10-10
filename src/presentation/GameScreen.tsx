@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +19,7 @@ import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
 import { updateSettings } from "../application/useCases/UpdateSettings";
 import { GameEngine } from "../domain/engine/GameEngine";
-import type { ScreenSize, TiltZero } from "../domain/types";
+import type { ScreenSize, SensorSample, TiltZero } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
@@ -90,7 +90,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	// Dev only: prefer gyro, fallback to touch when gyro not available (e.g. simulator)
 	const [devControlMode, setDevControlMode] = useState<DevControlMode>("pending");
-	const useTouchInputRef = useRef(false);
 	const devGyroTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const getEngine = useCallback((): GameEngine => {
@@ -145,12 +144,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		clockRef.current?.stop();
 	}, []);
 
-	// Keep useTouchInputRef in sync so sensor callback can skip feeding when touch is active
-	useEffect(() => {
-		useTouchInputRef.current = isDev && devControlMode === "touch";
-	}, [devControlMode]);
-
-	// Sounds load with the screen, follow the sound setting and the music follows the phase;
+	// Sounds load with the screen, follow the music and effect settings, and the music follows the phase;
 	// dispose discards a load in flight
 	useEffect(() => {
 		void audio.load();
@@ -173,27 +167,32 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	// the dots on the menus rest in the same hand position
 	useEffect(
 		() =>
-			bindTiltZero(store, (zero: TiltZero | null) => {
-				getEngine().setTiltZero(zero);
+			bindTiltZero(store, (zero: TiltZero | null, zeroDown: TiltZero | null) => {
+				getEngine().setTiltZero(zero, zeroDown);
 				tilt.zero.value = zero ?? NO_ZERO;
+				tilt.zeroDown.value = zeroDown ?? NO_ZERO;
 			}),
 		[getEngine, tilt],
 	);
 
+	// Reads the latest control mode without resubscribing the sensor when it changes
+	const handleSensorSample = useEffectEvent((sample: SensorSample) => {
+		// Dev: skip feeding the engine while touch is active
+		if (isDev && devControlMode === "touch") return;
+		// Dev: first gyro sample → prefer gyro, cancel touch fallback
+		if (isDev) {
+			if (devGyroTimeoutRef.current) {
+				clearTimeout(devGyroTimeoutRef.current);
+				devGyroTimeoutRef.current = null;
+			}
+			setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
+		}
+		engineRef.current?.onSensorInput(sample.x, sample.y, sample.facingDown);
+	});
+
 	// Setup sensor
 	useEffect(() => {
-		sensor.onSample((sample) => {
-			if (isDev && useTouchInputRef.current) return;
-			// Dev: first gyro sample → prefer gyro, cancel touch fallback
-			if (isDev) {
-				if (devGyroTimeoutRef.current) {
-					clearTimeout(devGyroTimeoutRef.current);
-					devGyroTimeoutRef.current = null;
-				}
-				setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
-			}
-			engineRef.current?.onSensorInput(sample.x, sample.y);
-		});
+		sensor.onSample((sample) => handleSensorSample(sample));
 		return () => {
 			if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
 			sensor.stop();
@@ -266,6 +265,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	// Transitions: a dot grows from under the finger, the scene changes, and it lifts.
 	// A first game starts by setting the level pose; the settled dot then floods into play.
+	// The level pose for the side the screen faces now, which a new settle replaces
+	const currentZero = useCallback(() => {
+		const { settings } = store.getState();
+		return tilt.raw.facingDown.value ? settings.tiltZeroDown : settings.tiltZero;
+	}, [tilt]);
 	const handleStartPress = useCallback(
 		(point: PressPoint, color: string) => {
 			if (store.getState().settings.tiltZero) {
@@ -277,15 +281,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		[flood, handleStart],
 	);
 	const handleCalibratePress = useCallback(() => {
-		setSettle({ from: "pause", color: playerColor, zero: store.getState().settings.tiltZero });
-	}, [playerColor]);
-	const handleMenuCalibratePress = useCallback((color: string) => {
-		setSettle({ from: "menu", color, zero: store.getState().settings.tiltZero });
-	}, []);
+		setSettle({ from: "pause", color: playerColor, zero: currentZero() });
+	}, [playerColor, currentZero]);
+	const handleMenuCalibratePress = useCallback(
+		(color: string) => {
+			setSettle({ from: "menu", color, zero: currentZero() });
+		},
+		[currentZero],
+	);
 	const handleSettled = useCallback(
-		(zero: TiltZero, point: PressPoint) => {
+		(zero: TiltZero, facingDown: boolean, point: PressPoint) => {
 			if (!settle) return;
-			void calibrateTilt(zero, store, storage);
+			void calibrateTilt(zero, store, storage, facingDown);
 			// From the title the pose is only saved; the title comes straight back
 			if (settle.from === "menu") {
 				setSettle(null);
@@ -411,7 +418,7 @@ const styles = StyleSheet.create({
 		backgroundColor: INK,
 	},
 	inset: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 	},
 	stage: {
 		flex: 1,
