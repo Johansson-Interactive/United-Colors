@@ -60,7 +60,7 @@ export const Confetti: React.FC = () => {
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const t = clock.value;
+			const t = clock.get();
 			const fade = t > DURATION_MS - 900 ? (DURATION_MS - t) / 900 : 1;
 			const paint = Skia.Paint();
 			paint.setAntiAlias(true);

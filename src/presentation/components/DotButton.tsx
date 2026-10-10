@@ -70,19 +70,19 @@ export const DotButton: React.FC<DotButtonProps> = ({
 	const centre = radius + pad;
 	const pressed = useSharedValue(0);
 
-	const fill = useDerivedValue(() => (typeof color === "string" ? color : color.value));
-	const glowRadius = useDerivedValue(() => radius * (1.08 + pressed.value * 0.12));
-	const glowBlur = useDerivedValue(() => radius * (0.32 + pressed.value * 0.1));
-	const glowOpacity = useDerivedValue(() => 0.55 + pressed.value * 0.35);
+	const fill = useDerivedValue(() => (typeof color === "string" ? color : color.get()));
+	const glowRadius = useDerivedValue(() => radius * (1.08 + pressed.get() * 0.12));
+	const glowBlur = useDerivedValue(() => radius * (0.32 + pressed.get() * 0.1));
+	const glowOpacity = useDerivedValue(() => 0.55 + pressed.get() * 0.35);
 	const glareCentre = useDerivedValue(() =>
 		vec(
-			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.x.value * GLARE_TILT_GAIN)),
-			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.y.value * GLARE_TILT_GAIN)),
+			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.x.get() * GLARE_TILT_GAIN)),
+			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.y.get() * GLARE_TILT_GAIN)),
 		),
 	);
 
 	const animatedStyle = useAnimatedStyle(() => ({
-		transform: [{ scale: 1 - pressed.value * 0.08 }],
+		transform: [{ scale: 1 - pressed.get() * 0.08 }],
 	}));
 
 	const handlePressIn = useCallback(() => {

@@ -87,11 +87,11 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 
 	const tiltX = parallax ? tilt.x : zero;
 	const tiltY = parallax ? tilt.y : zero;
-	const colorValue = useDerivedValue(() => (typeof color === "string" ? color : color.value));
+	const colorValue = useDerivedValue(() => (typeof color === "string" ? color : color.get()));
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const palette = colors ?? [colorValue.value];
+			const palette = colors ?? [colorValue.get()];
 			const paints = palette.map((c) => {
 				const p = Skia.Paint();
 				p.setAntiAlias(true);
@@ -117,9 +117,9 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 				: null;
 
 			const r = pitch * dotScale;
-			const ph = phase.value;
-			const tx = tiltX.value * PARALLAX_GAIN;
-			const ty = tiltY.value * PARALLAX_GAIN;
+			const ph = phase.get();
+			const tx = tiltX.get() * PARALLAX_GAIN;
+			const ty = tiltY.get() * PARALLAX_GAIN;
 
 			for (let pass = glows ? 0 : 1; pass < 2; pass++) {
 				for (const dot of dots) {

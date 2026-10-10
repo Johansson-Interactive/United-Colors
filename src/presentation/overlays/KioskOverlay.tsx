@@ -70,7 +70,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	}, [cycle]);
 	const playColor = useDerivedValue(() =>
 		interpolateColor(
-			(cycle.value + startIndex) % TRIO.length,
+			(cycle.get() + startIndex) % TRIO.length,
 			[0, 0.88, 1, 1.88, 2, 2.88, 3],
 			[TRIO[0], TRIO[0], TRIO[1], TRIO[1], TRIO[2], TRIO[2], TRIO[0]],
 		),
@@ -101,7 +101,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 						color={playColor}
 						label="PLAY"
 						labelPitch={4}
-						onPress={(point) => onStart(point, heldColor(cycle.value + startIndex))}
+						onPress={(point) => onStart(point, heldColor(cycle.get() + startIndex))}
 						accessibilityLabel="Play"
 					/>
 				</TiltBowl>
@@ -118,7 +118,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 					<IconDot
 						size={44}
 						icon="level"
-						onPress={() => onCalibrate(heldColor(cycle.value + startIndex))}
+						onPress={() => onCalibrate(heldColor(cycle.get() + startIndex))}
 						accessibilityLabel="Set level pose"
 						color="#F4F6FB"
 					/>

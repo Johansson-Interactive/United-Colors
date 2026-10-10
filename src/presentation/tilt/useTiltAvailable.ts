@@ -8,14 +8,14 @@ export function useTiltAvailable(): boolean {
 	const tilt = useTilt();
 	const [available, setAvailable] = useState(false);
 	useAnimatedReaction(
-		() => tilt.available.value,
+		() => tilt.available.get(),
 		(value, previous) => {
 			if (value !== previous) scheduleOnRN(setAvailable, value);
 		},
 	);
 	useEffect(() => {
 		// Pick up the value if it flipped before this hook mounted
-		if (tilt.available.value) setAvailable(true);
+		if (tilt.available.get()) setAvailable(true);
 	}, [tilt.available]);
 	return available;
 }

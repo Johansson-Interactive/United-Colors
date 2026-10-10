@@ -29,7 +29,7 @@ export const HUD: React.FC<HUDProps> = ({ score, color, onPause }) => {
 			),
 		);
 	}, [score, bump]);
-	const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
+	const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.get() }] }));
 
 	return (
 		<View style={styles.container} pointerEvents="box-none">

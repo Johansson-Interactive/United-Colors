@@ -76,7 +76,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 				const bowl = bowlRef.current;
 				if (!bowl) return;
 				bowl.measureInWindow((x, y, width, height) => {
-					onSettled(zero, tilt.raw.facingDown.value, { x: x + width / 2, y: y + height / 2 });
+					onSettled(zero, tilt.raw.facingDown.get(), { x: x + width / 2, y: y + height / 2 });
 				});
 			}, SNAP_MS);
 		},
@@ -91,10 +91,10 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	);
 
 	useFrameCallback((info) => {
-		if (!tilt.available.value) return;
+		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const prev = state.value;
-		const next = stepSettle(prev, tilt.raw.x.value, tilt.raw.y.value, dt);
+		const prev = state.get();
+		const next = stepSettle(prev, tilt.raw.x.get(), tilt.raw.y.get(), dt);
 		if (next === prev) return;
 		state.set(next);
 		if (next.phase !== prev.phase) {
@@ -109,7 +109,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
 	const handleSetNow = useCallback(() => {
 		if (doneRef.current) return;
-		const current = state.value;
+		const current = state.get();
 		const measured = tiltAvailable && current.elapsedMs > 0;
 		state.set({ ...current, phase: "settled", progress: 1 });
 		finish(measured ? { x: current.meanX, y: current.meanY } : { x: 0, y: 0 });

@@ -45,17 +45,17 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state }) =>
 	const shownX = useSharedValue(0);
 	const shownY = useSharedValue(0);
 	useFrameCallback((info) => {
-		if (!tilt.available.value) return;
+		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		shownX.set(shownX.get() + (tilt.raw.x.value - shownX.value) * k);
-		shownY.set(shownY.get() + (tilt.raw.y.value - shownY.value) * k);
+		shownX.set(shownX.get() + (tilt.raw.x.get() - shownX.get()) * k);
+		shownY.set(shownY.get() + (tilt.raw.y.get() - shownY.get()) * k);
 	});
 
 	// Snap and pulse once the pose has settled
 	const pulse = useSharedValue(0);
 	useAnimatedReaction(
-		() => state.value.phase === "settled",
+		() => state.get().phase === "settled",
 		(settled, was) => {
 			if (settled && !was) {
 				pulse.set(0);
@@ -64,12 +64,12 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state }) =>
 		},
 	);
 
-	const level = useDerivedValue(() => settleEase(state.value.progress));
+	const level = useDerivedValue(() => settleEase(state.get().progress));
 	const position = useDerivedValue(() => {
 		// The bowl levels to the hand as the hold progresses: the mean is taken out gradually
-		const s = state.value;
-		let x = (shownX.value - s.meanX * level.value) * GAIN;
-		let y = (shownY.value - s.meanY * level.value) * GAIN;
+		const s = state.get();
+		let x = (shownX.get() - s.meanX * level.get()) * GAIN;
+		let y = (shownY.get() - s.meanY * level.get()) * GAIN;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;
@@ -77,14 +77,14 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state }) =>
 		}
 		return vec(centre + x, centre + y);
 	});
-	const dotRadius = useDerivedValue(() => dot * (1 + 0.3 * Math.sin(pulse.value * Math.PI)));
-	const glowRadius = useDerivedValue(() => dotRadius.value * (1.5 + level.value * 0.4));
-	const glowOpacity = useDerivedValue(() => 0.35 + level.value * 0.45);
-	const ringRadius = useDerivedValue(() => rim - (rim - closed) * level.value);
-	const ringOpacity = useDerivedValue(() => 0.12 + level.value * 0.88);
-	const pulseRadius = useDerivedValue(() => closed + (rim * 1.1 - closed) * pulse.value);
+	const dotRadius = useDerivedValue(() => dot * (1 + 0.3 * Math.sin(pulse.get() * Math.PI)));
+	const glowRadius = useDerivedValue(() => dotRadius.get() * (1.5 + level.get() * 0.4));
+	const glowOpacity = useDerivedValue(() => 0.35 + level.get() * 0.45);
+	const ringRadius = useDerivedValue(() => rim - (rim - closed) * level.get());
+	const ringOpacity = useDerivedValue(() => 0.12 + level.get() * 0.88);
+	const pulseRadius = useDerivedValue(() => closed + (rim * 1.1 - closed) * pulse.get());
 	const pulseOpacity = useDerivedValue(() =>
-		pulse.value > 0 && pulse.value < 1 ? 0.9 * (1 - pulse.value) : 0,
+		pulse.get() > 0 && pulse.get() < 1 ? 0.9 * (1 - pulse.get()) : 0,
 	);
 
 	return (

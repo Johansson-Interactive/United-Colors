@@ -70,14 +70,14 @@ export function useFlood(): FloodController {
 export const FloodOverlay: React.FC<{ flood: FloodController }> = ({ flood }) => {
 	const { width, height } = useWindowDimensions();
 	const style = useAnimatedStyle(() => {
-		const ox = flood.originX.value;
-		const oy = flood.originY.value;
+		const ox = flood.originX.get();
+		const oy = flood.originY.get();
 		// Radius needed to reach the farthest corner from the origin
 		const reach = Math.hypot(Math.max(ox, width - ox), Math.max(oy, height - oy));
-		const scale = (flood.progress.value * reach * 2.05) / BASE_DIAMETER;
+		const scale = (flood.progress.get() * reach * 2.05) / BASE_DIAMETER;
 		return {
-			opacity: flood.opacity.value,
-			backgroundColor: flood.color.value,
+			opacity: flood.opacity.get(),
+			backgroundColor: flood.color.get(),
 			transform: [
 				{ translateX: ox - BASE_DIAMETER / 2 },
 				{ translateY: oy - BASE_DIAMETER / 2 },
@@ -86,7 +86,7 @@ export const FloodOverlay: React.FC<{ flood: FloodController }> = ({ flood }) =>
 		};
 	});
 	const pointerStyle = useAnimatedStyle(() => ({
-		pointerEvents: flood.opacity.value > 0 ? "auto" : "none",
+		pointerEvents: flood.opacity.get() > 0 ? "auto" : "none",
 	}));
 
 	return (

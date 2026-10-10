@@ -46,18 +46,18 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	const leaveRad = target / BUBBLE_GAIN;
 
 	const gate = useSharedValue(INITIAL_LEVEL_GATE);
-	const progress = useDerivedValue(() => gate.value.progress);
+	const progress = useDerivedValue(() => gate.get().progress);
 	// Only highlight "level" once the bubble has been out, so a centred bubble isn't misread
 	const level = useDerivedValue(
 		() =>
-			gate.value.phase === "return" && tilt.available.value && isLevel(tilt.x.value, tilt.y.value),
+			gate.get().phase === "return" && tilt.available.get() && isLevel(tilt.x.get(), tilt.y.get()),
 	);
 
 	useFrameCallback((info) => {
-		if (!tilt.available.value) return;
+		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const prev = gate.value;
-		const next = stepLevelGate(prev, tilt.x.value, tilt.y.value, dt, leaveRad);
+		const prev = gate.get();
+		const next = stepLevelGate(prev, tilt.x.get(), tilt.y.get(), dt, leaveRad);
 		if (next === prev) return;
 		gate.set(next);
 		if (next.phase !== prev.phase && onPhaseChange) scheduleOnRN(onPhaseChange, next.phase);
@@ -65,8 +65,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	});
 
 	const bubblePos = useDerivedValue(() => {
-		let x = tilt.x.value * BUBBLE_GAIN;
-		let y = tilt.y.value * BUBBLE_GAIN;
+		let x = tilt.x.get() * BUBBLE_GAIN;
+		let y = tilt.y.get() * BUBBLE_GAIN;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;
@@ -74,13 +74,13 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 		}
 		return { x: centre + x, y: centre + y };
 	});
-	const bubbleX = useDerivedValue(() => bubblePos.value.x);
-	const bubbleY = useDerivedValue(() => bubblePos.value.y);
-	const bubbleColor = useDerivedValue(() => (level.value ? color : WHITE));
-	const targetColor = useDerivedValue(() => (level.value ? color : "rgba(255,255,255,0.25)"));
+	const bubbleX = useDerivedValue(() => bubblePos.get().x);
+	const bubbleY = useDerivedValue(() => bubblePos.get().y);
+	const bubbleColor = useDerivedValue(() => (level.get() ? color : WHITE));
+	const targetColor = useDerivedValue(() => (level.get() ? color : "rgba(255,255,255,0.25)"));
 	const arc = useDerivedValue(() => {
 		const path = Skia.Path.Make();
-		const sweep = 360 * progress.value;
+		const sweep = 360 * progress.get();
 		if (sweep > 0) {
 			path.addArc(Skia.XYWHRect(centre - rim, centre - rim, rim * 2, rim * 2), -90, sweep);
 		}

@@ -25,8 +25,8 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) =
 	const travel = rim - dotSize / 2 - 6;
 
 	const offset = useDerivedValue(() => {
-		let x = tilt.x.value * ROLL_GAIN;
-		let y = tilt.y.value * ROLL_GAIN;
+		let x = tilt.x.get() * ROLL_GAIN;
+		let y = tilt.y.get() * ROLL_GAIN;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;
@@ -36,15 +36,15 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) =
 	});
 
 	const dotStyle = useAnimatedStyle(() => ({
-		transform: [{ translateX: offset.value.x }, { translateY: offset.value.y }],
+		transform: [{ translateX: offset.get().x }, { translateY: offset.get().y }],
 	}));
 
 	// Contact shadow: lags under the dot and stretches toward the rim as it rolls out
 	const shadowCentre = useDerivedValue(() =>
-		vec(rim + offset.value.x * 1.08, rim + offset.value.y * 1.08 + 6),
+		vec(rim + offset.get().x * 1.08, rim + offset.get().y * 1.08 + 6),
 	);
 	const shadowRadius = useDerivedValue(
-		() => dotSize * 0.55 + Math.hypot(offset.value.x, offset.value.y) * 0.08,
+		() => dotSize * 0.55 + Math.hypot(offset.get().x, offset.get().y) * 0.08,
 	);
 
 	return (

@@ -43,7 +43,7 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 	const lightY = useSharedValue(0);
 
 	useAnimatedReaction(
-		() => ({ x: tilt.x.value, y: tilt.y.value, frozen: frost.value > 0.001 }),
+		() => ({ x: tilt.x.get(), y: tilt.y.get(), frozen: frost.get() > 0.001 }),
 		(current) => {
 			if (current.frozen) return;
 			lightX.set(current.x);
@@ -53,8 +53,8 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const lx = lightX.value;
-			const ly = lightY.value;
+			const lx = lightX.get();
+			const ly = lightY.get();
 			const full = Skia.XYWHRect(0, 0, width, height);
 
 			// Faint gradients over dark ink only span a handful of 8-bit steps; dither them so
@@ -74,7 +74,7 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 
 			const wash = Skia.Paint();
 			wash.setDither(true);
-			const c = Skia.Color(accent.value);
+			const c = Skia.Color(accent.get());
 			wash.setShader(
 				Skia.Shader.MakeRadialGradient(
 					vec(width / 2, height / 2),

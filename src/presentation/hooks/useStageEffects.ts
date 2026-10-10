@@ -84,7 +84,7 @@ export function useStageEffects(
 	);
 
 	const shakeStyle = useAnimatedStyle(() => ({
-		transform: [{ translateX: shake.value }],
+		transform: [{ translateX: shake.get() }],
 	}));
 
 	return { accent, frost, shakeStyle, bursts };

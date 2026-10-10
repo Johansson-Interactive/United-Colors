@@ -63,7 +63,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 
 	// Only track the light while live: frosted scenes stay still even as the phone moves
 	useAnimatedReaction(
-		() => ({ x: tilt.x.value, y: tilt.y.value, frozen: frost.value > 0.001 }),
+		() => ({ x: tilt.x.get(), y: tilt.y.get(), frozen: frost.get() > 0.001 }),
 		(current, previous) => {
 			if (current.frozen !== previous?.frozen) scheduleOnRN(setFrosted, current.frozen);
 			if (current.frozen) return;
@@ -106,8 +106,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const lx = lightX.value;
-			const ly = lightY.value;
+			const lx = lightX.get();
+			const ly = lightY.get();
 
 			const fill = Skia.Paint();
 			fill.setAntiAlias(true);
@@ -166,7 +166,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				return paint;
 			};
 
-			const dots = scene.value;
+			const dots = scene.get();
 			// Halos first so no glow sits on top of a neighbouring body
 			for (const dot of dots) {
 				if (dot.radius <= 0 || dot.kind === "player") continue;
@@ -194,7 +194,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 		}),
 	);
 
-	const frostSigma = useDerivedValue(() => frost.value * FROST_MAX_SIGMA);
+	const frostSigma = useDerivedValue(() => frost.get() * FROST_MAX_SIGMA);
 
 	// When using drag, Canvas must not capture touches so the container gets them
 	const canvasPointerEvents = onDragDelta ? "none" : "auto";

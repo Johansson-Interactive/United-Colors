@@ -38,11 +38,11 @@ const Pop: React.FC<{ burst: Extract<Burst, { kind: "pop" }> }> = ({ burst }) =>
 		t.set(withTiming(1, { duration: BURST_LIFETIME_MS, easing: Easing.out(Easing.cubic) }));
 	}, [t]);
 	const style = useAnimatedStyle(() => ({
-		opacity: t.value < 0.6 ? 1 : 1 - (t.value - 0.6) / 0.4,
+		opacity: t.get() < 0.6 ? 1 : 1 - (t.get() - 0.6) / 0.4,
 		transform: [
 			{ translateX: burst.x - POP_WIDTH / 2 },
-			{ translateY: burst.y - 30 - t.value * 46 },
-			{ scale: 0.7 + Math.min(t.value * 4, 1) * 0.5 },
+			{ translateY: burst.y - 30 - t.get() * 46 },
+			{ scale: 0.7 + Math.min(t.get() * 4, 1) * 0.5 },
 		],
 	}));
 	return (
@@ -61,13 +61,13 @@ const Ring: React.FC<{ burst: Extract<Burst, { kind: "ring" }> }> = ({ burst }) 
 		);
 	}, [t]);
 	const style = useAnimatedStyle(() => ({
-		opacity: (1 - t.value) * 0.9,
+		opacity: (1 - t.get()) * 0.9,
 		borderColor: burst.color,
-		borderWidth: 3 + (1 - t.value) * 5,
+		borderWidth: 3 + (1 - t.get()) * 5,
 		transform: [
 			{ translateX: burst.x - size / 2 },
 			{ translateY: burst.y - size / 2 },
-			{ scale: 0.3 + t.value * 9 },
+			{ scale: 0.3 + t.get() * 9 },
 		],
 	}));
 	return (

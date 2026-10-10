@@ -269,7 +269,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	// The level pose for the side the screen faces now, which a new settle replaces
 	const currentZero = useCallback(() => {
 		const { settings } = store.getState();
-		return tilt.raw.facingDown.value ? settings.tiltZeroDown : settings.tiltZero;
+		return tilt.raw.facingDown.get() ? settings.tiltZeroDown : settings.tiltZero;
 	}, [tilt]);
 	const handleStartPress = useCallback(
 		(point: PressPoint, color: string) => {
