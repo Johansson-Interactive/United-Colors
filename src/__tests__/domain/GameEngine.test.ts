@@ -5,8 +5,9 @@ import {
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import { resetDotIdCounter } from "../../domain/entities/Dot";
+import type { AudioPort } from "../../domain/types";
 
-function createEngine(seed = 0.5) {
+function createEngine(seed = 0.5, audio?: AudioPort) {
 	resetDotIdCounter();
 	let callCount = 0;
 	const seededRandom = () => {
@@ -19,6 +20,7 @@ function createEngine(seed = 0.5) {
 		density: 100,
 		screen: { width: 400, height: 800 },
 		random: seededRandom,
+		audio,
 	});
 }
 
@@ -237,8 +239,8 @@ describe("GameEngine", () => {
 	});
 
 	describe("per-frame collisions", () => {
-		function startWithSmallDot() {
-			const engine = createEngine();
+		function startWithSmallDot(audio?: AudioPort) {
+			const engine = createEngine(0.5, audio);
 			engine.startGame();
 			for (let i = 0; i < 2000; i++) {
 				const small = engine.getFrame().dots.find((d) => d.kind === "small");
@@ -267,6 +269,26 @@ describe("GameEngine", () => {
 			} else {
 				expect(frame.phase).toBe("GAME_OVER");
 			}
+		});
+
+		it("catching a small dot plays the small collect sound, not the large one", () => {
+			const calls: string[] = [];
+			const audio: AudioPort = {
+				playCollect: () => calls.push("collect"),
+				playLargeCollect: () => calls.push("large"),
+				playPointSpawn: () => {},
+			};
+			const { engine, small } = startWithSmallDot(audio);
+			const alpha = 0.5;
+			const player = engine.getPlayerPosition();
+			engine.onMovementDelta(
+				small.x + small.vx * alpha - player.x,
+				small.y + small.vy * alpha - player.y,
+			);
+			engine.advancePlayer(0, alpha);
+
+			// A wrong-colour small dot ends the game instead, which plays no catch sound
+			expect(calls).toEqual(engine.getFrame().phase === "RUNNING" ? ["collect"] : []);
 		});
 
 		it("reports no change when nothing is hit", () => {

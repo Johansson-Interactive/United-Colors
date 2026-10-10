@@ -261,16 +261,16 @@ export class GameEngine {
 				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
 				(dot as PointDot).forceRemove();
+				this.audio?.playLargeCollect();
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
 				dot.flagForRemoval();
+				this.audio?.playCollect();
 			} else {
 				// Wrong color -- game over
 				this.stateMachine.transition("GAME_OVER");
 				return;
 			}
-
-			this.audio?.playCollect();
 		}
 	}
 }

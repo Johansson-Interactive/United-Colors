@@ -51,7 +51,10 @@ export interface SensorPort {
 
 /** Port for audio playback -- implemented by infrastructure */
 export interface AudioPort {
+	/** A small dot of the player's colour was caught */
 	playCollect(): void;
+	/** A point dot was caught and recoloured the player */
+	playLargeCollect(): void;
 	playPointSpawn(): void;
 }
 

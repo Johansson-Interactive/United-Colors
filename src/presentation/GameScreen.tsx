@@ -7,6 +7,7 @@ import { useStore } from "zustand";
 import type { GameAudio } from "../application/GameAudio";
 import { createGameStore } from "../application/GameStore";
 import { buildScene, type SceneDot } from "../application/renderScene";
+import { bindMusic } from "../application/useCases/BindMusic";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
@@ -134,11 +135,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		useTouchInputRef.current = isDev && devControlMode === "touch";
 	}, [devControlMode]);
 
-	// Sounds load with the screen and follow the sound setting; dispose discards a load in flight
+	// Sounds load with the screen, follow the sound setting and the music follows the phase;
+	// dispose discards a load in flight
 	useEffect(() => {
 		void audio.load();
 		const unbindSound = bindSoundSetting(store, audio);
+		const unbindMusic = bindMusic(store, audio);
 		return () => {
+			unbindMusic();
 			unbindSound();
 			audio.dispose();
 		};

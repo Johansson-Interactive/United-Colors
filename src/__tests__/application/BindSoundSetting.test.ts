@@ -8,7 +8,10 @@ function fakeAudio() {
 		load: async () => {},
 		dispose: () => {},
 		playCollect: () => {},
+		playLargeCollect: () => {},
 		playPointSpawn: () => {},
+		playGameOver: () => {},
+		setMusic: () => {},
 		setMuted: (value) => muted.push(value),
 	};
 	return { audio, muted };
