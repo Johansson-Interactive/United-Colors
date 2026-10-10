@@ -53,7 +53,6 @@ export interface SensorPort {
 export interface AudioPort {
 	playCollect(): void;
 	playPointSpawn(): void;
-	setEnabled(enabled: boolean): void;
 }
 
 /** Port for persistent storage -- implemented by infrastructure */

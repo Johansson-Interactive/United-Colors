@@ -4,8 +4,10 @@ import { StyleSheet, View } from "react-native";
 import Animated, { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
+import type { GameAudio } from "../application/GameAudio";
 import { createGameStore } from "../application/GameStore";
 import { buildScene, type SceneDot } from "../application/renderScene";
+import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
@@ -16,7 +18,6 @@ import { updateSettings } from "../application/useCases/UpdateSettings";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { ScreenSize } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
-import { AudioService } from "../infrastructure/AudioService";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
 import { AmbientBackground } from "./components/AmbientBackground";
@@ -39,7 +40,6 @@ const DEFAULT_DENSITY = 400;
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
 const sensor = new DeviceMotionAdapter();
-const audio = new AudioService();
 
 const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
@@ -48,7 +48,11 @@ type DevControlMode = "gyro" | "touch" | "pending";
 
 const GYRO_DETECT_MS = 800;
 
-export const GameScreen: React.FC = () => {
+interface GameScreenProps {
+	audio: GameAudio;
+}
+
+export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const insets = useSafeAreaInsets();
 	// Subscribe to phase/score only: dot positions never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
@@ -82,7 +86,7 @@ export const GameScreen: React.FC = () => {
 			});
 		}
 		return engineRef.current;
-	}, []);
+	}, [audio]);
 
 	// Colour wash, frost, shake and bursts react to the store and engine; the flood is the transition
 	const { accent, frost, shakeStyle, bursts } = useStageEffects(
@@ -130,10 +134,15 @@ export const GameScreen: React.FC = () => {
 		useTouchInputRef.current = isDev && devControlMode === "touch";
 	}, [devControlMode]);
 
-	// Sync store sound setting to audio service
+	// Sounds load with the screen and follow the sound setting; dispose discards a load in flight
 	useEffect(() => {
-		audio.setEnabled(soundEnabled);
-	}, [soundEnabled]);
+		void audio.load();
+		const unbindSound = bindSoundSetting(store, audio);
+		return () => {
+			unbindSound();
+			audio.dispose();
+		};
+	}, [audio]);
 
 	// Dev only: live speed tuning from the pause menu
 	const [devSpeed, setDevSpeed] = useState(() => getEngine().getPlayerSpeedPerDegree());
@@ -151,34 +160,24 @@ export const GameScreen: React.FC = () => {
 		void loadHighScore(store, storage);
 	}, []);
 
-	// Setup sensor and audio (await preload so sounds are ready before game starts)
+	// Setup sensor
 	useEffect(() => {
-		let cancelled = false;
-		(async () => {
-			await audio.preload(
-				require("../../assets/sounds/blop.ogg"),
-				require("../../assets/sounds/jump.ogg"),
-			);
-			if (cancelled) return;
-			sensor.onSample((sample) => {
-				if (isDev && useTouchInputRef.current) return;
-				// Dev: first gyro sample → prefer gyro, cancel touch fallback
-				if (isDev) {
-					if (devGyroTimeoutRef.current) {
-						clearTimeout(devGyroTimeoutRef.current);
-						devGyroTimeoutRef.current = null;
-					}
-					setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
+		sensor.onSample((sample) => {
+			if (isDev && useTouchInputRef.current) return;
+			// Dev: first gyro sample → prefer gyro, cancel touch fallback
+			if (isDev) {
+				if (devGyroTimeoutRef.current) {
+					clearTimeout(devGyroTimeoutRef.current);
+					devGyroTimeoutRef.current = null;
 				}
-				engineRef.current?.onSensorInput(sample.x, sample.y);
-			});
-		})();
+				setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
+			}
+			engineRef.current?.onSensorInput(sample.x, sample.y);
+		});
 		return () => {
-			cancelled = true;
 			if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
 			sensor.stop();
 			clockRef.current?.stop();
-			audio.unload();
 		};
 	}, []);
 

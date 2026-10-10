@@ -1,66 +1,103 @@
 import { Asset } from "expo-asset";
-import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio";
-import type { AudioPort } from "../domain/types";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
+import type { GameAudio } from "../application/GameAudio";
+import { SoundEffect, type Voice } from "./SoundEffect";
 
-/** require() result for bundling; we resolve to URI via expo-asset for reliable playback */
-type AssetModule = number;
+type SoundName = "collect" | "pointSpawn";
+
+/** require() results for bundled sound files */
+export type SoundSources = Record<SoundName, number>;
+
+/** Players per effect: collects can land several in a few frames, spawns rarely overlap */
+const VOICES: Record<SoundName, number> = {
+	collect: 4,
+	pointSpawn: 2,
+};
 
 /**
- * Audio service using expo-audio.
- * Pre-loads game sounds via expo-asset (for reliable playback on Android) and plays them on demand.
+ * Sound effects on expo-audio. Sounds resolve to local files via expo-asset (for reliable
+ * playback on Android) and each effect gets a small pool of players.
  */
-export class AudioService implements AudioPort {
-	private enabled = true;
-	private collectPlayer: AudioPlayer | null = null;
-	private pointSpawnPlayer: AudioPlayer | null = null;
-	private loaded = false;
+export class AudioService implements GameAudio {
+	private effects: Partial<Record<SoundName, SoundEffect>> = {};
+	private muted = false;
+	private loading: Promise<void> | null = null;
+	/** Bumped on dispose so a load still in flight knows its results are stale */
+	private generation = 0;
 
-	async preload(collectAsset: AssetModule, pointSpawnAsset: AssetModule): Promise<void> {
-		try {
-			await setAudioModeAsync({
-				playsInSilentMode: true,
-				shouldPlayInBackground: false,
-			});
+	constructor(private readonly sources: SoundSources) {}
 
-			const [collectRes, pointSpawnRes] = await Promise.all([
-				Asset.loadAsync(collectAsset),
-				Asset.loadAsync(pointSpawnAsset),
-			]);
-			const collectUri = collectRes[0]?.localUri ?? collectRes[0]?.uri ?? null;
-			const pointSpawnUri = pointSpawnRes[0]?.localUri ?? pointSpawnRes[0]?.uri ?? null;
-			if (!collectUri || !pointSpawnUri) {
-				this.loaded = false;
-				return;
-			}
-
-			this.collectPlayer = createAudioPlayer(collectUri);
-			this.pointSpawnPlayer = createAudioPlayer(pointSpawnUri);
-			this.loaded = true;
-		} catch {
-			// Audio unavailable (e.g. simulator) -- degrade gracefully
-			this.loaded = false;
-		}
+	load(): Promise<void> {
+		this.loading ??= this.loadEffects(this.generation);
+		return this.loading;
 	}
 
 	playCollect(): void {
-		if (!this.enabled || !this.loaded || !this.collectPlayer) return;
-		this.collectPlayer.seekTo(0).then(() => this.collectPlayer?.play());
+		this.effects.collect?.play();
 	}
 
 	playPointSpawn(): void {
-		if (!this.enabled || !this.loaded || !this.pointSpawnPlayer) return;
-		this.pointSpawnPlayer.seekTo(0).then(() => this.pointSpawnPlayer?.play());
+		this.effects.pointSpawn?.play();
 	}
 
-	setEnabled(enabled: boolean): void {
-		this.enabled = enabled;
+	setMuted(muted: boolean): void {
+		this.muted = muted;
+		for (const effect of Object.values(this.effects)) effect.setMuted(muted);
 	}
 
-	async unload(): Promise<void> {
-		this.collectPlayer?.remove();
-		this.pointSpawnPlayer?.remove();
-		this.collectPlayer = null;
-		this.pointSpawnPlayer = null;
-		this.loaded = false;
+	dispose(): void {
+		this.generation++;
+		this.loading = null;
+		for (const effect of Object.values(this.effects)) effect.dispose();
+		this.effects = {};
 	}
+
+	private async loadEffects(generation: number): Promise<void> {
+		const created: Partial<Record<SoundName, SoundEffect>> = {};
+		try {
+			// Sound effects mix with the player's own music rather than taking audio focus
+			// (Android) or stopping it (iOS) on every play
+			await setAudioModeAsync({
+				playsInSilentMode: true,
+				shouldPlayInBackground: false,
+				interruptionMode: "mixWithOthers",
+			});
+			const names = Object.keys(this.sources) as SoundName[];
+			const uris = await Promise.all(names.map((name) => resolveUri(this.sources[name])));
+			if (generation !== this.generation) return;
+
+			names.forEach((name, i) => {
+				created[name] = new SoundEffect(createVoices(uris[i], VOICES[name]));
+			});
+			for (const effect of Object.values(created)) effect.setMuted(this.muted);
+			this.effects = created;
+		} catch {
+			// Audio unavailable (e.g. simulator) -- degrade to silence and allow a later retry
+			for (const effect of Object.values(created)) effect.dispose();
+			if (generation === this.generation) this.loading = null;
+		}
+	}
+}
+
+async function resolveUri(source: number): Promise<string> {
+	const [asset] = await Asset.loadAsync(source);
+	const uri = asset?.localUri ?? asset?.uri;
+	if (!uri) throw new Error("Sound asset has no URI");
+	return uri;
+}
+
+function createVoices(uri: string | undefined, count: number): Voice[] {
+	if (!uri) throw new Error("Sound asset has no URI");
+	const voices: Voice[] = [];
+	try {
+		for (let i = 0; i < count; i++) {
+			// Keeping the iOS session active avoids deactivating it after every short sound,
+			// which races the next play and costs a session round trip each time
+			voices.push(createAudioPlayer(uri, { keepAudioSessionActive: true }));
+		}
+	} catch (error) {
+		for (const voice of voices) voice.remove();
+		throw error;
+	}
+	return voices;
 }
