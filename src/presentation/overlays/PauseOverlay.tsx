@@ -1,4 +1,5 @@
 import type React from "react";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { DotButton, type PressPoint } from "../components/DotButton";
@@ -6,9 +7,12 @@ import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { LevelGate } from "../components/LevelGate";
 import { CAPTION, WHITE } from "../theme/theme";
+import type { LevelGatePhase } from "../tilt/levelGate";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
 interface PauseOverlayProps {
+	/** Player dot colour at the moment of pausing; the level shows it while levelling back in */
+	color: string;
 	onResume: () => void;
 	onQuit: (point: PressPoint) => void;
 	soundEnabled: boolean;
@@ -18,10 +22,12 @@ interface PauseOverlayProps {
 }
 
 /**
- * Paused: the scene frosts over and a spirit level takes the middle. Holding the phone
- * level resumes, so play restarts from rest; tapping the level resumes immediately.
+ * Paused: the scene frosts over and a spirit level takes the middle. Tipping the bubble out
+ * of the inner circle and then holding the phone level resumes, so play restarts from rest;
+ * tapping the level resumes immediately.
  */
 export const PauseOverlay: React.FC<PauseOverlayProps> = ({
+	color,
 	onResume,
 	onQuit,
 	soundEnabled,
@@ -29,6 +35,12 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	children,
 }) => {
 	const tiltAvailable = useTiltAvailable();
+	const [gatePhase, setGatePhase] = useState<LevelGatePhase>("leave");
+	const caption = !tiltAvailable
+		? "tap the ring to resume"
+		: gatePhase === "leave"
+			? "tip the dot out of the circle\nor tap the ring"
+			: "bring it back and hold level\nor tap the ring";
 	return (
 		<Animated.View
 			style={styles.container}
@@ -40,10 +52,14 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 			</View>
 
 			<Animated.View style={styles.centre} entering={ZoomIn.springify().damping(14)}>
-				<LevelGate size={220} onLevelHeld={onResume} onTap={onResume} />
-				<Text style={styles.caption}>
-					{tiltAvailable ? "hold level to resume\nor tap the ring" : "tap the ring to resume"}
-				</Text>
+				<LevelGate
+					size={220}
+					color={color}
+					onLevelHeld={onResume}
+					onTap={onResume}
+					onPhaseChange={setGatePhase}
+				/>
+				<Text style={styles.caption}>{caption}</Text>
 			</Animated.View>
 
 			<View style={styles.footer}>

@@ -313,6 +313,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 					{phase === "PAUSED" && (
 						<PauseOverlay
+							color={playerColor}
 							onResume={handleResume}
 							onQuit={handleQuitPress}
 							soundEnabled={soundEnabled}

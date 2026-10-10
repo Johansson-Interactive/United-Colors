@@ -2,37 +2,38 @@ import { Canvas, Circle, Path, Skia } from "@shopify/react-native-skia";
 import type React from "react";
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import {
-	interpolateColor,
-	useDerivedValue,
-	useFrameCallback,
-	useSharedValue,
-} from "react-native-reanimated";
+import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { GREEN, WHITE } from "../theme/theme";
+import { WHITE } from "../theme/theme";
+import { INITIAL_LEVEL_GATE, isLevel, type LevelGatePhase, stepLevelGate } from "../tilt/levelGate";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface LevelGateProps {
 	size: number;
+	/** Bubble, target and fill colour while levelling back in (the player's colour) */
+	color: string;
 	/** Fired once when the device has been held level long enough */
 	onLevelHeld: () => void;
 	/** Fired when the gate is tapped (always available as a fallback) */
 	onTap: () => void;
+	/** Fired when the gate moves between "tip out" and "bring back" (for captions) */
+	onPhaseChange?: (phase: LevelGatePhase) => void;
 }
 
-/** Tilt (radians, either axis) that still counts as level */
-const LEVEL_RAD = 0.11;
-/** How long the device must stay level */
-const HOLD_MS = 900;
-/** Ignore the first moments after pausing so the hand can settle */
-const ARM_MS = 700;
 const BUBBLE_GAIN = 150;
 
 /**
- * A spirit level. The bubble follows the tilt; hold the phone level and the ring fills,
- * then the game resumes with the dot at rest instead of flying off. Tapping resumes at once.
+ * A spirit level. The bubble follows the tilt; tip it out of the inner circle, then bring it
+ * back and hold level until the ring fills, so the game resumes with the dot at rest instead of
+ * flying off (and pausing mid-play, already level, can't resume by itself). Tapping resumes at once.
  */
-export const LevelGate: React.FC<LevelGateProps> = ({ size, onLevelHeld, onTap }) => {
+export const LevelGate: React.FC<LevelGateProps> = ({
+	size,
+	color,
+	onLevelHeld,
+	onTap,
+	onPhaseChange,
+}) => {
 	const tilt = useTilt();
 	const centre = size / 2;
 	const rim = centre - 4;
@@ -40,31 +41,26 @@ export const LevelGate: React.FC<LevelGateProps> = ({ size, onLevelHeld, onTap }
 	const bubble = size * 0.085;
 	const travel = rim - bubble - 2;
 
-	const progress = useSharedValue(0);
-	const armed = useSharedValue(0);
-	const fired = useSharedValue(false);
-	const level = useSharedValue(false);
+	// Bubble centre crossing the inner circle counts as leaving it
+	const leaveRad = target / BUBBLE_GAIN;
+
+	const gate = useSharedValue(INITIAL_LEVEL_GATE);
+	const progress = useDerivedValue(() => gate.value.progress);
+	// Only highlight "level" once the bubble has been out, so a centred bubble isn't misread
+	const level = useDerivedValue(
+		() =>
+			gate.value.phase === "return" && tilt.available.value && isLevel(tilt.x.value, tilt.y.value),
+	);
 
 	useFrameCallback((info) => {
+		if (!tilt.available.value) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		if (armed.value < ARM_MS) {
-			armed.value += dt;
-			return;
-		}
-		const isLevel =
-			tilt.available.value &&
-			Math.abs(tilt.x.value) < LEVEL_RAD &&
-			Math.abs(tilt.y.value) < LEVEL_RAD;
-		level.value = isLevel;
-		if (isLevel) {
-			progress.value = Math.min(1, progress.value + dt / HOLD_MS);
-		} else {
-			progress.value = Math.max(0, progress.value - dt / (HOLD_MS * 0.4));
-		}
-		if (progress.value >= 1 && !fired.value) {
-			fired.value = true;
-			scheduleOnRN(onLevelHeld);
-		}
+		const prev = gate.value;
+		const next = stepLevelGate(prev, tilt.x.value, tilt.y.value, dt, leaveRad);
+		if (next === prev) return;
+		gate.value = next;
+		if (next.phase !== prev.phase && onPhaseChange) scheduleOnRN(onPhaseChange, next.phase);
+		if (next.fired && !prev.fired) scheduleOnRN(onLevelHeld);
 	});
 
 	const bubblePos = useDerivedValue(() => {
@@ -79,12 +75,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({ size, onLevelHeld, onTap }
 	});
 	const bubbleX = useDerivedValue(() => bubblePos.value.x);
 	const bubbleY = useDerivedValue(() => bubblePos.value.y);
-	const bubbleColor = useDerivedValue(() =>
-		interpolateColor(level.value ? 1 : 0, [0, 1], [WHITE, GREEN]),
-	);
-	const targetColor = useDerivedValue(() =>
-		level.value ? "rgba(139,195,74,0.9)" : "rgba(255,255,255,0.25)",
-	);
+	const bubbleColor = useDerivedValue(() => (level.value ? color : WHITE));
+	const targetColor = useDerivedValue(() => (level.value ? color : "rgba(255,255,255,0.25)"));
 	const arc = useDerivedValue(() => {
 		const path = Skia.Path.Make();
 		const sweep = 360 * progress.value;
@@ -108,7 +100,7 @@ export const LevelGate: React.FC<LevelGateProps> = ({ size, onLevelHeld, onTap }
 					style="stroke"
 					strokeWidth={2}
 				/>
-				<Path path={arc} color={GREEN} style="stroke" strokeWidth={4} strokeCap="round" />
+				<Path path={arc} color={color} style="stroke" strokeWidth={4} strokeCap="round" />
 				<Circle
 					cx={centre}
 					cy={centre}
