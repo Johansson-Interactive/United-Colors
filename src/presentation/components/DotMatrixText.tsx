@@ -151,8 +151,3 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 		</Canvas>
 	);
 };
-
-/** Pixel width of a line of dot-matrix text at a pitch (no padding) */
-export function dotMatrixWidth(text: string, pitch: number): number {
-	return matrixSize(layoutDotMatrix(text), pitch).width;
-}
