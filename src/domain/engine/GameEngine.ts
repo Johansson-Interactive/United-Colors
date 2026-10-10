@@ -42,6 +42,8 @@ export class GameEngine {
 	private prevRadii = new Map<string, number>();
 	/** Pose that counts as no tilt; null means the raw sensor frame (flat) */
 	private tiltZero: TiltZero | null = null;
+	/** The same with the screen facing down */
+	private tiltZeroDown: TiltZero | null = null;
 
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
@@ -88,14 +90,18 @@ export class GameEngine {
 		return this.stateMachine.transition("RUNNING");
 	}
 
-	/** Measure tilt from this pose from now on (null restores the raw sensor frame) */
-	setTiltZero(zero: TiltZero | null): void {
+	/**
+	 * Measure tilt from these poses from now on, one per side the screen faces (null restores
+	 * the raw sensor frame)
+	 */
+	setTiltZero(zero: TiltZero | null, zeroDown: TiltZero | null = null): void {
 		this.tiltZero = zero;
+		this.tiltZeroDown = zeroDown;
 	}
 
-	/** Feed raw sensor data (radians); the player sees it relative to the level pose */
-	onSensorInput(x: number, y: number): void {
-		const zero = this.tiltZero;
+	/** Feed raw sensor data (radians); the player sees it relative to that side's level pose */
+	onSensorInput(x: number, y: number, facingDown = false): void {
+		const zero = facingDown ? this.tiltZeroDown : this.tiltZero;
 		this.player.updateOrientation(zero ? x - zero.x : x, zero ? y - zero.y : y);
 	}
 

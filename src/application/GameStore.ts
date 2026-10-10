@@ -13,8 +13,10 @@ export interface GameStoreState {
 
 export const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
+	musicEnabled: true,
 	gyroSensitivity: 1.0,
 	tiltZero: null,
+	tiltZeroDown: null,
 };
 
 export const DEFAULT_FRAME: RenderFrame = {

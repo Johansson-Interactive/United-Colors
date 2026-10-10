@@ -67,6 +67,21 @@ describe("GameEngine", () => {
 			expect(playerAfter(engine, 0.5, 0.3)).toEqual(before);
 		});
 
+		it("screen down, tilt is measured from that side's pose, or from flat without one", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.setTiltZero({ x: 0.5, y: 0.3 });
+			const before = engine.getPlayerPosition();
+			// The screen-up pose doesn't apply screen down: flat reads level there
+			engine.onSensorInput(0, 0, true);
+			engine.advancePlayer(100);
+			expect(engine.getPlayerPosition()).toEqual(before);
+			engine.setTiltZero({ x: 0.5, y: 0.3 }, { x: -0.2, y: 0.1 });
+			engine.onSensorInput(-0.2, 0.1, true);
+			engine.advancePlayer(100);
+			expect(engine.getPlayerPosition()).toEqual(before);
+		});
+
 		it("tilt is measured from the level pose, and clearing it restores raw tilt", () => {
 			const zeroed = createEngine();
 			zeroed.startGame();

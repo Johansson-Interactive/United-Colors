@@ -8,8 +8,10 @@ const KEYS = {
 
 const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
+	musicEnabled: true,
 	gyroSensitivity: 1.0,
 	tiltZero: null,
+	tiltZeroDown: null,
 };
 
 /**
@@ -40,7 +42,10 @@ export class AsyncStorageRepository implements StoragePort {
 		try {
 			const value = await AsyncStorage.getItem(KEYS.settings);
 			if (value == null) return { ...DEFAULT_SETTINGS };
-			return { ...DEFAULT_SETTINGS, ...JSON.parse(value) };
+			const stored: Partial<GameSettings> = JSON.parse(value);
+			// Before music had its own switch, the sound switch silenced it too
+			const musicEnabled = stored.musicEnabled ?? stored.soundEnabled ?? true;
+			return { ...DEFAULT_SETTINGS, ...stored, musicEnabled };
 		} catch {
 			return { ...DEFAULT_SETTINGS };
 		}

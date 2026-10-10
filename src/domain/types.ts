@@ -12,16 +12,22 @@ export interface TiltZero {
 
 /** Persisted user settings */
 export interface GameSettings {
+	/** Sound effects (catches, spawns, game over) */
 	soundEnabled: boolean;
+	musicEnabled: boolean;
 	gyroSensitivity: number;
 	/** Null until the player has set a level pose */
 	tiltZero: TiltZero | null;
+	/** Level pose with the screen facing down (lying back, phone overhead); null reads flat */
+	tiltZeroDown: TiltZero | null;
 }
 
 /** Raw sensor reading from the device gyroscope */
 export interface SensorSample {
 	x: number;
 	y: number;
+	/** The screen faces the ground; tilt is then measured from flat screen down */
+	facingDown: boolean;
 	timestampMs: number;
 }
 
