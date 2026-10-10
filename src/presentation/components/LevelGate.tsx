@@ -59,7 +59,7 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 		const prev = gate.value;
 		const next = stepLevelGate(prev, tilt.x.value, tilt.y.value, dt, leaveRad);
 		if (next === prev) return;
-		gate.value = next;
+		gate.set(next);
 		if (next.phase !== prev.phase && onPhaseChange) scheduleOnRN(onPhaseChange, next.phase);
 		if (next.fired && !prev.fired) scheduleOnRN(onLevelHeld);
 	});

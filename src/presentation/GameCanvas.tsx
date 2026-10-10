@@ -11,7 +11,7 @@ import {
 	vec,
 } from "@shopify/react-native-skia";
 import type React from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type LayoutChangeEvent, PanResponder, StyleSheet, View } from "react-native";
 import {
 	type SharedValue,
@@ -81,31 +81,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 	);
 
 	// Use touch position (not cumulative dx/dy) so deltas are correct and no jump-back on gesture resets
-	const lastTouch = useRef<{ x: number; y: number } | null>(null);
-	const panResponder = useMemo(
-		() =>
-			onDragDelta
-				? PanResponder.create({
-						onStartShouldSetPanResponder: () => true,
-						onMoveShouldSetPanResponder: () => true,
-						onPanResponderGrant: (evt) => {
-							const { pageX, pageY } = evt.nativeEvent;
-							lastTouch.current = { x: pageX, y: pageY };
-						},
-						onPanResponderMove: (evt) => {
-							const { pageX, pageY } = evt.nativeEvent;
-							const prev = lastTouch.current;
-							if (prev === null) return;
-							onDragDelta(pageX - prev.x, pageY - prev.y);
-							lastTouch.current = { x: pageX, y: pageY };
-						},
-						onPanResponderRelease: () => {
-							lastTouch.current = null;
-						},
-					})
-				: null,
-		[onDragDelta],
-	);
+	const panResponder = useMemo(() => {
+		if (!onDragDelta) return null;
+		let lastTouch: { x: number; y: number } | null = null;
+		return PanResponder.create({
+			onStartShouldSetPanResponder: () => true,
+			onMoveShouldSetPanResponder: () => true,
+			onPanResponderGrant: (evt) => {
+				const { pageX, pageY } = evt.nativeEvent;
+				lastTouch = { x: pageX, y: pageY };
+			},
+			onPanResponderMove: (evt) => {
+				const { pageX, pageY } = evt.nativeEvent;
+				const prev = lastTouch;
+				if (prev === null) return;
+				onDragDelta(pageX - prev.x, pageY - prev.y);
+				lastTouch = { x: pageX, y: pageY };
+			},
+			onPanResponderRelease: () => {
+				lastTouch = null;
+			},
+		});
+	}, [onDragDelta]);
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {

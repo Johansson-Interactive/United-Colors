@@ -86,10 +86,10 @@ export const DotButton: React.FC<DotButtonProps> = ({
 	}));
 
 	const handlePressIn = useCallback(() => {
-		pressed.value = withTiming(1, { duration: 90 });
+		pressed.set(withTiming(1, { duration: 90 }));
 	}, [pressed]);
 	const handlePressOut = useCallback(() => {
-		pressed.value = withSpring(0, { damping: 12, stiffness: 220 });
+		pressed.set(withSpring(0, { damping: 12, stiffness: 220 }));
 	}, [pressed]);
 	const handlePress = useCallback(
 		(event: GestureResponderEvent) => {

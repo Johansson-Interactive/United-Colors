@@ -38,24 +38,24 @@ export function useFlood(): FloodController {
 
 	const run = useCallback(
 		(nextColor: string, x: number, y: number, onCovered: () => void) => {
-			color.value = nextColor;
-			originX.value = x;
-			originY.value = y;
-			opacity.value = 1;
-			progress.value = 0;
-			progress.value = withTiming(
-				1,
-				{ duration: COVER_MS, easing: Easing.in(Easing.quad) },
-				(finished) => {
+			color.set(nextColor);
+			originX.set(x);
+			originY.set(y);
+			opacity.set(1);
+			progress.set(0);
+			progress.set(
+				withTiming(1, { duration: COVER_MS, easing: Easing.in(Easing.quad) }, (finished) => {
 					if (!finished) return;
 					scheduleOnRN(onCovered);
-					opacity.value = withDelay(
-						60,
-						withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
-							if (done) progress.value = 0;
-						}),
+					opacity.set(
+						withDelay(
+							60,
+							withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
+								if (done) progress.set(0);
+							}),
+						),
 					);
-				},
+				}),
 			);
 		},
 		[color, originX, originY, opacity, progress],

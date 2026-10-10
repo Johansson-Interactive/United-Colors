@@ -96,7 +96,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 		const prev = state.value;
 		const next = stepSettle(prev, tilt.raw.x.value, tilt.raw.y.value, dt);
 		if (next === prev) return;
-		state.value = next;
+		state.set(next);
 		if (next.phase !== prev.phase) {
 			if (next.phase === "settled") {
 				scheduleOnRN(finish, { x: next.meanX, y: next.meanY });
@@ -111,7 +111,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 		if (doneRef.current) return;
 		const current = state.value;
 		const measured = tiltAvailable && current.elapsedMs > 0;
-		state.value = { ...current, phase: "settled", progress: 1 };
+		state.set({ ...current, phase: "settled", progress: 1 });
 		finish(measured ? { x: current.meanX, y: current.meanY } : { x: 0, y: 0 });
 	}, [state, tiltAvailable, finish]);
 

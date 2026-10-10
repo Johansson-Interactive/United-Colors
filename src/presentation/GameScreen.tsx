@@ -86,7 +86,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const screenRef = useRef<ScreenSize>(DEFAULT_SCREEN);
 
 	const flood = useFlood();
-	const previousBestRef = useRef(0);
+	const [previousBest, setPreviousBest] = useState(0);
 	const [settle, setSettle] = useState<SettleRequest | null>(null);
 
 	// Dev only: prefer gyro, fallback to touch when gyro not available (e.g. simulator)
@@ -115,7 +115,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	/** Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed) */
 	const drawScene = useCallback(
 		(alpha: number) => {
-			scene.value = buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition());
+			scene.set(buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition()));
 		},
 		[getEngine, scene],
 	);
@@ -226,7 +226,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	const handleStart = useCallback(
 		(color: string) => {
-			previousBestRef.current = store.getState().highScore;
+			setPreviousBest(store.getState().highScore);
 			const engine = getEngine();
 			startGame(engine, store, color);
 			sensor.start();
@@ -407,7 +407,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 					{phase === "GAME_OVER" && (
 						<GameOverOverlay
 							score={score}
-							previousBest={previousBestRef.current}
+							previousBest={previousBest}
 							color={playerColor}
 							onRetry={handleRetryPress}
 							onBack={handleBackPress}
