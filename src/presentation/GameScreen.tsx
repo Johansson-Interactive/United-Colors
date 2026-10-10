@@ -1,12 +1,11 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { useSharedValue } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameAudio } from "../application/GameAudio";
 import { createGameStore } from "../application/GameStore";
-import { buildScene, type SceneDot } from "../application/renderScene";
 import { bindMusic } from "../application/useCases/BindMusic";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
@@ -18,11 +17,9 @@ import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
 import { updateSettings } from "../application/useCases/UpdateSettings";
-import { GameEngine } from "../domain/engine/GameEngine";
 import type { ScreenSize, SensorSample, TiltZero } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
-import { FrameClock } from "../infrastructure/FrameClock";
 import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
@@ -30,6 +27,7 @@ import { Bursts } from "./effects/Bursts";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import { GameCanvas } from "./GameCanvas";
+import { useGameLoop } from "./hooks/useGameLoop";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
@@ -38,9 +36,6 @@ import { SettleOverlay } from "./overlays/SettleOverlay";
 import { INK, INK_LIFT, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
-
-const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
-const DEFAULT_DENSITY = 400;
 
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
@@ -80,11 +75,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		store,
 		(s) => s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE,
 	);
-	const scene = useSharedValue<SceneDot[]>([]);
-	const engineRef = useRef<GameEngine | null>(null);
-	const clockRef = useRef<FrameClock | null>(null);
 	const kioskInitializedRef = useRef(false);
-	const screenRef = useRef<ScreenSize>(DEFAULT_SCREEN);
 
 	const flood = useFlood();
 	const [previousBest, setPreviousBest] = useState(0);
@@ -94,16 +85,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const [devControlMode, setDevControlMode] = useState<DevControlMode>("pending");
 	const devGyroTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const getEngine = useCallback((): GameEngine => {
-		if (!engineRef.current) {
-			engineRef.current = new GameEngine({
-				density: DEFAULT_DENSITY,
-				screen: screenRef.current,
-				audio,
-			});
-		}
-		return engineRef.current;
-	}, [audio]);
+	const { scene, getEngine, peekEngine, setScreen, drawScene, startClock, stopClock } = useGameLoop(
+		store,
+		audio,
+	);
 
 	// Colour wash, frost, shake and bursts react to the store and engine; the flood is the transition
 	const { accent, frost, shakeStyle, bursts } = useStageEffects(
@@ -112,39 +97,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		phase,
 		playerColor,
 	);
-
-	/** Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed) */
-	const drawScene = useCallback(
-		(alpha: number) => {
-			scene.set(buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition()));
-		},
-		[getEngine, scene],
-	);
-
-	const startClock = useCallback(() => {
-		if (clockRef.current) clockRef.current.stop();
-		const engine = getEngine();
-		clockRef.current = new FrameClock(
-			() => {
-				engine.tick();
-				store.getState().updateFrame(engine.getFrame());
-			},
-			(dtMs, alpha) => {
-				// Player moves and collides every rendered frame; other dots are extrapolated
-				// between ticks. Drawn on the UI thread from the shared value -- no React render
-				// per frame unless a collision changed score/phase.
-				if (engine.advancePlayer(dtMs, alpha)) {
-					store.getState().updateFrame(engine.getFrame());
-				}
-				drawScene(alpha);
-			},
-		);
-		clockRef.current.start();
-	}, [getEngine, drawScene]);
-
-	const stopClock = useCallback(() => {
-		clockRef.current?.stop();
-	}, []);
 
 	// Sounds load with the screen, follow the music and effect settings, and the music follows the phase;
 	// dispose discards a load in flight
@@ -189,7 +141,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 			}
 			setDevControlMode((prev) => (prev === "pending" ? "gyro" : prev));
 		}
-		engineRef.current?.onSensorInput(sample.x, sample.y, sample.facingDown);
+		peekEngine()?.onSensorInput(sample.x, sample.y, sample.facingDown);
 	});
 
 	// Setup sensor
@@ -198,7 +150,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		return () => {
 			if (devGyroTimeoutRef.current) clearTimeout(devGyroTimeoutRef.current);
 			sensor.stop();
-			clockRef.current?.stop();
 		};
 	}, []);
 
@@ -213,8 +164,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	const handleLayout = useCallback(
 		(size: ScreenSize) => {
-			screenRef.current = size;
-			engineRef.current?.setScreen(size);
+			setScreen(size);
 			if (kioskInitializedRef.current) return;
 			kioskInitializedRef.current = true;
 			const engine = getEngine();
@@ -222,7 +172,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 			store.getState().updateFrame(engine.getFrame());
 			startClock();
 		},
-		[getEngine, startClock],
+		[getEngine, setScreen, startClock],
 	);
 
 	const handleStart = useCallback(
@@ -355,7 +305,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 							isDev && devControlMode === "touch"
 								? (dx, dy) => {
 										// Rendered on the next frame
-										engineRef.current?.onMovementDelta(dx, dy);
+										peekEngine()?.onMovementDelta(dx, dy);
 									}
 								: undefined
 						}
