@@ -35,8 +35,8 @@ For the stack, architecture, and quality gates, see [AGENTS.md](./AGENTS.md).
 
 ## Requirements
 
-- Node `24.13.1` (see `.nvmrc`; `nvm use`)
-- Corepack, with pnpm `10.29.3`
+- Node `24.21.0` (see `.nvmrc`; `nvm use`)
+- Corepack, with pnpm `10.34.6`
 - Xcode for iOS builds, Android Studio for Android builds
 
 ## Setup

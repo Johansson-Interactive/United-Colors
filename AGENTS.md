@@ -22,24 +22,24 @@ Don't:
 ## Locked Stack
 
 Use exactly:
-- Expo `54`
-- React Native `0.81`
-- React `19.1.0`
-- TypeScript `5.9.3`
-- Node `24.13.1`
-- pnpm `10.29.3` via Corepack
+- Expo `57`
+- React Native `0.86`
+- React `19.2.3`
+- TypeScript `6.0.3`
+- Node `24.21.0`
+- pnpm `10.34.6` via Corepack
 
 Repository requirements:
-- `.nvmrc` must be `24.13.1`.
+- `.nvmrc` must be `24.21.0`.
 - `package.json` must include:
-  - `"engines": { "node": "24.13.1", "pnpm": "10.29.3" }`
-  - `"packageManager": "pnpm@10.29.3"`
+  - `"engines": { "node": "24.21.0", "pnpm": "10.34.6" }`
+  - `"packageManager": "pnpm@10.34.6"`
 
 ## Setup and Command Conventions
 
 Full-project commands:
 - `corepack enable`
-- `nvm use` (or install/use Node `24.13.1`)
+- `nvm use` (or install/use Node `24.21.0`)
 - `pnpm install`
 - `pnpm typecheck` — TypeScript check only
 - `pnpm lint` — Biome lint (check)
