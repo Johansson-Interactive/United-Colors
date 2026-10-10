@@ -46,5 +46,8 @@ export const KIOSK_DOT_LIMIT = 10;
 /** The three game colors (legacy colorAlt) */
 export const GAME_COLORS = ["#E91E63", "#2196F3", "#8BC34A"] as const;
 
+/** Each time a color is picked, its probability of being picked next is multiplied by this */
+export const COLOR_REPEAT_FACTOR = 1 / 3;
+
 /** Point-dot pulse contracts to this fraction of full size */
 export const POINT_DOT_PULSE_SCALE = 0.85;

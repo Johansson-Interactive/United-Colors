@@ -259,7 +259,7 @@ export class GameEngine {
 
 			if (dot instanceof PointDot) {
 				this.score += POINT_DOT_VALUE;
-				this.switchPlayerColor();
+				this.player.color = dot.color;
 				(dot as PointDot).forceRemove();
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
@@ -272,14 +272,5 @@ export class GameEngine {
 
 			this.audio?.playCollect();
 		}
-	}
-
-	private switchPlayerColor(): void {
-		let newIndex: number;
-		do {
-			newIndex = Math.floor(this.random() * GAME_COLORS.length);
-		} while (GAME_COLORS[newIndex] === this.player.color);
-
-		this.player.color = GAME_COLORS[newIndex];
 	}
 }

@@ -1,4 +1,5 @@
 import {
+	GAME_COLORS,
 	KIOSK_DOT_LIMIT,
 	MAX_TIME_DIFFICULTY,
 	POINT_DOT_TIME_BETWEEN,
@@ -87,6 +88,35 @@ describe("SpawnSystem", () => {
 			expect(spawn.trySpawnPointDot(1001, player, screen, 100)).toBeNull();
 			expect(spawn.trySpawnPointDot(1000 + wait, player, screen, 100)).toBeNull();
 			expect(spawn.trySpawnPointDot(1000 + wait + 1, player, screen, 100)).not.toBeNull();
+		});
+
+		it("picks its color from the weighted picker, not the player's color", () => {
+			// Player is [0]; with a roll of 0.5 over [1] and [2] at equal weight -> [2]
+			const dot = spawn.trySpawnPointDot(wait + 1, player, screen, 100);
+			expect(dot?.color).toBe(GAME_COLORS[2]);
+		});
+
+		it("never spawns in the player's color", () => {
+			for (const color of GAME_COLORS) {
+				const system = new SpawnSystem(Math.random);
+				system.reset();
+				const p = new PlayerDot(10, 10, color, 12.5, 0);
+				for (let i = 0; i < 50; i++) {
+					const dot = system.trySpawnPointDot(wait * 2 * (i + 1), p, screen, 100);
+					expect(dot?.color).not.toBe(color);
+					dot?.forceRemove();
+				}
+			}
+		});
+
+		it("is not affected by small dot colors", () => {
+			// Spawn many small dots, then check the point dot still uses fresh 1/3 weights
+			for (let i = 1; i <= 10; i++) {
+				spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL * 2 * i, 0, screen, 100, false);
+			}
+			// random() = 0.5 with player [0] excluded -> [1] and [2] equal -> 0.5 picks [2]
+			const dot = spawn.trySpawnPointDot(MAX_TIME_DIFFICULTY, player, screen, 100);
+			expect(dot?.color).toBe(GAME_COLORS[2]);
 		});
 
 		it("waits after a faded point dot is removed before respawning", () => {

@@ -1,6 +1,5 @@
 import {
 	DOT_LIMIT,
-	GAME_COLORS,
 	KIOSK_DOT_LIMIT,
 	MAX_TIME_DIFFICULTY,
 	POINT_DOT_SIZE_RATIO,
@@ -15,24 +14,31 @@ import type { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
 import type { ScreenSize } from "../types";
 import { didCollide } from "./Collision";
+import { ColorPicker } from "./ColorPicker";
 
 /**
  * Handles spawning of small dots and point dots.
+ * Small and point dots pick colors from separate weighted pickers; point dots never
+ * spawn in the player's current color.
  * Replicates legacy GameManager spawn logic.
  */
 export class SpawnSystem {
-	private colorCounter = 0;
 	private dotCreateStep = 0;
 	private pointStep = 0;
 	private pointDot: PointDot | null = null;
 	private random: () => number;
+	private smallDotColors: ColorPicker;
+	private pointDotColors: ColorPicker;
 
 	constructor(random?: () => number) {
 		this.random = random ?? Math.random;
+		this.smallDotColors = new ColorPicker(this.random);
+		this.pointDotColors = new ColorPicker(this.random);
 	}
 
 	reset(): void {
-		this.colorCounter = Math.floor(this.random() * GAME_COLORS.length);
+		this.smallDotColors.reset();
+		this.pointDotColors.reset();
 		this.dotCreateStep = 0;
 		this.pointStep = 0;
 		this.pointDot = null;
@@ -94,7 +100,13 @@ export class SpawnSystem {
 		if (this.pointDot != null) {
 			if (this.pointDot.isFlaggedForRemoval) {
 				if (timeStep - this.pointStep > randomTime) {
-					this.pointDot = this.createPointDot(timeStep, player, screen, density);
+					this.pointDot = this.createPointDot(
+						timeStep,
+						player,
+						screen,
+						density,
+						this.pointDotColors.next(player.color),
+					);
 					this.pointStep = timeStep;
 					return this.pointDot;
 				}
@@ -105,7 +117,13 @@ export class SpawnSystem {
 		}
 
 		if (timeStep > randomTime) {
-			this.pointDot = this.createPointDot(timeStep, player, screen, density);
+			this.pointDot = this.createPointDot(
+				timeStep,
+				player,
+				screen,
+				density,
+				this.pointDotColors.next(player.color),
+			);
 			this.pointStep = timeStep;
 			return this.pointDot;
 		}
@@ -170,7 +188,7 @@ export class SpawnSystem {
 			vy /= len;
 		}
 
-		const color = GAME_COLORS[this.colorCounter++ % GAME_COLORS.length];
+		const color = this.smallDotColors.next();
 		return new Dot(x, y, vx, vy, color, size, SMALL_DOT_SPEED_RATIO * density);
 	}
 
@@ -179,6 +197,7 @@ export class SpawnSystem {
 		player: PlayerDot,
 		screen: ScreenSize,
 		density: number,
+		color: string,
 	): PointDot {
 		const size = POINT_DOT_SIZE_RATIO * density;
 		const x = Math.floor(this.random() * (screen.width - size * 2)) + size;
@@ -187,9 +206,9 @@ export class SpawnSystem {
 		// Check if spawning on player -- retry recursively
 		const tempDot = new Dot(x, y, 0, 0, player.color, size * 2, 0);
 		if (didCollide(player, tempDot)) {
-			return this.createPointDot(timeStep, player, screen, density);
+			return this.createPointDot(timeStep, player, screen, density, color);
 		}
 
-		return new PointDot(timeStep, x, y, player.color, size, POINT_DOT_VALUE);
+		return new PointDot(timeStep, x, y, color, size, POINT_DOT_VALUE);
 	}
 }
