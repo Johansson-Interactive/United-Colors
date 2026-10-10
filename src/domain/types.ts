@@ -1,10 +1,21 @@
 /** Core game phase states matching legacy GameManager states */
 export type GamePhase = "KIOSK" | "RUNNING" | "PAUSED" | "GAME_OVER";
 
+/**
+ * The device pose the player calls "level" (raw tilt in radians); tilt is measured from
+ * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ */
+export interface TiltZero {
+	x: number;
+	y: number;
+}
+
 /** Persisted user settings */
 export interface GameSettings {
 	soundEnabled: boolean;
 	gyroSensitivity: number;
+	/** Null until the player has set a level pose */
+	tiltZero: TiltZero | null;
 }
 
 /** Raw sensor reading from the device gyroscope */

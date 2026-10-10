@@ -25,6 +25,44 @@ function createEngine(seed = 0.5, audio?: AudioPort) {
 }
 
 describe("GameEngine", () => {
+	describe("tilt zero", () => {
+		function playerAfter(engine: GameEngine, x: number, y: number) {
+			engine.onSensorInput(x, y);
+			engine.advancePlayer(100);
+			return engine.getPlayerPosition();
+		}
+
+		it("without a zero, raw tilt moves the player", () => {
+			const engine = createEngine();
+			engine.startGame();
+			const before = engine.getPlayerPosition();
+			const after = playerAfter(engine, 0.5, 0.3);
+			expect(after.x).toBeGreaterThan(before.x);
+			expect(after.y).toBeGreaterThan(before.y);
+		});
+
+		it("the level pose reads as no tilt", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.setTiltZero({ x: 0.5, y: 0.3 });
+			const before = engine.getPlayerPosition();
+			expect(playerAfter(engine, 0.5, 0.3)).toEqual(before);
+		});
+
+		it("tilt is measured from the level pose, and clearing it restores raw tilt", () => {
+			const zeroed = createEngine();
+			zeroed.startGame();
+			zeroed.setTiltZero({ x: 0.5, y: 0.3 });
+			const raw = createEngine();
+			raw.startGame();
+			expect(playerAfter(zeroed, 0.7, 0.1)).toEqual(playerAfter(raw, 0.2, -0.2));
+
+			zeroed.setTiltZero(null);
+			const before = zeroed.getPlayerPosition();
+			expect(playerAfter(zeroed, 0, 0)).toEqual(before);
+		});
+	});
+
 	describe("collision outcomes", () => {
 		it("matching color small dot gives +1 score", () => {
 			const engine = createEngine();

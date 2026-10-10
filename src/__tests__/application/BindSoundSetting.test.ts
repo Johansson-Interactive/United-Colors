@@ -40,7 +40,7 @@ describe("bindSoundSetting", () => {
 		const { audio, muted } = fakeAudio();
 		bindSoundSetting(store, audio);
 		store.getState().setHighScore(10);
-		store.getState().updateSettings({ gyroSensitivity: 2 });
+		store.getState().updateSettings({ gyroSensitivity: 2, tiltZero: null });
 		expect(muted).toEqual([false]);
 	});
 

@@ -19,13 +19,20 @@ function memoryStorage(initial: GameSettings, highScore = 0): StoragePort {
 describe("settings use cases", () => {
 	it("loadSettings restores persisted settings into the store", async () => {
 		const store = createGameStore();
-		await loadSettings(store, memoryStorage({ soundEnabled: true, gyroSensitivity: 1.5 }));
+		await loadSettings(
+			store,
+			memoryStorage({ soundEnabled: true, gyroSensitivity: 1.5, tiltZero: null }),
+		);
 		expect(store.getState().settings.gyroSensitivity).toBe(1.5);
 	});
 
 	it("updateSettings roundtrips settings through storage", async () => {
-		const storage = memoryStorage({ soundEnabled: true, gyroSensitivity: 1 });
-		await updateSettings({ soundEnabled: true, gyroSensitivity: 2 }, createGameStore(), storage);
+		const storage = memoryStorage({ soundEnabled: true, gyroSensitivity: 1, tiltZero: null });
+		await updateSettings(
+			{ soundEnabled: true, gyroSensitivity: 2, tiltZero: null },
+			createGameStore(),
+			storage,
+		);
 		const store = createGameStore();
 		await loadSettings(store, storage);
 		expect(store.getState().settings.gyroSensitivity).toBe(2);
@@ -33,7 +40,10 @@ describe("settings use cases", () => {
 
 	it("loadHighScore restores the persisted best into the store", async () => {
 		const store = createGameStore();
-		await loadHighScore(store, memoryStorage({ soundEnabled: true, gyroSensitivity: 1 }, 42));
+		await loadHighScore(
+			store,
+			memoryStorage({ soundEnabled: true, gyroSensitivity: 1, tiltZero: null }, 42),
+		);
 		expect(store.getState().highScore).toBe(42);
 	});
 });

@@ -15,6 +15,8 @@ interface PauseOverlayProps {
 	color: string;
 	onResume: () => void;
 	onQuit: (point: PressPoint) => void;
+	/** Open the settle bowl to set the level pose again */
+	onCalibrate: () => void;
 	soundEnabled: boolean;
 	onToggleSound: () => void;
 	/** Extra content below the controls (e.g. dev tools) */
@@ -24,12 +26,13 @@ interface PauseOverlayProps {
 /**
  * Paused: the scene frosts over and a spirit level takes the middle. Tipping the bubble out
  * of the inner circle and then holding the phone level resumes, so play restarts from rest;
- * tapping the level resumes immediately.
+ * tapping the level resumes immediately. The corners hold the level pose and sound settings.
  */
 export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	color,
 	onResume,
 	onQuit,
+	onCalibrate,
 	soundEnabled,
 	onToggleSound,
 	children,
@@ -75,6 +78,16 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				{children ? <View style={styles.extra}>{children}</View> : null}
 			</View>
 
+			<View style={styles.level}>
+				<IconDot
+					size={44}
+					icon="level"
+					onPress={onCalibrate}
+					accessibilityLabel="Set level pose"
+					color={color}
+				/>
+			</View>
+
 			<View style={styles.sound}>
 				<IconDot
 					size={44}
@@ -113,6 +126,11 @@ const styles = StyleSheet.create({
 	},
 	extra: {
 		alignItems: "center",
+	},
+	level: {
+		position: "absolute",
+		left: 20,
+		bottom: 26,
 	},
 	sound: {
 		position: "absolute",

@@ -16,7 +16,7 @@ describe("Persistence roundtrip", () => {
 
 	it("save/load settings roundtrip (placeholder)", async () => {
 		const repo = new AsyncStorageRepository();
-		await repo.saveSettings({ soundEnabled: false, gyroSensitivity: 0.5 });
+		await repo.saveSettings({ soundEnabled: false, gyroSensitivity: 0.5, tiltZero: null });
 		// Currently returns defaults since AsyncStorage is not wired
 		const settings = await repo.loadSettings();
 		expect(settings).toBeDefined();

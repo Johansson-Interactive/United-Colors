@@ -1,19 +1,25 @@
 import type React from "react";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import type { SensorPort } from "../../domain/types";
+import type { SensorPort, TiltZero } from "../../domain/types";
 
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
- * anything that rolls on screen rolls the way the player dot would). Smoothed on the UI
- * thread every frame; `available` flips once the first real sample arrives (false on
- * simulators without motion sensors, so gyro-driven UI can fall back to tap).
+ * anything that rolls on screen rolls the way the player dot would). `x`/`y` are measured
+ * from the level pose and smoothed on the UI thread every frame; `raw` is the latest sample
+ * as the sensor gave it, for setting that pose. `available` flips once the first real sample
+ * arrives (false on simulators without motion sensors, so gyro-driven UI can fall back to tap).
  */
 export interface Tilt {
 	x: SharedValue<number>;
 	y: SharedValue<number>;
+	raw: { x: SharedValue<number>; y: SharedValue<number> };
+	/** The pose that reads as level; the game screen keeps it in step with settings */
+	zero: SharedValue<TiltZero>;
 	available: SharedValue<boolean>;
 }
+
+export const NO_ZERO: TiltZero = { x: 0, y: 0 };
 
 const TiltContext = createContext<Tilt | null>(null);
 
@@ -28,6 +34,7 @@ interface TiltProviderProps {
 export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) => {
 	const rawX = useSharedValue(0);
 	const rawY = useSharedValue(0);
+	const zero = useSharedValue<TiltZero>(NO_ZERO);
 	const x = useSharedValue(0);
 	const y = useSharedValue(0);
 	const available = useSharedValue(false);
@@ -45,11 +52,14 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		x.value += (rawX.value - x.value) * k;
-		y.value += (rawY.value - y.value) * k;
+		x.value += (rawX.value - zero.value.x - x.value) * k;
+		y.value += (rawY.value - zero.value.y - y.value) * k;
 	});
 
-	const value = useMemo<Tilt>(() => ({ x, y, available }), [x, y, available]);
+	const value = useMemo<Tilt>(
+		() => ({ x, y, raw: { x: rawX, y: rawY }, zero, available }),
+		[x, y, rawX, rawY, zero, available],
+	);
 	return <TiltContext.Provider value={value}>{children}</TiltContext.Provider>;
 };
 

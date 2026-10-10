@@ -2,12 +2,12 @@ import { Circle, Line, Path, RoundedRect, Skia, vec } from "@shopify/react-nativ
 import type React from "react";
 import { useMemo } from "react";
 import { WHITE } from "../theme/theme";
-import { DotButton, type PressPoint } from "./DotButton";
+import { DotButton, GLOW_PAD, type PressPoint } from "./DotButton";
 
 interface IconDotProps {
 	size: number;
 	onPress: (point: PressPoint) => void;
-	icon: "pause" | "sound-on" | "sound-off";
+	icon: "pause" | "sound-on" | "sound-off" | "level";
 	accessibilityLabel: string;
 	color?: string;
 }
@@ -21,8 +21,8 @@ export const IconDot: React.FC<IconDotProps> = ({
 	color = WHITE,
 }) => {
 	const radius = size / 2;
-	// Canvas inside DotButton is padded by 55% of the radius on each side
-	const c = radius + radius * 0.55;
+	// Canvas inside DotButton is padded by GLOW_PAD radii on each side
+	const c = radius + radius * GLOW_PAD;
 
 	const waves = useMemo(() => {
 		const path = Skia.Path.Make();
@@ -41,7 +41,12 @@ export const IconDot: React.FC<IconDotProps> = ({
 			onPress={onPress}
 			accessibilityLabel={accessibilityLabel}
 		>
-			{icon === "pause" ? (
+			{icon === "level" ? (
+				<>
+					<Circle cx={c} cy={c} r={radius * 0.46} color={color} style="stroke" strokeWidth={1.5} />
+					<Circle cx={c} cy={c} r={radius * 0.17} color={color} />
+				</>
+			) : icon === "pause" ? (
 				<>
 					<RoundedRect
 						x={c - radius * 0.3}

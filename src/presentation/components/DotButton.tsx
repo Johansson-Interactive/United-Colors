@@ -37,7 +37,11 @@ interface DotButtonProps {
 	disabled?: boolean;
 }
 
-const GLOW_PAD = 0.55;
+/**
+ * Canvas margin around the dot, as a fraction of the radius. Must hold the pressed glow
+ * (radius 1.2r, blur sigma 0.42r, ~3 sigma of falloff) or the blur is clipped to a square.
+ */
+export const GLOW_PAD = 1.5;
 /** Widest a label may be, as a fraction of the diameter, so it sits clear of the rim */
 const LABEL_MAX_WIDTH = 0.66;
 /** Glare centre offset per radian of tilt (fraction of the radius) */

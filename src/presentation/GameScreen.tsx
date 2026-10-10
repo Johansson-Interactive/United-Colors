@@ -9,6 +9,8 @@ import { createGameStore } from "../application/GameStore";
 import { buildScene, type SceneDot } from "../application/renderScene";
 import { bindMusic } from "../application/useCases/BindMusic";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
+import { bindTiltZero } from "../application/useCases/BindTiltZero";
+import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import { handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
@@ -17,7 +19,7 @@ import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
 import { updateSettings } from "../application/useCases/UpdateSettings";
 import { GameEngine } from "../domain/engine/GameEngine";
-import type { ScreenSize } from "../domain/types";
+import type { ScreenSize, TiltZero } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "../infrastructure/FrameClock";
@@ -33,7 +35,9 @@ import { useStageEffects } from "./hooks/useStageEffects";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
+import { SettleOverlay } from "./overlays/SettleOverlay";
 import { INK, INK_LIFT, WHITE } from "./theme/theme";
+import { NO_ZERO, useTilt } from "./tilt/TiltProvider";
 
 const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
 const DEFAULT_DENSITY = 400;
@@ -49,12 +53,19 @@ type DevControlMode = "gyro" | "touch" | "pending";
 
 const GYRO_DETECT_MS = 800;
 
+/** The settle bowl is open: where play continues afterwards, and the colour of the dot that settles */
+interface SettleRequest {
+	from: "start" | "pause";
+	color: string;
+}
+
 interface GameScreenProps {
 	audio: GameAudio;
 }
 
 export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 	const insets = useSafeAreaInsets();
+	const tilt = useTilt();
 	// Subscribe to phase/score only: dot positions never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
 	const score = useStore(store, (s) => s.frame.score);
@@ -72,6 +83,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	const flood = useFlood();
 	const previousBestRef = useRef(0);
+	const [settle, setSettle] = useState<SettleRequest | null>(null);
 
 	// Dev only: prefer gyro, fallback to touch when gyro not available (e.g. simulator)
 	const [devControlMode, setDevControlMode] = useState<DevControlMode>("pending");
@@ -164,6 +176,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		void loadHighScore(store, storage);
 	}, []);
 
+	// The level pose reaches the engine and the interface together, so the dot in the game and
+	// the dots on the menus rest in the same hand position
+	useEffect(
+		() =>
+			bindTiltZero(store, (zero: TiltZero | null) => {
+				getEngine().setTiltZero(zero);
+				tilt.zero.value = zero ?? NO_ZERO;
+			}),
+		[getEngine, tilt],
+	);
+
 	// Setup sensor
 	useEffect(() => {
 		sensor.onSample((sample) => {
@@ -245,11 +268,35 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		startClock();
 	}, [getEngine, startClock]);
 
-	// Transitions: a dot grows from under the finger, the scene changes, and it lifts
+	// Transitions: a dot grows from under the finger, the scene changes, and it lifts.
+	// A first game starts by setting the level pose; the settled dot then floods into play.
 	const handleStartPress = useCallback(
-		(point: PressPoint, color: string) => flood.run(color, point.x, point.y, handleStart),
+		(point: PressPoint, color: string) => {
+			if (store.getState().settings.tiltZero) {
+				flood.run(color, point.x, point.y, handleStart);
+			} else {
+				setSettle({ from: "start", color });
+			}
+		},
 		[flood, handleStart],
 	);
+	const handleCalibratePress = useCallback(() => {
+		setSettle({ from: "pause", color: playerColor });
+	}, [playerColor]);
+	const handleSettled = useCallback(
+		(zero: TiltZero, point: PressPoint) => {
+			if (!settle) return;
+			void calibrateTilt(zero, store, storage);
+			const next = settle.from === "start" ? handleStart : handleResume;
+			flood.run(settle.color, point.x, point.y, () => {
+				setSettle(null);
+				next();
+			});
+		},
+		[settle, flood, handleStart, handleResume],
+	);
+	const handleSettleBack = useCallback(() => setSettle(null), []);
+	const handleSettleSnap = useCallback(() => audio.playCollect(), [audio]);
 	const handleRetryPress = useCallback(
 		(point: PressPoint) => flood.run(playerColor, point.x, point.y, handleStart),
 		[flood, playerColor, handleStart],
@@ -306,7 +353,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 				<View style={styles.stage} pointerEvents="box-none">
 					{phase === "RUNNING" && <HUD score={score} color={playerColor} onPause={handlePause} />}
 
-					{phase === "KIOSK" && (
+					{phase === "KIOSK" && !settle && (
 						<KioskOverlay
 							highScore={highScore}
 							soundEnabled={soundEnabled}
@@ -315,11 +362,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 						/>
 					)}
 
-					{phase === "PAUSED" && (
+					{phase === "PAUSED" && !settle && (
 						<PauseOverlay
 							color={playerColor}
 							onResume={handleResume}
 							onQuit={handleQuitPress}
+							onCalibrate={handleCalibratePress}
 							soundEnabled={soundEnabled}
 							onToggleSound={handleToggleSound}
 						>
@@ -331,6 +379,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 								/>
 							)}
 						</PauseOverlay>
+					)}
+
+					{settle && (
+						<SettleOverlay
+							color={settle.color}
+							onSettled={handleSettled}
+							onBack={handleSettleBack}
+							onSnap={handleSettleSnap}
+						/>
 					)}
 
 					{phase === "GAME_OVER" && (

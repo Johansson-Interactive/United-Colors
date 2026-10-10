@@ -9,6 +9,7 @@ const KEYS = {
 const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	gyroSensitivity: 1.0,
+	tiltZero: null,
 };
 
 /**

@@ -8,7 +8,7 @@ import {
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
-import type { AudioPort, DotView, RenderFrame, ScreenSize } from "../types";
+import type { AudioPort, DotView, RenderFrame, ScreenSize, TiltZero } from "../types";
 import { circlesOverlap } from "./Collision";
 import { SpawnSystem } from "./SpawnSystem";
 import { StateMachine } from "./StateMachine";
@@ -41,6 +41,8 @@ export class GameEngine {
 	private playerSpeed: number;
 	/** Dot radii at the start of the current tick (for DotView.prevRadius) */
 	private prevRadii = new Map<string, number>();
+	/** Pose that counts as no tilt; null means the raw sensor frame (flat) */
+	private tiltZero: TiltZero | null = null;
 
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
@@ -87,9 +89,15 @@ export class GameEngine {
 		return this.stateMachine.transition("RUNNING");
 	}
 
-	/** Feed sensor data to the player dot (gyro) */
+	/** Measure tilt from this pose from now on (null restores the raw sensor frame) */
+	setTiltZero(zero: TiltZero | null): void {
+		this.tiltZero = zero;
+	}
+
+	/** Feed raw sensor data (radians); the player sees it relative to the level pose */
 	onSensorInput(x: number, y: number): void {
-		this.player.updateOrientation(x, y);
+		const zero = this.tiltZero;
+		this.player.updateOrientation(zero ? x - zero.x : x, zero ? y - zero.y : y);
 	}
 
 	/** Player speed as PLAYER_DOT_SPEED_RATIO (legacy units: px/tick/rad per density) */
