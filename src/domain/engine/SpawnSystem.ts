@@ -44,11 +44,6 @@ export class SpawnSystem {
 		this.pointDot = null;
 	}
 
-	/** Get the current point dot reference */
-	getPointDot(): PointDot | null {
-		return this.pointDot;
-	}
-
 	/**
 	 * Calculate spawn wait time based on difficulty curve.
 	 * Spawn interval decreases linearly from SMALL_DOT_CREATE_INTERVAL to 0.
