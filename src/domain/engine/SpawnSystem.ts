@@ -83,7 +83,8 @@ export class SpawnSystem {
 	 * Try to spawn or manage a point dot.
 	 * Returns new PointDot or null.
 	 * Like legacy mPointDot, the last point dot stays referenced after removal (faded or
-	 * collected) so the respawn wait counts from its removal; it is only cleared on reset.
+	 * collected) so the respawn wait counts from its removal (or from being caught, before
+	 * it has finished merging into the player); it is only cleared on reset.
 	 */
 	trySpawnPointDot(
 		timeStep: number,
@@ -99,7 +100,7 @@ export class SpawnSystem {
 		const randomTime = interval + halfInterval;
 
 		if (this.pointDot != null) {
-			if (this.pointDot.isFlaggedForRemoval) {
+			if (this.pointDot.isFlaggedForRemoval || this.pointDot.isAbsorbing) {
 				if (timeStep - this.pointStep > randomTime) {
 					this.pointDot = this.createPointDot(
 						timeStep,

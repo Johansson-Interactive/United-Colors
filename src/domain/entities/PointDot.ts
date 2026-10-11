@@ -35,6 +35,10 @@ export class PointDot extends Dot {
 	}
 
 	override update(timeStep: number): void {
+		if (this.isAbsorbing) {
+			super.update(timeStep);
+			return;
+		}
 		switch (this.animPhase) {
 			case "zoom_in":
 				this.updateZoomIn(timeStep);
@@ -115,16 +119,17 @@ export class PointDot extends Dot {
 		}
 	}
 
-	/** Force-remove immediately (on collision) */
-	forceRemove(): void {
-		super.flagForRemoval();
+	/** Caught: the pulse stops and the dot merges into the player */
+	override startAbsorb(): void {
+		if (this.isAbsorbing) return;
+		super.startAbsorb();
 		this.animPhase = "done";
-		this.setSize(0);
 	}
 
 	override get isFlaggedForRemoval(): boolean {
 		// Not removable while zoom-out animation is still playing
 		if (this.animPhase === "zoom_out") return false;
+		if (this.isAbsorbing) return super.isFlaggedForRemoval;
 		return super.isFlaggedForRemoval || this.animPhase === "done";
 	}
 }

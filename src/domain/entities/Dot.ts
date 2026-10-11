@@ -1,3 +1,5 @@
+import { ABSORB_TICKS } from "../constants";
+
 let nextId = 0;
 
 /** A moving dot in the game world */
@@ -11,7 +13,15 @@ export class Dot {
 	velocity: number;
 	/** Size at the start of the current tick, for interpolating size changes between ticks */
 	prevSize: number;
+	/**
+	 * Progress of the merge into the player, 0..1, once caught; stays 0 otherwise.
+	 * `prevAbsorb` is the value at the start of the tick, for interpolating between ticks.
+	 */
+	absorb = 0;
+	prevAbsorb = 0;
 	private _size: number;
+	private _absorbing = false;
+	private absorbTicks = 0;
 	private _flaggedForRemoval = false;
 
 	constructor(
@@ -43,8 +53,33 @@ export class Dot {
 	}
 
 	update(_timeStep: number): void {
+		if (this._absorbing) {
+			this.absorbTicks = Math.min(ABSORB_TICKS, this.absorbTicks + 1);
+			this.absorb = this.absorbTicks / ABSORB_TICKS;
+			if (this.absorbTicks === ABSORB_TICKS) this.flagForRemoval();
+			return;
+		}
 		this.x += this.vx * this.velocity;
 		this.y += this.vy * this.velocity;
+	}
+
+	/**
+	 * The player caught this dot: it stops where it is and merges into the player over
+	 * ABSORB_TICKS, after which it is flagged for removal. Idempotent.
+	 */
+	startAbsorb(): void {
+		if (this._absorbing) return;
+		this._absorbing = true;
+		this.absorbTicks = 0;
+		this.absorb = 0;
+		this.prevAbsorb = 0;
+		this.vx = 0;
+		this.vy = 0;
+	}
+
+	/** Caught and merging into the player; no longer part of play */
+	get isAbsorbing(): boolean {
+		return this._absorbing;
 	}
 
 	flagForRemoval(): void {

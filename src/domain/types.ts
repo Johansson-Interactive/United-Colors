@@ -42,6 +42,12 @@ export interface DotView {
 	/** Displacement per simulation tick (px), for render-side extrapolation between ticks */
 	vx: number;
 	vy: number;
+	/**
+	 * Set once the player has caught this dot: progress of its merge into the player, 0..1,
+	 * at this tick and at the previous one. See ABSORB_TICKS.
+	 */
+	absorb?: number;
+	prevAbsorb?: number;
 }
 
 /** Complete frame data emitted by the engine for the presentation layer */

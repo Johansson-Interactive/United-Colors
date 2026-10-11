@@ -1,4 +1,5 @@
 import {
+	ABSORB_TICKS,
 	GAME_COLORS,
 	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_PULSE_SPEED,
@@ -411,11 +412,34 @@ describe("GameEngine", () => {
 			const frame = engine.getFrame();
 			if (frame.phase === "RUNNING") {
 				expect(frame.score).toBe(1);
-				// Collected dot disappears from the frame right away, not at the next tick
-				expect(frame.dots.find((d) => d.id === small.id)).toBeUndefined();
+				// The caught dot stays in the frame right away as merging, frozen where it was
+				const caught = frame.dots.find((d) => d.id === small.id);
+				expect(caught).toMatchObject({ absorb: 0, prevAbsorb: 0, vx: 0, vy: 0 });
 			} else {
 				expect(frame.phase).toBe("GAME_OVER");
 			}
+		});
+
+		it("a caught dot scores once, merges over ABSORB_TICKS and then leaves the frame", () => {
+			const { engine, small } = startWithSmallDot();
+			const player = engine.getPlayerPosition();
+			engine.onMovementDelta(small.x - player.x, small.y - player.y);
+			engine.advancePlayer(0, 0);
+			if (engine.getFrame().phase !== "RUNNING") return;
+			expect(engine.getScore()).toBe(1);
+
+			// Still overlapping the player every frame, but never scores again
+			for (let t = 1; t < ABSORB_TICKS; t++) {
+				engine.advancePlayer(0, 0);
+				engine.tick();
+				if (engine.getFrame().phase !== "RUNNING") return;
+				const caught = engine.getFrame().dots.find((d) => d.id === small.id);
+				expect(caught?.absorb).toBeCloseTo(t / ABSORB_TICKS);
+				expect(caught?.prevAbsorb).toBeCloseTo((t - 1) / ABSORB_TICKS);
+				expect(engine.getScore()).toBe(1);
+			}
+			engine.tick();
+			expect(engine.getFrame().dots.find((d) => d.id === small.id)).toBeUndefined();
 		});
 
 		it("catching a small dot plays the small collect sound, not the large one", () => {

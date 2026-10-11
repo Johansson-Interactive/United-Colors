@@ -144,9 +144,12 @@ export class GameEngine {
 
 		const isKiosk = phase === "KIOSK";
 		this.timeStep++;
-		// Dots collected between ticks (per-frame collisions) leave before spawn limits apply
+		// Dots that finished merging between ticks leave before spawn limits apply
 		this.removeFlaggedDots();
-		for (const dot of this.dots) dot.prevSize = dot.size;
+		for (const dot of this.dots) {
+			dot.prevSize = dot.size;
+			dot.prevAbsorb = dot.absorb;
+		}
 		const spawnedFrom = this.dots.length;
 
 		// Spawn small dots
@@ -200,13 +203,13 @@ export class GameEngine {
 
 	/** Produce a RenderFrame for the presentation layer */
 	getFrame(): RenderFrame {
-		// Skip dots collected between ticks; they are removed at the next tick
+		// Skip dots that finished merging between ticks; they are removed at the next tick
 		const dots: DotView[] = [];
 		for (const dot of this.dots) {
 			if (dot.isFlaggedForRemoval) continue;
 			const kind =
 				dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small";
-			const moves = kind !== "player";
+			const moves = kind !== "player" && !dot.isAbsorbing;
 			dots.push({
 				id: dot.id,
 				x: dot.x,
@@ -218,6 +221,8 @@ export class GameEngine {
 				// Matches Dot.update; 0 for the player (moved per frame) and stationary point dots
 				vx: moves ? dot.vx * dot.velocity : 0,
 				vy: moves ? dot.vy * dot.velocity : 0,
+				absorb: dot.isAbsorbing ? dot.absorb : undefined,
+				prevAbsorb: dot.isAbsorbing ? dot.prevAbsorb : undefined,
 			});
 		}
 
@@ -274,7 +279,7 @@ export class GameEngine {
 		const player = this.player;
 		for (const dot of this.dots) {
 			if (dot === player) continue;
-			if (dot.isFlaggedForRemoval) continue;
+			if (dot.isFlaggedForRemoval || dot.isAbsorbing) continue;
 
 			const x = dot.x + dot.vx * dot.velocity * alpha;
 			const y = dot.y + dot.vy * dot.velocity * alpha;
@@ -283,13 +288,11 @@ export class GameEngine {
 			if (dot instanceof PointDot) {
 				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
-				dot.forceRemove();
-				this.hasFlaggedDots = true;
+				dot.startAbsorb();
 				this.audio?.playLargeCollect();
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
-				dot.flagForRemoval();
-				this.hasFlaggedDots = true;
+				dot.startAbsorb();
 				this.audio?.playCollect();
 			} else {
 				// Wrong color -- game over

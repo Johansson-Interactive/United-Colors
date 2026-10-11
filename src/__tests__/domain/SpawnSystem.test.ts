@@ -77,13 +77,13 @@ describe("SpawnSystem", () => {
 		// Corner player, away from where random() = 0.5 places the point dot
 		const player = new PlayerDot(10, 10, "#E91E63", 12.5, 0);
 
-		it("waits after a collected point dot is removed before respawning", () => {
+		it("waits from when a point dot is caught (not when it finishes merging) before respawning", () => {
 			const first = spawn.trySpawnPointDot(wait + 1, player, screen, 100);
 			expect(first).not.toBeNull();
 
 			// Alive until collected at step 1000
 			expect(spawn.trySpawnPointDot(1000, player, screen, 100)).toBeNull();
-			first?.forceRemove();
+			first?.startAbsorb();
 
 			expect(spawn.trySpawnPointDot(1001, player, screen, 100)).toBeNull();
 			expect(spawn.trySpawnPointDot(1000 + wait, player, screen, 100)).toBeNull();
@@ -104,7 +104,7 @@ describe("SpawnSystem", () => {
 				for (let i = 0; i < 50; i++) {
 					const dot = system.trySpawnPointDot(wait * 2 * (i + 1), p, screen, 100);
 					expect(dot?.color).not.toBe(color);
-					dot?.forceRemove();
+					dot?.startAbsorb();
 				}
 			}
 		});

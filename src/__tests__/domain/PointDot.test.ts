@@ -1,4 +1,8 @@
-import { POINT_DOT_FADE_TIME, POINT_DOT_SIZE_ANIMATION_TIME } from "../../domain/constants";
+import {
+	ABSORB_TICKS,
+	POINT_DOT_FADE_TIME,
+	POINT_DOT_SIZE_ANIMATION_TIME,
+} from "../../domain/constants";
 import { resetDotIdCounter } from "../../domain/entities/Dot";
 import { PointDot } from "../../domain/entities/PointDot";
 
@@ -65,11 +69,33 @@ describe("PointDot", () => {
 		expect(pd.size).toBe(0);
 	});
 
-	it("forceRemove makes it immediately removable", () => {
+	it("once caught it stops pulsing and merges into the player before it is removable", () => {
 		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
-		pd.forceRemove();
+		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME + 3; t++) pd.update(t);
+		const sizeWhenCaught = pd.size;
+		pd.startAbsorb();
+		expect(pd.isAbsorbing).toBe(true);
+		expect(pd.isFlaggedForRemoval).toBe(false);
+
+		let t = POINT_DOT_SIZE_ANIMATION_TIME + 4;
+		for (let i = 1; i < ABSORB_TICKS; i++, t++) {
+			pd.update(t);
+			expect(pd.size).toBe(sizeWhenCaught);
+			expect(pd.isFlaggedForRemoval).toBe(false);
+		}
+		pd.update(t);
+		expect(pd.absorb).toBe(1);
 		expect(pd.isFlaggedForRemoval).toBe(true);
-		expect(pd.size).toBe(0);
+	});
+
+	it("does not fade out on its timeout while merging", () => {
+		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME; t++) pd.update(t);
+		expect(pd.size).toBe(50);
+		pd.startAbsorb();
+		pd.update(POINT_DOT_FADE_TIME + 1);
+		expect(pd.size).toBe(50);
+		expect(pd.absorb).toBeCloseTo(1 / ABSORB_TICKS);
 	});
 
 	it("has correct value", () => {

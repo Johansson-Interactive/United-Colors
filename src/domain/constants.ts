@@ -42,6 +42,14 @@ export const GAME_COLORS = ["#E91E63", "#2196F3", "#8BC34A"] as const;
 /** Each time a color is picked, its probability of being picked next is multiplied by this */
 export const COLOR_REPEAT_FACTOR = 1 / 3;
 
+/**
+ * A caught dot merges into the player like a droplet over this many ticks, then is removed.
+ * The first ABSORB_MERGE_FRACTION of that is the dot sliding in; the rest is the player
+ * settling back from the swell.
+ */
+export const ABSORB_TICKS = 14;
+export const ABSORB_MERGE_FRACTION = 0.5;
+
 /** Point-dot pulse contracts to this fraction of full size */
 export const POINT_DOT_PULSE_SCALE = 0.85;
 
