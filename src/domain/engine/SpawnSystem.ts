@@ -92,6 +92,9 @@ export class SpawnSystem {
 		density: number,
 	): PointDot | null {
 		const halfInterval = POINT_DOT_TIME_BETWEEN / 2;
+		// The wait is re-rolled on every tick while a point dot is alive, so the effective
+		// respawn delay is not uniform over the range. This matches legacy spawnBigPoint,
+		// which also draws a fresh interval each tick; keep it to preserve legacy behaviour.
 		const interval = Math.floor(this.random() * POINT_DOT_TIME_BETWEEN);
 		const randomTime = interval + halfInterval;
 
