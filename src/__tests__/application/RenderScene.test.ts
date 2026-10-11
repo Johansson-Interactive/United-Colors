@@ -11,7 +11,10 @@ import {
 	SCENE_KIND_SMALL,
 	SCENE_MERGE,
 	SCENE_RADIUS,
+	SCENE_STRETCH_X,
+	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
@@ -104,6 +107,27 @@ describe("buildScene", () => {
 			kind: "player",
 			merge: 0,
 		});
+	});
+
+	it("gives only the moving player a liquid stretch, and none while frozen", () => {
+		const build = createSceneBuilder();
+		const player = dot({ kind: "player", radius: 25 });
+		const free = dot({});
+		const last = (scene: Float32Array) => scene.length - SCENE_STRIDE;
+		let scene = build(frame([free, player]), 0, { x: 50, y: 60 }, 16);
+		for (let i = 1; i <= 30; i++)
+			scene = build(frame([free, player]), 0, { x: 50 + 10 * i, y: 60 }, 16);
+		expect(Math.abs(scene[last(scene) + SCENE_STRETCH_X])).toBeGreaterThan(0);
+		expect(scene[last(scene) + SCENE_WOBBLE]).toBeGreaterThan(0);
+		expect([scene[SCENE_STRETCH_X], scene[SCENE_STRETCH_Y], scene[SCENE_WOBBLE]]).toEqual([
+			0, 0, 0,
+		]);
+
+		const moving = Array.from(scene.subarray(last(scene)));
+		const paused = build(frame([free, player], "PAUSED"), 0, { x: 400, y: 60 }, 16);
+		expect(Array.from(paused.subarray(last(paused) + SCENE_STRETCH_X))).toEqual(
+			moving.slice(SCENE_STRETCH_X),
+		);
 	});
 
 	it("omits the player when not in the frame (kiosk)", () => {

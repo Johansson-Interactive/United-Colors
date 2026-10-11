@@ -41,10 +41,13 @@ export function useGameLoop(store: GameStore, audio: GameAudio) {
 		engineRef.current?.setScreen(size);
 	}, []);
 
-	/** Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed) */
+	/**
+	 * Write the drawable scene for this rendered frame (alpha = fraction of a tick elapsed,
+	 * dtMs = time since the last frame, 0 for a redraw that should not animate the player)
+	 */
 	const drawScene = useCallback(
-		(alpha: number) => {
-			scene.set(buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition()));
+		(alpha: number, dtMs = 0) => {
+			scene.set(buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition(), dtMs));
 		},
 		[store, getEngine, scene, buildScene],
 	);
@@ -64,7 +67,7 @@ export function useGameLoop(store: GameStore, audio: GameAudio) {
 				if (engine.advancePlayer(dtMs, alpha)) {
 					store.getState().updateFrame(engine.getFrame());
 				}
-				drawScene(alpha);
+				drawScene(alpha, dtMs);
 			},
 		);
 		clockRef.current.start();

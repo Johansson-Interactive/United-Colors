@@ -4,7 +4,6 @@ import {
 	createPicture,
 	Group,
 	Paint,
-	PaintStyle,
 	Picture,
 	Skia,
 	TileMode,
@@ -27,6 +26,8 @@ import {
 	SCENE_KIND_PLAYER,
 	SCENE_MERGE,
 	SCENE_RADIUS,
+	SCENE_STRETCH_X,
+	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
 	SCENE_X,
 	SCENE_Y,
@@ -64,13 +65,6 @@ const FILL_COLORS = GAME_COLORS.map((color) => Skia.Color(color));
 
 const FILL_PAINT = Skia.Paint();
 FILL_PAINT.setAntiAlias(true);
-
-/** White core ring on the player, in unit-radius space */
-const RING_PAINT = Skia.Paint();
-RING_PAINT.setAntiAlias(true);
-RING_PAINT.setStyle(PaintStyle.Stroke);
-RING_PAINT.setStrokeWidth(0.09);
-RING_PAINT.setColor(Skia.Color("rgba(255,255,255,0.85)"));
 
 /**
  * Specular glare centred on the origin in unit-radius space. Instead of moving the shader
@@ -126,7 +120,9 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
  * Every dot is drawn as a lit glass bead: a soft halo in its own colour, a solid body and a
  * specular glare whose position follows the device tilt, so the dots read as physical
  * objects under a fixed light. The player dot has no halo, so its edge stays sharp and the
- * gap to other dots is easy to judge; it gets a white core ring instead.
+ * gap to other dots is easy to judge. What marks it as the player's is that it alone is
+ * liquid: it trails, stretches and sloshes as it moves and ripples gently at rest (see
+ * jelly.ts), while every other dot stays rigid glass.
  * Caught dots merge into the player like water droplets: the player and every merging dot
  * are one body under the metaball shader, so a neck forms between them as the dot slides in
  * and the player swells and settles once it has flowed in.
@@ -237,7 +233,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				Skia.XYWHRect(merge.left, merge.top, merge.right - merge.left, merge.bottom - merge.top),
 				MERGE_PAINT,
 			);
-			// Glare on the liquid: fading on each merging dot, full on the player, plus its ring
+			// Glare on the liquid: fading on each merging dot, full on the player and stretched
+			// with it
 			for (let i = 0; i < end; i += SCENE_STRIDE) {
 				const radius = dots[i + SCENE_RADIUS];
 				const kind = dots[i + SCENE_KIND];
@@ -247,10 +244,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				const isPlayer = kind === SCENE_KIND_PLAYER;
 				GLARE_PAINT.setAlphaf(isPlayer ? 1 : 1 - dots[i + SCENE_MERGE]);
 				canvas.save();
+				if (isPlayer) {
+					const sx = dots[i + SCENE_STRETCH_X];
+					const sy = dots[i + SCENE_STRETCH_Y];
+					const k = 1 + Math.hypot(sx, sy);
+					const degrees = (Math.atan2(sy, sx) * 180) / Math.PI;
+					canvas.translate(x, y);
+					canvas.rotate(degrees, 0, 0);
+					canvas.scale(k, 1 / k);
+					canvas.rotate(-degrees, 0, 0);
+					canvas.translate(-x, -y);
+				}
 				canvas.translate(x + gx * radius, y + gy * radius);
 				canvas.scale(radius, radius);
 				canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-				if (isPlayer) canvas.drawCircle(-gx, -gy, 0.62, RING_PAINT);
 				canvas.restore();
 			}
 			GLARE_PAINT.setAlphaf(1);

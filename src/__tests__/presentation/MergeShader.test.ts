@@ -1,9 +1,13 @@
+import { JELLY_MAX_STRETCH } from "../../application/jelly";
 import {
 	createSceneBuilder,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_RADIUS,
+	SCENE_STRETCH_X,
+	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
@@ -12,6 +16,7 @@ import {
 	MERGE_BLEND,
 	MERGE_MAX_BLOBS,
 	MERGE_SKSL,
+	MERGE_WOBBLE,
 	packMergeUniforms,
 } from "../../presentation/mergeShader";
 
@@ -53,23 +58,37 @@ describe("packMergeUniforms", () => {
 		const values = packed?.values ?? [];
 		expect(values.slice(0, 3)).toEqual([50, 60, 20]);
 		expect(values.slice(3, 6)).toEqual([80, 60, 10]);
-		// Unused slots are zero; then count and blend radius
+		// Unused slots are zero; then count, blend radius and the player's jelly (round, at rest)
 		expect(values.slice(6, MERGE_MAX_BLOBS * 3).every((v) => v === 0)).toBe(true);
 		expect(values[MERGE_MAX_BLOBS * 3]).toBe(2);
 		expect(values[MERGE_MAX_BLOBS * 3 + 1]).toBeCloseTo(20 * MERGE_BLEND);
-		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 2);
+		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2)).toEqual([0, 0, 0]);
+		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 5);
 	});
 
-	it("bounds cover every body plus the smooth-min bulge", () => {
+	it("bounds cover every body, the player at full stretch and wobble, plus the bulge", () => {
 		const s = scene([PLAYER, dot({ id: "c", x: 80, y: 60, absorb: 0 })]);
 		const packed = packMergeUniforms(s);
 		const pad = (20 * MERGE_BLEND) / 4 + 1;
-		expect(packed).toMatchObject({
-			left: 30 - pad,
-			top: 40 - pad,
-			right: 90 + pad,
-			bottom: 80 + pad,
-		});
+		const reach = 20 * (1 + JELLY_MAX_STRETCH) * (1 + MERGE_WOBBLE);
+		expect(packed?.left).toBeCloseTo(50 - reach - pad);
+		expect(packed?.top).toBeCloseTo(60 - reach - pad);
+		expect(packed?.right).toBeCloseTo(90 + pad);
+		expect(packed?.bottom).toBeCloseTo(60 + reach + pad);
+	});
+
+	it("passes the player's stretch and wobble clock from the scene to the shader", () => {
+		const s = scene([PLAYER]);
+		s[SCENE_STRETCH_X] = 0.1;
+		s[SCENE_STRETCH_Y] = -0.05;
+		s[SCENE_WOBBLE] = 3;
+		const values = packMergeUniforms(s)?.values ?? [];
+		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2)).toEqual([
+			Math.fround(0.1),
+			Math.fround(-0.05),
+			3,
+		]);
+		expect(MERGE_SKSL).toContain("uniform float3 jelly;");
 	});
 
 	it("never packs more than MERGE_MAX_BLOBS bodies", () => {

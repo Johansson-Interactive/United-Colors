@@ -1,11 +1,12 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import type { DotView, RenderFrame } from "../domain/types";
+import { createJelly } from "./jelly";
 
 /**
  * The drawable scene is a flat Float32Array with one record of SCENE_STRIDE floats per dot,
  * so one typed-array copy crosses to the UI thread per frame instead of an object per dot.
  */
-export const SCENE_STRIDE = 6;
+export const SCENE_STRIDE = 9;
 export const SCENE_X = 0;
 export const SCENE_Y = 1;
 export const SCENE_RADIUS = 2;
@@ -15,6 +16,10 @@ export const SCENE_COLOR = 3;
 export const SCENE_KIND = 4;
 /** For SCENE_KIND_MERGING dots: how far the slide into the player has come, 0..1 */
 export const SCENE_MERGE = 5;
+/** For the player: its liquid stretch vector and wobble clock (see jelly.ts); 0 otherwise */
+export const SCENE_STRETCH_X = 6;
+export const SCENE_STRETCH_Y = 7;
+export const SCENE_WOBBLE = 8;
 
 export const SCENE_KIND_SMALL = 0;
 export const SCENE_KIND_POINT = 1;
@@ -58,6 +63,12 @@ export function mergeSwell(absorb: number): number {
 	return 1 - eased;
 }
 
+function clearPlayerFields(buffer: Float32Array, offset: number): void {
+	buffer[offset + SCENE_STRETCH_X] = 0;
+	buffer[offset + SCENE_STRETCH_Y] = 0;
+	buffer[offset + SCENE_WOBBLE] = 0;
+}
+
 function colorIndex(color: string): number {
 	const index = (GAME_COLORS as readonly string[]).indexOf(color);
 	return index < 0 ? 0 : index;
@@ -74,7 +85,8 @@ function colorIndex(color: string): number {
  *   extrapolating them would overshoot when a pulse reverses.
  * - Caught dots slide from where they were caught into the player's live position, shrinking
  *   as they go, and the player swells by the volume it takes in before settling back.
- * - The player is drawn at its live position (moved every frame) and always last (on top).
+ * - The player is drawn at its live position (moved every frame) and always last (on top),
+ *   with the liquid shape its movement over the last `dtMs` gives it.
  * - When the simulation is frozen (paused / game over) dots are drawn exactly as simulated.
  *
  * The backing buffer is reused and grown as needed, but every call returns a new view on it:
@@ -83,11 +95,13 @@ function colorIndex(color: string): number {
  */
 export function createSceneBuilder() {
 	let buffer = new Float32Array(0);
+	const jelly = createJelly();
 
 	return function buildScene(
 		frame: RenderFrame,
 		alpha: number,
 		player: { x: number; y: number },
+		dtMs = 0,
 	): Float32Array {
 		const frozen = frame.phase === "PAUSED" || frame.phase === "GAME_OVER";
 		const moveT = frozen ? 0 : alpha;
@@ -112,6 +126,7 @@ export function createSceneBuilder() {
 				buffer[offset + SCENE_RADIUS] = radius * (1 - (1 - MERGE_SHRINK) * slide);
 				buffer[offset + SCENE_KIND] = SCENE_KIND_MERGING;
 				buffer[offset + SCENE_MERGE] = slide;
+				clearPlayerFields(buffer, offset);
 				if (playerDot && playerDot.radius > 0) {
 					const ratio = radius / playerDot.radius;
 					swell += ratio * ratio * mergeSwell(absorb);
@@ -122,11 +137,13 @@ export function createSceneBuilder() {
 				buffer[offset + SCENE_RADIUS] = radius;
 				buffer[offset + SCENE_KIND] = kindCode(dot.kind);
 				buffer[offset + SCENE_MERGE] = 0;
+				clearPlayerFields(buffer, offset);
 			}
 			offset += SCENE_STRIDE;
 		}
 
 		if (playerDot) {
+			const shape = jelly(player.x, player.y, playerDot.radius, frozen ? 0 : dtMs);
 			buffer[offset + SCENE_X] = player.x;
 			buffer[offset + SCENE_Y] = player.y;
 			buffer[offset + SCENE_RADIUS] =
@@ -134,6 +151,9 @@ export function createSceneBuilder() {
 			buffer[offset + SCENE_COLOR] = colorIndex(playerDot.color);
 			buffer[offset + SCENE_KIND] = SCENE_KIND_PLAYER;
 			buffer[offset + SCENE_MERGE] = 0;
+			buffer[offset + SCENE_STRETCH_X] = shape.stretchX;
+			buffer[offset + SCENE_STRETCH_Y] = shape.stretchY;
+			buffer[offset + SCENE_WOBBLE] = shape.wobble;
 			offset += SCENE_STRIDE;
 		}
 
