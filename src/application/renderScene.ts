@@ -15,7 +15,7 @@ import {
  * The drawable scene is a flat Float32Array with one record of SCENE_STRIDE floats per dot,
  * so one typed-array copy crosses to the UI thread per frame instead of an object per dot.
  */
-export const SCENE_STRIDE = 11;
+export const SCENE_STRIDE = 13;
 export const SCENE_X = 0;
 export const SCENE_Y = 1;
 export const SCENE_RADIUS = 2;
@@ -42,6 +42,12 @@ export const SCENE_DENT = 9;
  * catching it, while its shell (SCENE_COLOR) is the player's own colour; -1 for no yolk
  */
 export const SCENE_CORE = 10;
+/**
+ * For a point dot: where its yolk sits, as an offset (px) from the dot's centre before the
+ * lean stretches it; 0 otherwise
+ */
+export const SCENE_CORE_X = 11;
+export const SCENE_CORE_Y = 12;
 
 export const SCENE_KIND_SMALL = 0;
 export const SCENE_KIND_POINT = 1;
@@ -55,6 +61,10 @@ export const SCENE_KIND_REJECTED = 4;
 export const MERGE_SWELL_MAX = 1.3;
 /** A merging dot has shrunk to this fraction of its radius by the time it reaches the player */
 const MERGE_SHRINK = 0.55;
+/** A point dot's yolk radius relative to the dot's */
+export const YOLK_RADIUS = 0.5;
+/** The yolk is drawn this share of the way from the dot's centre to its rim, toward the player */
+export const YOLK_PULL = 0.7;
 
 function kindCode(kind: DotView["kind"]): number {
 	if (kind === "player") return SCENE_KIND_PLAYER;
@@ -114,6 +124,8 @@ function clearExtraFields(buffer: Float32Array, offset: number): void {
 	buffer[offset + SCENE_WOBBLE] = 0;
 	buffer[offset + SCENE_DENT] = 0;
 	buffer[offset + SCENE_CORE] = -1;
+	buffer[offset + SCENE_CORE_X] = 0;
+	buffer[offset + SCENE_CORE_Y] = 0;
 }
 
 function colorIndex(color: string): number {
@@ -133,8 +145,9 @@ function colorIndex(color: string): number {
  * - Caught dots slide from where they were caught into the player's live position, shrinking
  *   as they go, and the player swells by the volume it takes in before settling back.
  * - A point dot is drawn as a yolk: a shell in the player's colour, since it is safe to catch
- *   like any dot of that colour, round a core in the colour it turns the player into. As the
- *   player nears it leans toward them, its back edge held still (see lean.ts).
+ *   like any dot of that colour, round a core in the colour it turns the player into. The
+ *   yolk is drawn to the player wherever they are; as they near, the whole dot leans toward
+ *   them too, its back edge held still (see lean.ts).
  * - A refused wrong-colour dot presses into the player along the line from the player
  *   through it and is pushed back out, while the player squashes across that line and then
  *   recoils the other way (see rejection.ts).
@@ -231,11 +244,14 @@ export function createSceneBuilder() {
 					const dx = player.x - x;
 					const dy = player.y - y;
 					const distance = Math.hypot(dx, dy);
+					const nx = distance > 1e-6 ? dx / distance : 0;
+					const ny = distance > 1e-6 ? dy / distance : 0;
+					const pull = radius * (1 - YOLK_RADIUS) * YOLK_PULL;
+					buffer[offset + SCENE_CORE_X] = nx * pull;
+					buffer[offset + SCENE_CORE_Y] = ny * pull;
 					const reach = leanReach(distance - playerDot.radius - radius, playerDot.radius, radius);
 					if (reach > 0) {
 						// Stretched along the lean, the tip moves out by twice the centre's shift
-						const nx = dx / distance;
-						const ny = dy / distance;
 						buffer[offset + SCENE_X] = x + (nx * reach) / 2;
 						buffer[offset + SCENE_Y] = y + (ny * reach) / 2;
 						buffer[offset + SCENE_STRETCH_X] = (nx * reach) / (2 * radius);
@@ -261,6 +277,8 @@ export function createSceneBuilder() {
 			buffer[offset + SCENE_WOBBLE] = shape.wobble;
 			buffer[offset + SCENE_DENT] = 0;
 			buffer[offset + SCENE_CORE] = -1;
+			buffer[offset + SCENE_CORE_X] = 0;
+			buffer[offset + SCENE_CORE_Y] = 0;
 			offset += SCENE_STRIDE;
 		}
 

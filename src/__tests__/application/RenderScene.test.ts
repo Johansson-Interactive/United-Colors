@@ -15,6 +15,8 @@ import {
 	mergeSwell,
 	SCENE_COLOR,
 	SCENE_CORE,
+	SCENE_CORE_X,
+	SCENE_CORE_Y,
 	SCENE_DENT,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
@@ -30,6 +32,8 @@ import {
 	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
+	YOLK_PULL,
+	YOLK_RADIUS,
 } from "../../application/renderScene";
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../../domain/constants";
 import type { DotView, GamePhase, RenderFrame } from "../../domain/types";
@@ -56,6 +60,7 @@ function decode(scene: Float32Array) {
 			dent: scene[i + SCENE_DENT],
 			core: scene[i + SCENE_CORE] < 0 ? undefined : GAME_COLORS[scene[i + SCENE_CORE]],
 			stretch: [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y]],
+			yolk: [scene[i + SCENE_CORE_X], scene[i + SCENE_CORE_Y]],
 		});
 	}
 	return dots;
@@ -125,6 +130,7 @@ describe("buildScene", () => {
 			merge: 0,
 			dent: 0,
 			stretch: [0, 0],
+			yolk: [0, 0],
 		});
 	});
 
@@ -275,6 +281,29 @@ describe("buildScene", () => {
 		it("sits round and still while the player is out of range", () => {
 			const far = 50 + 20 + 10 + LEAN_RANGE * 20 + 1;
 			expect(drawn(far)).toMatchObject({ x: far, y: 60, stretch: [0, 0] });
+		});
+
+		it("draws its yolk to the player from the start, wherever they are", () => {
+			const pull = 10 * (1 - YOLK_RADIUS) * YOLK_PULL;
+			// Far off to the right of the player, then far below it
+			const right = drawn(1000);
+			expect(right.yolk[0]).toBeCloseTo(-pull);
+			expect(right.yolk[1]).toBeCloseTo(0);
+			const [below] = buildScene(
+				frame([dot({ kind: "point", x: 50, y: 1000, radius: 10 }), player]),
+				0,
+				PLAYER_POS,
+			);
+			expect(below.yolk[0]).toBeCloseTo(0);
+			expect(below.yolk[1]).toBeCloseTo(-pull);
+			// Still inside the shell
+			expect(pull + 10 * YOLK_RADIUS).toBeLessThan(10);
+		});
+
+		it("has no yolk to pull once caught, and small dots have none", () => {
+			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 }).yolk).toEqual([0, 0]);
+			const [small] = buildScene(frame([dot({ x: 1000 }), player]), 0, PLAYER_POS);
+			expect(small.yolk).toEqual([0, 0]);
 		});
 
 		it("leans toward a nearby player with its back edge held still", () => {

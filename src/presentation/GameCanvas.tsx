@@ -19,10 +19,11 @@ import {
 	useSharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { LEAN_MAX_STRETCH } from "../application/lean";
 import {
 	SCENE_COLOR,
 	SCENE_CORE,
+	SCENE_CORE_X,
+	SCENE_CORE_Y,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
@@ -36,6 +37,7 @@ import {
 	SCENE_STRIDE,
 	SCENE_X,
 	SCENE_Y,
+	YOLK_RADIUS,
 } from "../application/renderScene";
 import { GAME_COLORS } from "../domain/constants";
 import type { ScreenSize } from "../domain/types";
@@ -61,10 +63,6 @@ const GLARE_MAX_OFFSET = 0.55;
 /** Halo (soft glow behind each non-player dot) size relative to its radius */
 const HALO_SCALE = 1.9;
 const FROST_MAX_SIGMA = 14;
-/** A point dot's yolk radius relative to the dot's */
-const YOLK_RADIUS = 0.5;
-/** At the fullest lean the yolk has slid this share of the way to the front of the shell */
-const YOLK_SLIDE = 0.7;
 
 // Paints and colours are built once on the JS thread and captured by the picture worklet,
 // so a frame only sets the fill colour and draws.
@@ -139,8 +137,9 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
  * presses a dent into the liquid and is pushed back out, drawn on top of the liquid so it
  * never looks taken in.
  * A point dot is a yolk: its shell is the player's colour, so like every dot of that colour
- * it reads as safe to catch, and its core shows the colour it turns the player into. As the
- * player comes near it leans out toward them and its yolk slides forward, as if reaching.
+ * it reads as safe to catch, and its core shows the colour it turns the player into. The yolk
+ * is drawn to the player wherever they are, and as they come near the whole dot leans out
+ * toward them, as if reaching.
  * The canvas is transparent over the ambient background. Lighting freezes while frosted,
  * and the blur layer only exists while frosted, so a live scene pays nothing for it.
  */
@@ -243,13 +242,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.drawCircle(x, y, radius, FILL_PAINT);
 				const core = dots[i + SCENE_CORE];
 				if (core >= 0) {
-					const yolk = radius * YOLK_RADIUS;
-					const slide =
-						stretch > 0
-							? ((radius - yolk) * YOLK_SLIDE * Math.min(1, stretch / LEAN_MAX_STRETCH)) / stretch
-							: 0;
 					FILL_PAINT.setColor(FILL_COLORS[core]);
-					canvas.drawCircle(x + sx * slide, y + sy * slide, yolk, FILL_PAINT);
+					canvas.drawCircle(
+						x + dots[i + SCENE_CORE_X],
+						y + dots[i + SCENE_CORE_Y],
+						radius * YOLK_RADIUS,
+						FILL_PAINT,
+					);
 				}
 				canvas.translate(x + gx * radius, y + gy * radius);
 				canvas.scale(radius, radius);
