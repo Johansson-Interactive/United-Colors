@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DEFAULT_SETTINGS } from "../../domain/constants";
+import type { GameSettings } from "../../domain/types";
 import { AsyncStorageRepository } from "../../infrastructure/AsyncStorageRepository";
 
 vi.mock("@react-native-async-storage/async-storage", () => {
@@ -14,6 +16,14 @@ vi.mock("@react-native-async-storage/async-storage", () => {
 	};
 });
 
+const SETTINGS_KEY = "@united_colors/settings";
+
+/** Persist a raw value as an older or hand-edited app might have, then load it */
+async function loadStored(raw: unknown): Promise<GameSettings> {
+	await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(raw));
+	return new AsyncStorageRepository().loadSettings();
+}
+
 beforeEach(() => AsyncStorage.clear());
 
 describe("Persistence roundtrip", () => {
@@ -26,37 +36,29 @@ describe("Persistence roundtrip", () => {
 	it("loads default settings", async () => {
 		const repo = new AsyncStorageRepository();
 		const settings = await repo.loadSettings();
-		expect(settings.soundEnabled).toBe(true);
-		expect(settings.musicEnabled).toBe(true);
+		expect(settings).toEqual(DEFAULT_SETTINGS);
 	});
 
-	it("save/load settings roundtrip (placeholder)", async () => {
+	it("save/load settings roundtrip", async () => {
 		const repo = new AsyncStorageRepository();
-		await repo.saveSettings({
+		const saved: GameSettings = {
 			soundEnabled: false,
 			musicEnabled: true,
-			tiltZero: null,
+			tiltZero: { x: 0.25, y: -0.5 },
 			tiltZeroDown: null,
-		});
-		// Currently returns defaults since AsyncStorage is not wired
-		const settings = await repo.loadSettings();
-		expect(settings).toBeDefined();
+		};
+		await repo.saveSettings(saved);
+		expect(await repo.loadSettings()).toEqual(saved);
 	});
 
-	it("save/load high score roundtrip (placeholder)", async () => {
+	it("save/load high score roundtrip", async () => {
 		const repo = new AsyncStorageRepository();
 		await repo.saveHighScore(42);
-		// Currently returns 0 since AsyncStorage is not wired
-		const score = await repo.loadHighScore();
-		expect(score).toBeDefined();
+		expect(await repo.loadHighScore()).toBe(42);
 	});
 
 	it("keeps music off for settings saved before music had its own switch", async () => {
-		await AsyncStorage.setItem(
-			"@united_colors/settings",
-			JSON.stringify({ soundEnabled: false, gyroSensitivity: 1, tiltZero: null }),
-		);
-		const settings = await new AsyncStorageRepository().loadSettings();
+		const settings = await loadStored({ soundEnabled: false, gyroSensitivity: 1, tiltZero: null });
 		expect(settings.soundEnabled).toBe(false);
 		expect(settings.musicEnabled).toBe(false);
 	});
@@ -72,5 +74,56 @@ describe("Persistence roundtrip", () => {
 		const settings = await repo.loadSettings();
 		expect(settings.soundEnabled).toBe(false);
 		expect(settings.musicEnabled).toBe(true);
+	});
+});
+
+describe("Persisted settings are validated before use", () => {
+	it("drops a tilt zero that is not a pose", async () => {
+		const settings = await loadStored({ ...DEFAULT_SETTINGS, tiltZero: "0.5,0.3" });
+		expect(settings.tiltZero).toBeNull();
+	});
+
+	it("drops a tilt zero with a non-finite coordinate", async () => {
+		// JSON has no NaN; a hand-edited or buggy writer leaves null, a string or Infinity-as-null
+		const settings = await loadStored({
+			...DEFAULT_SETTINGS,
+			tiltZero: { x: null, y: 0.3 },
+			tiltZeroDown: { x: 0.1, y: "NaN" },
+		});
+		expect(settings.tiltZero).toBeNull();
+		expect(settings.tiltZeroDown).toBeNull();
+	});
+
+	it("drops a tilt zero missing a coordinate and keeps the other pose", async () => {
+		const settings = await loadStored({
+			...DEFAULT_SETTINGS,
+			tiltZero: { x: 0.5 },
+			tiltZeroDown: { x: 0.1, y: 0.2 },
+		});
+		expect(settings.tiltZero).toBeNull();
+		expect(settings.tiltZeroDown).toEqual({ x: 0.1, y: 0.2 });
+	});
+
+	it("drops unknown keys instead of carrying them into the settings", async () => {
+		const settings = await loadStored({ ...DEFAULT_SETTINGS, gyroSensitivity: 1.5, theme: "dark" });
+		expect(settings).toEqual(DEFAULT_SETTINGS);
+		expect(Object.keys(settings).sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort());
+	});
+
+	it("falls back to the default for a switch that is not a boolean", async () => {
+		const settings = await loadStored({ soundEnabled: "yes", musicEnabled: 0 });
+		expect(settings.soundEnabled).toBe(true);
+		expect(settings.musicEnabled).toBe(true);
+	});
+
+	it("falls back to defaults when the stored value is not an object", async () => {
+		expect(await loadStored([1, 2, 3])).toEqual(DEFAULT_SETTINGS);
+		expect(await loadStored("settings")).toEqual(DEFAULT_SETTINGS);
+		expect(await loadStored(null)).toEqual(DEFAULT_SETTINGS);
+	});
+
+	it("falls back to defaults when the stored value is not JSON", async () => {
+		await AsyncStorage.setItem(SETTINGS_KEY, "{not json");
+		expect(await new AsyncStorageRepository().loadSettings()).toEqual(DEFAULT_SETTINGS);
 	});
 });

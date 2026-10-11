@@ -1,11 +1,45 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_SETTINGS } from "../domain/constants";
-import type { GameSettings, StoragePort } from "../domain/types";
+import type { GameSettings, StoragePort, TiltZero } from "../domain/types";
 
 const KEYS = {
 	highScore: "@united_colors/high_score",
 	settings: "@united_colors/settings",
 } as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+	return typeof value === "boolean" ? value : fallback;
+}
+
+/** A pose is two finite radians; anything else (corrupt, hand-edited, old shape) reads as unset */
+function readTiltZero(value: unknown): TiltZero | null {
+	if (!isRecord(value)) return null;
+	const { x, y } = value;
+	if (typeof x !== "number" || typeof y !== "number") return null;
+	if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+	return { x, y };
+}
+
+/**
+ * Rebuild settings from whatever was persisted, field by field, falling back to the default
+ * for anything missing or malformed and dropping keys the game no longer knows.
+ */
+function sanitizeSettings(stored: unknown): GameSettings {
+	if (!isRecord(stored)) return { ...DEFAULT_SETTINGS };
+	const soundEnabled = readBoolean(stored.soundEnabled, DEFAULT_SETTINGS.soundEnabled);
+	// Before music had its own switch, the sound switch silenced it too
+	const musicEnabled = readBoolean(stored.musicEnabled, soundEnabled);
+	return {
+		soundEnabled,
+		musicEnabled,
+		tiltZero: readTiltZero(stored.tiltZero),
+		tiltZeroDown: readTiltZero(stored.tiltZeroDown),
+	};
+}
 
 /**
  * Persistence layer using AsyncStorage.
@@ -35,10 +69,7 @@ export class AsyncStorageRepository implements StoragePort {
 		try {
 			const value = await AsyncStorage.getItem(KEYS.settings);
 			if (value == null) return { ...DEFAULT_SETTINGS };
-			const stored: Partial<GameSettings> = JSON.parse(value);
-			// Before music had its own switch, the sound switch silenced it too
-			const musicEnabled = stored.musicEnabled ?? stored.soundEnabled ?? true;
-			return { ...DEFAULT_SETTINGS, ...stored, musicEnabled };
+			return sanitizeSettings(JSON.parse(value));
 		} catch {
 			return { ...DEFAULT_SETTINGS };
 		}
