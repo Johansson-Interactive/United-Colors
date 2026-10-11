@@ -29,14 +29,26 @@ describe("StateMachine", () => {
 		expect(sm.phase).toBe("RUNNING");
 	});
 
-	it("transitions RUNNING -> GAME_OVER", () => {
+	it("transitions RUNNING -> REJECTING -> GAME_OVER", () => {
 		sm.transition("RUNNING");
+		expect(sm.transition("REJECTING")).toBe(true);
+		expect(sm.phase).toBe("REJECTING");
 		expect(sm.transition("GAME_OVER")).toBe(true);
 		expect(sm.phase).toBe("GAME_OVER");
 	});
 
+	it("only ends a game through the rejection, which cannot be paused", () => {
+		sm.transition("RUNNING");
+		expect(sm.transition("GAME_OVER")).toBe(false);
+		sm.transition("REJECTING");
+		expect(sm.transition("PAUSED")).toBe(false);
+		expect(sm.transition("RUNNING")).toBe(false);
+		expect(sm.phase).toBe("REJECTING");
+	});
+
 	it("transitions GAME_OVER -> KIOSK", () => {
 		sm.transition("RUNNING");
+		sm.transition("REJECTING");
 		sm.transition("GAME_OVER");
 		expect(sm.transition("KIOSK")).toBe(true);
 		expect(sm.phase).toBe("KIOSK");
@@ -44,6 +56,7 @@ describe("StateMachine", () => {
 
 	it("transitions GAME_OVER -> RUNNING (retry)", () => {
 		sm.transition("RUNNING");
+		sm.transition("REJECTING");
 		sm.transition("GAME_OVER");
 		expect(sm.transition("RUNNING")).toBe(true);
 		expect(sm.phase).toBe("RUNNING");
@@ -57,6 +70,7 @@ describe("StateMachine", () => {
 		expect(sm.phase).toBe("PAUSED");
 		sm.transition("RUNNING");
 		expect(sm.phase).toBe("RUNNING");
+		sm.transition("REJECTING");
 		sm.transition("GAME_OVER");
 		expect(sm.phase).toBe("GAME_OVER");
 		sm.transition("KIOSK");

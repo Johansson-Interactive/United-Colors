@@ -3,7 +3,8 @@ import type { GamePhase } from "../types";
 const VALID_TRANSITIONS: ReadonlySet<string> = new Set<string>([
 	"KIOSK->RUNNING",
 	"RUNNING->PAUSED",
-	"RUNNING->GAME_OVER",
+	"RUNNING->REJECTING",
+	"REJECTING->GAME_OVER",
 	"PAUSED->RUNNING",
 	"PAUSED->KIOSK",
 	"GAME_OVER->KIOSK",

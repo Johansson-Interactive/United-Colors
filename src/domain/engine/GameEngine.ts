@@ -40,6 +40,8 @@ export class GameEngine {
 	private playerSpeed: number;
 	/** Set when a dot may have become removable since the last removal pass */
 	private hasFlaggedDots = false;
+	/** The wrong-colour dot being refused while REJECTING (and after, at game over) */
+	private rejected: Dot | null = null;
 	/** Pose that counts as no tilt; null means the raw sensor frame (flat) */
 	private tiltZero: TiltZero | null = null;
 	/** The same with the screen facing down */
@@ -67,6 +69,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
+		this.rejected = null;
 		this.spawnSystem.reset();
 		this.initPlayer(color);
 		this.dots.push(this.player);
@@ -78,6 +81,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
+		this.rejected = null;
 		this.spawnSystem.reset();
 		this.initPlayer();
 	}
@@ -141,6 +145,10 @@ export class GameEngine {
 	tick(): void {
 		const phase = this.stateMachine.phase;
 		if (phase === "PAUSED" || phase === "GAME_OVER") return;
+		if (phase === "REJECTING") {
+			this.tickRejecting();
+			return;
+		}
 
 		const isKiosk = phase === "KIOSK";
 		this.timeStep++;
@@ -209,7 +217,11 @@ export class GameEngine {
 			if (dot.isFlaggedForRemoval) continue;
 			const kind =
 				dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small";
-			const moves = kind !== "player" && !dot.isAbsorbing;
+			const moves =
+				kind !== "player" &&
+				!dot.isAbsorbing &&
+				this.stateMachine.phase !== "REJECTING" &&
+				this.stateMachine.phase !== "GAME_OVER";
 			dots.push({
 				id: dot.id,
 				x: dot.x,
@@ -223,6 +235,8 @@ export class GameEngine {
 				vy: moves ? dot.vy * dot.velocity : 0,
 				absorb: dot.isAbsorbing ? dot.absorb : undefined,
 				prevAbsorb: dot.isAbsorbing ? dot.prevAbsorb : undefined,
+				reject: dot.isRejecting ? dot.reject : undefined,
+				prevReject: dot.isRejecting ? dot.prevReject : undefined,
 			});
 		}
 
@@ -263,6 +277,29 @@ export class GameEngine {
 		else if (dot.y + halfSize > this.screen.height) dot.vy = -Math.abs(dot.vy);
 	}
 
+	/**
+	 * One tick of the player refusing a wrong-colour dot: the scene is frozen (nothing spawns,
+	 * moves, pulses or collides), dots already merging finish flowing in, and the refused
+	 * dot's progress runs to 1, at which point the game is over
+	 */
+	private tickRejecting(): void {
+		this.removeFlaggedDots();
+		for (const dot of this.dots) {
+			dot.prevSize = dot.size;
+			dot.prevAbsorb = dot.absorb;
+			dot.prevReject = dot.reject;
+		}
+		for (const dot of this.dots) {
+			if (!dot.isAbsorbing && !dot.isRejecting) continue;
+			dot.update(this.timeStep);
+			if (dot.isFlaggedForRemoval) this.hasFlaggedDots = true;
+		}
+		if (this.rejected === null || this.rejected.reject >= 1) {
+			this.stateMachine.transition("GAME_OVER");
+		}
+		this.removeFlaggedDots();
+	}
+
 	/** Compact flagged dots out in place; a no-op unless something was flagged */
 	private removeFlaggedDots(): void {
 		if (!this.hasFlaggedDots) return;
@@ -295,8 +332,10 @@ export class GameEngine {
 				dot.startAbsorb();
 				this.audio?.playCollect();
 			} else {
-				// Wrong color -- game over
-				this.stateMachine.transition("GAME_OVER");
+				// Wrong colour: the player refuses the dot, then the game is over
+				dot.startReject();
+				this.rejected = dot;
+				this.stateMachine.transition("REJECTING");
 				return;
 			}
 		}

@@ -50,6 +50,13 @@ export const COLOR_REPEAT_FACTOR = 1 / 3;
 export const ABSORB_TICKS = 14;
 export const ABSORB_MERGE_FRACTION = 0.5;
 
+/**
+ * Touching a dot of the wrong colour does not end the game at once: the player reaches round
+ * the dot, refuses it and spits it out over this many ticks, with the rest of the scene
+ * frozen, and only then is the game over
+ */
+export const REJECT_TICKS = 15;
+
 /** Point-dot pulse contracts to this fraction of full size */
 export const POINT_DOT_PULSE_SCALE = 0.85;
 

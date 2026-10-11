@@ -6,6 +6,7 @@ import {
 	POINT_DOT_SIZE_ANIMATION_TIME,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
+	REJECT_TICKS,
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import { resetDotIdCounter } from "../../domain/entities/Dot";
@@ -416,7 +417,7 @@ describe("GameEngine", () => {
 				const caught = frame.dots.find((d) => d.id === small.id);
 				expect(caught).toMatchObject({ absorb: 0, prevAbsorb: 0, vx: 0, vy: 0 });
 			} else {
-				expect(frame.phase).toBe("GAME_OVER");
+				expect(frame.phase).toBe("REJECTING");
 			}
 		});
 
@@ -458,7 +459,7 @@ describe("GameEngine", () => {
 			);
 			engine.advancePlayer(0, alpha);
 
-			// A wrong-colour small dot ends the game instead, which plays no catch sound
+			// A wrong-colour small dot is refused instead, which plays no catch sound
 			expect(calls).toEqual(engine.getFrame().phase === "RUNNING" ? ["collect"] : []);
 		});
 
@@ -466,6 +467,73 @@ describe("GameEngine", () => {
 			const engine = createEngine();
 			engine.startGame();
 			expect(engine.advancePlayer(16, 0.5)).toBe(false);
+		});
+	});
+
+	describe("rejecting a wrong-colour dot", () => {
+		function hitWrongDot() {
+			const engine = createEngine();
+			engine.startGame();
+			for (let i = 0; i < 5000; i++) {
+				const frame = engine.getFrame();
+				const player = frame.dots.find((d) => d.kind === "player");
+				const wrong = frame.dots.find((d) => d.kind === "small" && d.color !== player?.color);
+				if (wrong && frame.phase === "RUNNING") {
+					const pos = engine.getPlayerPosition();
+					engine.onMovementDelta(wrong.x - pos.x, wrong.y - pos.y);
+					expect(engine.advancePlayer(0, 0)).toBe(true);
+					return { engine, wrong };
+				}
+				engine.tick();
+			}
+			throw new Error("no wrong-colour dot spawned");
+		}
+
+		it("refuses the dot for REJECT_TICKS before the game is over", () => {
+			const { engine, wrong } = hitWrongDot();
+			expect(engine.getFrame().phase).toBe("REJECTING");
+			expect(engine.getFrame().dots.find((d) => d.id === wrong.id)).toMatchObject({
+				reject: 0,
+				prevReject: 0,
+			});
+			for (let t = 1; t < REJECT_TICKS; t++) {
+				engine.tick();
+				expect(engine.getFrame().phase).toBe("REJECTING");
+				const refused = engine.getFrame().dots.find((d) => d.id === wrong.id);
+				expect(refused?.reject).toBeCloseTo(t / REJECT_TICKS);
+				expect(refused?.prevReject).toBeCloseTo((t - 1) / REJECT_TICKS);
+			}
+			engine.tick();
+			const frame = engine.getFrame();
+			expect(frame.phase).toBe("GAME_OVER");
+			// The refused dot stays, fully spat out, for the game over screen
+			expect(frame.dots.find((d) => d.id === wrong.id)?.reject).toBe(1);
+		});
+
+		it("freezes the scene and ignores the player while refusing", () => {
+			const { engine } = hitWrongDot();
+			const before = engine.getFrame();
+			const player = engine.getPlayerPosition();
+			for (let t = 1; t < REJECT_TICKS; t++) {
+				engine.onMovementDelta(30, 30);
+				engine.onSensorInput(0.5, 0.5);
+				expect(engine.advancePlayer(16, 0)).toBe(false);
+				engine.tick();
+			}
+			const after = engine.getFrame();
+			expect(engine.getPlayerPosition()).toEqual(player);
+			const still = (f: typeof before) =>
+				f.dots.filter((d) => d.absorb === undefined).map((d) => [d.id, d.x, d.y, d.radius]);
+			expect(still(after)).toEqual(still(before));
+			expect(after.dots.every((d) => d.vx === 0 && d.vy === 0)).toBe(true);
+		});
+
+		it("a fresh game forgets the refused dot", () => {
+			const { engine } = hitWrongDot();
+			for (let t = 0; t < REJECT_TICKS; t++) engine.tick();
+			engine.startGame();
+			expect(engine.getFrame().phase).toBe("RUNNING");
+			expect(engine.getFrame().dots.some((d) => d.reject !== undefined)).toBe(false);
 		});
 	});
 });

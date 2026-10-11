@@ -1,4 +1,4 @@
-import { ABSORB_TICKS } from "../constants";
+import { ABSORB_TICKS, REJECT_TICKS } from "../constants";
 
 let nextId = 0;
 
@@ -19,9 +19,14 @@ export class Dot {
 	 */
 	absorb = 0;
 	prevAbsorb = 0;
+	/** Progress of the player refusing this dot, 0..1, once it has ended the game; else 0 */
+	reject = 0;
+	prevReject = 0;
 	private _size: number;
 	private _absorbing = false;
 	private absorbTicks = 0;
+	private _rejecting = false;
+	private rejectTicks = 0;
 	private _flaggedForRemoval = false;
 
 	constructor(
@@ -59,6 +64,11 @@ export class Dot {
 			if (this.absorbTicks === ABSORB_TICKS) this.flagForRemoval();
 			return;
 		}
+		if (this._rejecting) {
+			this.rejectTicks = Math.min(REJECT_TICKS, this.rejectTicks + 1);
+			this.reject = this.rejectTicks / REJECT_TICKS;
+			return;
+		}
 		this.x += this.vx * this.velocity;
 		this.y += this.vy * this.velocity;
 	}
@@ -75,6 +85,24 @@ export class Dot {
 		this.prevAbsorb = 0;
 		this.vx = 0;
 		this.vy = 0;
+	}
+
+	/**
+	 * The player touched this dot with the wrong colour: it stops where it is while the player
+	 * refuses it over REJECT_TICKS (see `reject`). Idempotent.
+	 */
+	startReject(): void {
+		if (this._rejecting) return;
+		this._rejecting = true;
+		this.rejectTicks = 0;
+		this.reject = 0;
+		this.prevReject = 0;
+		this.vx = 0;
+		this.vy = 0;
+	}
+
+	get isRejecting(): boolean {
+		return this._rejecting;
 	}
 
 	/** Caught and merging into the player; no longer part of play */

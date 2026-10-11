@@ -31,13 +31,14 @@ describe("bindMusic", () => {
 		expect(calls).toEqual([MUSIC_CUES.KIOSK]);
 	});
 
-	it("follows a run: game loop, ducked on pause, stinger then menu on game over", () => {
+	it("follows a run: game loop, ducked on pause, dipped while refusing, then the stinger", () => {
 		const store = createGameStore();
 		const { audio, calls } = fakeAudio();
 		bindMusic(store, audio);
 		setPhase(store, "RUNNING");
 		setPhase(store, "PAUSED");
 		setPhase(store, "RUNNING");
+		setPhase(store, "REJECTING");
 		setPhase(store, "GAME_OVER");
 		setPhase(store, "KIOSK");
 		expect(calls).toEqual([
@@ -45,6 +46,7 @@ describe("bindMusic", () => {
 			MUSIC_CUES.RUNNING,
 			MUSIC_CUES.PAUSED,
 			MUSIC_CUES.RUNNING,
+			MUSIC_CUES.REJECTING,
 			"gameOver",
 			MUSIC_CUES.GAME_OVER,
 			MUSIC_CUES.KIOSK,
@@ -54,6 +56,8 @@ describe("bindMusic", () => {
 	it("keeps the game loop playing quieter while paused, and the menu calmer than play", () => {
 		expect(MUSIC_CUES.PAUSED.track).toBe(MUSIC_CUES.RUNNING.track);
 		expect(MUSIC_CUES.PAUSED.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
+		expect(MUSIC_CUES.REJECTING.track).toBe(MUSIC_CUES.RUNNING.track);
+		expect(MUSIC_CUES.REJECTING.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
 		expect(MUSIC_CUES.KIOSK.track).toBe("menu");
 		expect(MUSIC_CUES.KIOSK.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
 	});

@@ -1,4 +1,4 @@
-import { ABSORB_TICKS } from "../../domain/constants";
+import { ABSORB_TICKS, REJECT_TICKS } from "../../domain/constants";
 import { Dot, resetDotIdCounter } from "../../domain/entities/Dot";
 
 describe("Dot absorb", () => {
@@ -38,5 +38,28 @@ describe("Dot absorb", () => {
 		const progress = dot.absorb;
 		dot.startAbsorb();
 		expect(dot.absorb).toBe(progress);
+	});
+});
+
+describe("Dot reject", () => {
+	it("stops where it is and counts up to 1 over REJECT_TICKS, staying in play", () => {
+		const dot = new Dot(100, 100, 1, 0, "#E91E63", 20, 4);
+		dot.startReject();
+		expect(dot.isRejecting).toBe(true);
+		for (let t = 1; t <= REJECT_TICKS + 3; t++) {
+			dot.update(t);
+			expect(dot.reject).toBeCloseTo(Math.min(1, t / REJECT_TICKS));
+		}
+		expect(dot.x).toBe(100);
+		expect(dot.isFlaggedForRemoval).toBe(false);
+	});
+
+	it("rejecting again does not restart the refusal", () => {
+		const dot = new Dot(0, 0, 0, 0, "#E91E63", 20, 0);
+		dot.startReject();
+		dot.update(1);
+		const progress = dot.reject;
+		dot.startReject();
+		expect(dot.reject).toBe(progress);
 	});
 });

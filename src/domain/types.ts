@@ -1,5 +1,8 @@
-/** Core game phase states matching legacy GameManager states */
-export type GamePhase = "KIOSK" | "RUNNING" | "PAUSED" | "GAME_OVER";
+/**
+ * Core game phase states matching legacy GameManager states, plus REJECTING: the player has
+ * touched a dot of the wrong colour and refuses it for REJECT_TICKS before the game ends
+ */
+export type GamePhase = "KIOSK" | "RUNNING" | "REJECTING" | "PAUSED" | "GAME_OVER";
 
 /**
  * The device pose the player calls "level" (raw tilt in radians); tilt is measured from
@@ -48,6 +51,13 @@ export interface DotView {
 	 */
 	absorb?: number;
 	prevAbsorb?: number;
+	/**
+	 * Set on the wrong-colour dot that ended the game: progress of the player refusing it,
+	 * 0..1, at this tick and at the previous one. Stays 1 once the game is over. See
+	 * REJECT_TICKS.
+	 */
+	reject?: number;
+	prevReject?: number;
 }
 
 /** Complete frame data emitted by the engine for the presentation layer */
