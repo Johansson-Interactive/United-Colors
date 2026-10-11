@@ -19,7 +19,6 @@ function memoryStorage(initial: GameSettings): StoragePort {
 const UNSET: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
-	gyroSensitivity: 1,
 	tiltZero: null,
 	tiltZeroDown: null,
 };
@@ -33,7 +32,6 @@ describe("tilt zero", () => {
 		expect(store.getState().settings).toEqual({
 			soundEnabled: false,
 			musicEnabled: true,
-			gyroSensitivity: 1,
 			tiltZero: { x: 0.5, y: -0.3 },
 			tiltZeroDown: null,
 		});

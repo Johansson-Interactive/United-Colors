@@ -17,7 +17,7 @@ function fakeAppState() {
 
 function setup(phase: GamePhase) {
 	const store = createGameStore();
-	store.getState().setPhase(phase);
+	store.setState((s) => ({ frame: { ...s.frame, phase } }));
 	const app = fakeAppState();
 	let pauses = 0;
 	const unbind = bindPauseOnLeave(store, app.watch, () => pauses++);

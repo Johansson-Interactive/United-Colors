@@ -5,7 +5,7 @@ import { tiltFromRotation } from "./tiltFromRotation";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Provides SensorSample { x, y, timestampMs } from gyro-fused device orientation (radians),
+ * Provides SensorSample { x, y, facingDown } from gyro-fused device orientation (radians),
  * measured from flat screen up or screen down (see `tiltFromRotation`).
  * One native subscription fans out to every listener.
  */
@@ -36,7 +36,7 @@ export class DeviceMotionAdapter implements SensorPort {
 				this.facingDown,
 			);
 			this.facingDown = facingDown;
-			const sample = { x, y, facingDown, timestampMs: Date.now() };
+			const sample = { x, y, facingDown };
 			for (const listener of this.listeners) listener(sample);
 		});
 	}

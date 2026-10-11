@@ -15,7 +15,6 @@ export interface GameSettings {
 	/** Sound effects (catches, spawns, game over) */
 	soundEnabled: boolean;
 	musicEnabled: boolean;
-	gyroSensitivity: number;
 	/** Null until the player has set a level pose */
 	tiltZero: TiltZero | null;
 	/** Level pose with the screen facing down (lying back, phone overhead); null reads flat */
@@ -28,7 +27,6 @@ export interface SensorSample {
 	y: number;
 	/** The screen faces the ground; tilt is then measured from flat screen down */
 	facingDown: boolean;
-	timestampMs: number;
 }
 
 /** Visual representation of a dot for the rendering layer */

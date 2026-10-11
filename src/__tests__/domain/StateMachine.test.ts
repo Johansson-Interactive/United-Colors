@@ -70,19 +70,4 @@ describe("StateMachine", () => {
 		expect(sm.transition("GAME_OVER")).toBe(false);
 		expect(sm.phase).toBe("KIOSK");
 	});
-
-	it("notifies listeners on valid transitions", () => {
-		const phases: string[] = [];
-		sm.onPhaseChange((p) => phases.push(p));
-		sm.transition("RUNNING");
-		sm.transition("GAME_OVER");
-		expect(phases).toEqual(["RUNNING", "GAME_OVER"]);
-	});
-
-	it("does not notify on invalid transitions", () => {
-		const phases: string[] = [];
-		sm.onPhaseChange((p) => phases.push(p));
-		sm.transition("PAUSED"); // invalid from KIOSK
-		expect(phases).toEqual([]);
-	});
 });

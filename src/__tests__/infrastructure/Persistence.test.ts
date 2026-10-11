@@ -27,7 +27,7 @@ describe("Persistence roundtrip", () => {
 		const repo = new AsyncStorageRepository();
 		const settings = await repo.loadSettings();
 		expect(settings.soundEnabled).toBe(true);
-		expect(settings.gyroSensitivity).toBe(1.0);
+		expect(settings.musicEnabled).toBe(true);
 	});
 
 	it("save/load settings roundtrip (placeholder)", async () => {
@@ -35,7 +35,6 @@ describe("Persistence roundtrip", () => {
 		await repo.saveSettings({
 			soundEnabled: false,
 			musicEnabled: true,
-			gyroSensitivity: 0.5,
 			tiltZero: null,
 			tiltZeroDown: null,
 		});
@@ -67,7 +66,6 @@ describe("Persistence roundtrip", () => {
 		await repo.saveSettings({
 			soundEnabled: false,
 			musicEnabled: true,
-			gyroSensitivity: 1,
 			tiltZero: null,
 			tiltZeroDown: null,
 		});

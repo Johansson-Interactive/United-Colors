@@ -22,29 +22,26 @@ describe("settings use cases", () => {
 		await loadSettings(
 			store,
 			memoryStorage({
-				soundEnabled: true,
+				soundEnabled: false,
 				musicEnabled: true,
-				gyroSensitivity: 1.5,
 				tiltZero: null,
 				tiltZeroDown: null,
 			}),
 		);
-		expect(store.getState().settings.gyroSensitivity).toBe(1.5);
+		expect(store.getState().settings.soundEnabled).toBe(false);
 	});
 
 	it("updateSettings roundtrips settings through storage", async () => {
 		const storage = memoryStorage({
 			soundEnabled: true,
 			musicEnabled: true,
-			gyroSensitivity: 1,
 			tiltZero: null,
 			tiltZeroDown: null,
 		});
 		await updateSettings(
 			{
-				soundEnabled: true,
+				soundEnabled: false,
 				musicEnabled: true,
-				gyroSensitivity: 2,
 				tiltZero: null,
 				tiltZeroDown: null,
 			},
@@ -53,7 +50,7 @@ describe("settings use cases", () => {
 		);
 		const store = createGameStore();
 		await loadSettings(store, storage);
-		expect(store.getState().settings.gyroSensitivity).toBe(2);
+		expect(store.getState().settings.soundEnabled).toBe(false);
 	});
 
 	it("loadHighScore restores the persisted best into the store", async () => {
@@ -64,7 +61,6 @@ describe("settings use cases", () => {
 				{
 					soundEnabled: true,
 					musicEnabled: true,
-					gyroSensitivity: 1,
 					tiltZero: null,
 					tiltZeroDown: null,
 				},

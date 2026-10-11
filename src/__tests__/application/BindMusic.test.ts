@@ -1,6 +1,11 @@
 import type { GameAudio, MusicCue } from "../../application/GameAudio";
-import { createGameStore } from "../../application/GameStore";
+import { createGameStore, type GameStore } from "../../application/GameStore";
 import { bindMusic, MUSIC_CUES } from "../../application/useCases/BindMusic";
+import type { GamePhase } from "../../domain/types";
+
+function setPhase(store: GameStore, phase: GamePhase) {
+	store.setState((s) => ({ frame: { ...s.frame, phase } }));
+}
 
 function fakeAudio() {
 	const calls: Array<MusicCue | "gameOver"> = [];
@@ -30,12 +35,11 @@ describe("bindMusic", () => {
 		const store = createGameStore();
 		const { audio, calls } = fakeAudio();
 		bindMusic(store, audio);
-		const { setPhase } = store.getState();
-		setPhase("RUNNING");
-		setPhase("PAUSED");
-		setPhase("RUNNING");
-		setPhase("GAME_OVER");
-		setPhase("KIOSK");
+		setPhase(store, "RUNNING");
+		setPhase(store, "PAUSED");
+		setPhase(store, "RUNNING");
+		setPhase(store, "GAME_OVER");
+		setPhase(store, "KIOSK");
 		expect(calls).toEqual([
 			MUSIC_CUES.KIOSK,
 			MUSIC_CUES.RUNNING,
@@ -68,7 +72,7 @@ describe("bindMusic", () => {
 		const store = createGameStore();
 		const { audio, calls } = fakeAudio();
 		bindMusic(store, audio)();
-		store.getState().setPhase("RUNNING");
+		setPhase(store, "RUNNING");
 		expect(calls).toHaveLength(1);
 	});
 });
