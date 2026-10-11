@@ -1,4 +1,4 @@
-import { Canvas, createPicture, Picture, Skia } from "@shopify/react-native-skia";
+import { Canvas, createPicture, Picture, type SkColor, Skia } from "@shopify/react-native-skia";
 import type React from "react";
 import { useEffect, useMemo } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
@@ -22,6 +22,8 @@ interface Particle {
 	phase: number;
 	radius: number;
 	color: string;
+	/** `color` parsed once, so the picture worklet never calls Skia.Color per frame */
+	parsedColor: SkColor;
 }
 
 /** Deterministic pseudo-random so the shower is stable across re-renders */
@@ -41,15 +43,19 @@ export const Confetti: React.FC = () => {
 	const { width, height } = useWindowDimensions();
 	const particles = useMemo<Particle[]>(() => {
 		const rnd = mulberry32(7);
-		return Array.from({ length: COUNT }, () => ({
-			x: rnd() * width,
-			y0: -rnd() * height * 0.8 - 20,
-			speed: 0.12 + rnd() * 0.16,
-			sway: 10 + rnd() * 22,
-			phase: rnd() * Math.PI * 2,
-			radius: 3 + rnd() * 5,
-			color: TRIO[Math.floor(rnd() * TRIO.length)],
-		}));
+		return Array.from({ length: COUNT }, () => {
+			const color = TRIO[Math.floor(rnd() * TRIO.length)];
+			return {
+				x: rnd() * width,
+				y0: -rnd() * height * 0.8 - 20,
+				speed: 0.12 + rnd() * 0.16,
+				sway: 10 + rnd() * 22,
+				phase: rnd() * Math.PI * 2,
+				radius: 3 + rnd() * 5,
+				color,
+				parsedColor: Skia.Color(color),
+			};
+		});
 	}, [width, height]);
 
 	const clock = useSharedValue(0);
@@ -68,7 +74,7 @@ export const Confetti: React.FC = () => {
 				const y = p.y0 + t * p.speed;
 				if (y < -10 || y > height + 10) continue;
 				const x = p.x + Math.sin(t * 0.004 + p.phase) * p.sway;
-				paint.setColor(Skia.Color(p.color));
+				paint.setColor(p.parsedColor);
 				paint.setAlphaf(0.9 * fade);
 				canvas.drawCircle(x, y, p.radius, paint);
 			}
