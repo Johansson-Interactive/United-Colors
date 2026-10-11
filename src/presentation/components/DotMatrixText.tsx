@@ -1,4 +1,13 @@
-import { Canvas, createPicture, Picture, Skia, TileMode, vec } from "@shopify/react-native-skia";
+import {
+	Canvas,
+	createPicture,
+	Picture,
+	Skia,
+	type SkPaint,
+	type SkShader,
+	TileMode,
+	vec,
+} from "@shopify/react-native-skia";
 import type React from "react";
 import { useEffect, useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
@@ -39,10 +48,40 @@ const WAVE_AMPLITUDE = 0.22;
 const PARALLAX_GAIN = 26;
 const LAYER_DEPTH = [1, 0.55, 0.2] as const;
 const GLOW_SCALE = 2.6;
+const GLOW_CORE_ALPHA = 0.35;
+
+/** The dot body colour: the colour string at the text's opacity */
+function fillColor(color: string, opacity: number): Float32Array {
+	"worklet";
+	const col = Float32Array.from(Skia.Color(color));
+	col[3] *= opacity;
+	return col;
+}
+
+/** The glow: a unit-radius falloff from a translucent core to clear, in the dot's colour */
+function glowShader(color: string, opacity: number): SkShader {
+	"worklet";
+	const col = Skia.Color(color);
+	const core = Float32Array.from(col);
+	core[3] = GLOW_CORE_ALPHA * opacity;
+	const clear = Float32Array.from(col);
+	clear[3] = 0;
+	return Skia.Shader.MakeRadialGradient(vec(0, 0), 1, [core, clear], null, TileMode.Clamp);
+}
+
+function makePaint(): SkPaint {
+	const paint = Skia.Paint();
+	paint.setAntiAlias(true);
+	return paint;
+}
 
 /**
  * Text set in the game's own alphabet: a 5x7 grid of dots per character, drawn in Skia.
  * Used for titles, scores and button labels so the whole interface speaks "dot".
+ *
+ * Paints are built once on the JS thread and captured by the picture worklet. A palette or
+ * a plain colour string is baked into them up front; an animated colour is parsed on the UI
+ * thread only when its string changes, and the frame just applies it to the one paint.
  */
 export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	text,
@@ -74,6 +113,21 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	const width = base.width + pad * 2;
 	const height = base.height + pad * 2;
 
+	// A palette, or a single colour string, is known up front; only a shared value is not
+	const staticPalette = useMemo(
+		() => colors ?? (typeof color === "string" ? [color] : null),
+		[colors, color],
+	);
+	const paints = useMemo(() => {
+		const fills = (staticPalette ?? [""]).map(() => makePaint());
+		const glows = glow ? fills.map(() => makePaint()) : null;
+		staticPalette?.forEach((c, i) => {
+			fills[i].setColor(fillColor(c, opacity));
+			glows?.[i].setShader(glowShader(c, opacity));
+		});
+		return { fills, glows };
+	}, [staticPalette, glow, opacity]);
+
 	const zero = useSharedValue(0);
 	const phase = useSharedValue(0);
 	useEffect(() => {
@@ -87,34 +141,23 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 
 	const tiltX = parallax ? tilt.x : zero;
 	const tiltY = parallax ? tilt.y : zero;
-	const colorValue = useDerivedValue(() => (typeof color === "string" ? color : color.get()));
+
+	// For an animated colour, parse it once per change rather than once per frame
+	const animatedColor = staticPalette !== null || typeof color === "string" ? null : color;
+	const liveFill = useDerivedValue(() =>
+		animatedColor ? fillColor(animatedColor.get(), opacity) : null,
+	);
+	const liveGlow = useDerivedValue(() =>
+		animatedColor && glow ? glowShader(animatedColor.get(), opacity) : null,
+	);
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const palette = colors ?? [colorValue.get()];
-			const paints = palette.map((c) => {
-				const p = Skia.Paint();
-				p.setAntiAlias(true);
-				const col = Float32Array.from(Skia.Color(c));
-				col[3] *= opacity;
-				p.setColor(col);
-				return p;
-			});
-			const glows = glow
-				? palette.map((c) => {
-						const p = Skia.Paint();
-						p.setAntiAlias(true);
-						const col = Skia.Color(c);
-						const core = Float32Array.from(col);
-						core[3] = 0.35 * opacity;
-						const clear = Float32Array.from(col);
-						clear[3] = 0;
-						p.setShader(
-							Skia.Shader.MakeRadialGradient(vec(0, 0), 1, [core, clear], null, TileMode.Clamp),
-						);
-						return p;
-					})
-				: null;
+			const { fills, glows } = paints;
+			const fill = liveFill.get();
+			if (fill) fills[0].setColor(fill);
+			const glowFill = liveGlow.get();
+			if (glowFill) glows?.[0].setShader(glowFill);
 
 			const r = pitch * dotScale;
 			const ph = phase.get();
@@ -138,7 +181,7 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 						canvas.drawCircle(0, 0, 1, glows[ci]);
 						canvas.restore();
 					} else {
-						canvas.drawCircle(cx, cy, radius, paints[ci]);
+						canvas.drawCircle(cx, cy, radius, fills[ci]);
 					}
 				}
 			}
