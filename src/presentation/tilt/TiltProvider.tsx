@@ -42,15 +42,19 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	const y = useSharedValue(0);
 	const available = useSharedValue(false);
 
+	// The interface tilts on every screen, so the provider owns the sensor; the game only listens
 	useEffect(() => {
-		sensor.onSample((sample) => {
+		const unsubscribe = sensor.onSample((sample) => {
 			rawX.set(sample.x);
 			rawY.set(sample.y);
 			rawFacingDown.set(sample.facingDown);
 			if (!available.get()) available.set(true);
 		});
 		sensor.start();
-		return () => sensor.stop();
+		return () => {
+			unsubscribe();
+			sensor.stop();
+		};
 	}, [sensor, rawX, rawY, rawFacingDown, available]);
 
 	useFrameCallback((info) => {

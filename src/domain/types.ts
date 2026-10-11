@@ -59,11 +59,15 @@ export interface ScreenSize {
 	height: number;
 }
 
-/** Port for sensor input -- implemented by infrastructure */
+/**
+ * Port for sensor input -- implemented by infrastructure. One source can feed several listeners;
+ * whoever owns it starts and stops it, the others only subscribe.
+ */
 export interface SensorPort {
 	start(): void;
 	stop(): void;
-	onSample(callback: (sample: SensorSample) => void): void;
+	/** Returns a function that removes this listener */
+	onSample(listener: (sample: SensorSample) => void): () => void;
 }
 
 /** Port for audio playback -- implemented by infrastructure */

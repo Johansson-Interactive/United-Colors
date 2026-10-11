@@ -18,9 +18,8 @@ import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
 import { updateSettings } from "../application/useCases/UpdateSettings";
-import type { ScreenSize, SensorSample, TiltZero } from "../domain/types";
+import type { ScreenSize, SensorPort, SensorSample, TiltZero } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
-import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
 import { watchAppActive } from "../infrastructure/watchAppActive";
 import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
@@ -42,7 +41,6 @@ import { NO_ZERO } from "./tilt/tiltZero";
 
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
-const sensor = new DeviceMotionAdapter();
 
 /**
  * The settle bowl is open: where play continues afterwards, the colour of the dot that settles,
@@ -56,9 +54,11 @@ interface SettleRequest {
 
 interface GameScreenProps {
 	audio: GameAudio;
+	/** Shared with the interface tilt, which starts and stops it; the game only listens */
+	sensor: SensorPort;
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
 	// Subscribe to phase/score only: dot positions never go through React
@@ -132,19 +132,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		peekEngine()?.onSensorInput(sample.x, sample.y, sample.facingDown);
 	});
 
-	// Setup sensor
-	useEffect(() => {
-		sensor.onSample((sample) => handleSensorSample(sample));
-		return () => {
-			sensor.stop();
-		};
-	}, []);
+	// Samples arrive on every screen; the engine only moves the player while a game runs
+	useEffect(() => sensor.onSample((sample) => handleSensorSample(sample)), [sensor]);
 
 	// Watch for game over
 	useEffect(() => {
 		if (phase === "GAME_OVER") {
 			stopClock();
-			sensor.stop();
 			handleGameOver(getEngine(), store, storage);
 		}
 	}, [phase, getEngine, stopClock]);
@@ -167,7 +161,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 			setPreviousBest(store.getState().highScore);
 			const engine = getEngine();
 			startGame(engine, store, color);
-			sensor.start();
 			detectGyro();
 			startClock();
 		},
@@ -176,7 +169,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	const handlePause = useCallback(() => {
 		stopClock();
-		sensor.stop();
 		pauseGame(getEngine(), store);
 		// Frozen at tick positions; resume restarts at alpha 0, so no jump
 		drawScene(0);
@@ -187,7 +179,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 
 	const handleResume = useCallback(() => {
 		resumeGame(getEngine(), store);
-		sensor.start();
 		startClock();
 	}, [getEngine, startClock]);
 

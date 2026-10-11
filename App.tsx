@@ -5,8 +5,8 @@ import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
 
-/** Device tilt for the interface, separate from the game's own sensor subscription */
-const uiTilt = new DeviceMotionAdapter();
+/** One device-motion source: the interface tilt owns it, the game listens to it */
+const sensor = new DeviceMotionAdapter();
 
 const audio = new AudioService(
 	{
@@ -25,8 +25,8 @@ export default function App() {
 	return (
 		<SafeAreaProvider>
 			<StatusBar style="light" hidden />
-			<TiltProvider sensor={uiTilt}>
-				<GameScreen audio={audio} />
+			<TiltProvider sensor={sensor}>
+				<GameScreen audio={audio} sensor={sensor} />
 			</TiltProvider>
 		</SafeAreaProvider>
 	);
