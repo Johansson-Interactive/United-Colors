@@ -11,6 +11,7 @@ import type { GameEngine } from "../../domain/engine/GameEngine";
 import type { GamePhase } from "../../domain/types";
 import { BURST_LIFETIME_MS, type Burst, type BurstInput } from "../effects/Bursts";
 import { INK_LIFT, WHITE } from "../theme/theme";
+import { createTimeoutGroup } from "./timeoutGroup";
 
 const MAX_BURSTS = 8;
 
@@ -47,25 +48,20 @@ export function useStageEffects(
 	}, [phase, playerColor, accent]);
 
 	// Burst removal timers still pending, cleared on unmount so none fire into a dead screen
-	const pendingTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+	const [burstTimers] = useState(createTimeoutGroup);
+	useEffect(() => () => burstTimers.clearAll(), [burstTimers]);
 
-	useEffect(() => {
-		const timers = pendingTimers.current;
-		return () => {
-			for (const timer of timers) clearTimeout(timer);
-			timers.clear();
-		};
-	}, []);
-
-	const addBurst = useCallback((burst: BurstInput) => {
-		const id = burstIdRef.current++;
-		setBursts((prev) => [...prev.slice(-(MAX_BURSTS - 1)), { ...burst, id } as Burst]);
-		const timer = setTimeout(() => {
-			pendingTimers.current.delete(timer);
-			setBursts((prev) => prev.filter((b) => b.id !== id));
-		}, BURST_LIFETIME_MS + 50);
-		pendingTimers.current.add(timer);
-	}, []);
+	const addBurst = useCallback(
+		(burst: BurstInput) => {
+			const id = burstIdRef.current++;
+			setBursts((prev) => [...prev.slice(-(MAX_BURSTS - 1)), { ...burst, id } as Burst]);
+			burstTimers.schedule(
+				() => setBursts((prev) => prev.filter((b) => b.id !== id)),
+				BURST_LIFETIME_MS + 50,
+			);
+		},
+		[burstTimers],
+	);
 
 	// Score pops and rings where things happen; shake on the final hit
 	const handleStoreChange = useEffectEvent((state: GameStoreState, previous: GameStoreState) => {
