@@ -46,10 +46,25 @@ export function useStageEffects(
 		accent.set(phase === "KIOSK" ? INK_LIFT : playerColor);
 	}, [phase, playerColor, accent]);
 
+	// Burst removal timers still pending, cleared on unmount so none fire into a dead screen
+	const pendingTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+	useEffect(() => {
+		const timers = pendingTimers.current;
+		return () => {
+			for (const timer of timers) clearTimeout(timer);
+			timers.clear();
+		};
+	}, []);
+
 	const addBurst = useCallback((burst: BurstInput) => {
 		const id = burstIdRef.current++;
 		setBursts((prev) => [...prev.slice(-(MAX_BURSTS - 1)), { ...burst, id } as Burst]);
-		setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), BURST_LIFETIME_MS + 50);
+		const timer = setTimeout(() => {
+			pendingTimers.current.delete(timer);
+			setBursts((prev) => prev.filter((b) => b.id !== id));
+		}, BURST_LIFETIME_MS + 50);
+		pendingTimers.current.add(timer);
 	}, []);
 
 	// Score pops and rings where things happen; shake on the final hit
