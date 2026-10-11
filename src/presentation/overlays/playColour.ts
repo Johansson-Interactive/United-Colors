@@ -5,8 +5,8 @@ import { TRIO } from "../theme/theme";
  * (`PLAY_INPUT[i]`, `PLAY_INPUT[i + 1]`) with an even `i` is a hold on one colour; the gaps
  * between them are the blends into the next colour.
  */
-export const PLAY_INPUT = [0, 0.88, 1, 1.88, 2, 2.88, 3] as const;
-export const PLAY_OUTPUT = [TRIO[0], TRIO[0], TRIO[1], TRIO[1], TRIO[2], TRIO[2], TRIO[0]] as const;
+const PLAY_INPUT = [0, 0.88, 1, 1.88, 2, 2.88, 3] as const;
+const PLAY_OUTPUT = [TRIO[0], TRIO[0], TRIO[1], TRIO[1], TRIO[2], TRIO[2], TRIO[0]] as const;
 
 type Blend = (value: number, input: readonly number[], output: readonly string[]) => string;
 
