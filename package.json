@@ -21,9 +21,12 @@
 		"lint:fix": "biome lint --write .",
 		"format": "biome format .",
 		"format:fix": "biome format --write .",
-		"preflight": "pnpm typecheck && pnpm test && pnpm format:fix && pnpm dlx react-doctor@0.9.17 . --verbose --scope changed --include-untracked --blocking warning --no-score && pnpm run expo:doctor",
-		"test": "vitest run --config vitest.config.mts",
-		"expo:doctor": "npm_config_loglevel=error pnpm dlx expo-doctor@latest"
+		"doctor:react": "CI=true react-doctor . --blocking warning --no-score",
+		"doctor:expo": "EXPO_NO_TELEMETRY=1 expo-doctor",
+		"doctors": "pnpm run doctor:react && pnpm run doctor:expo",
+		"verify": "biome ci . && pnpm run typecheck && pnpm run test && pnpm run doctors",
+		"preflight": "biome check --write . && pnpm run verify",
+		"test": "vitest run --config vitest.config.mts"
 	},
 	"dependencies": {
 		"@react-native-async-storage/async-storage": "2.2.0",
