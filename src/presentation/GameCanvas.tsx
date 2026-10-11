@@ -20,13 +20,22 @@ import {
 	useSharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import type { SceneDot } from "../application/renderScene";
+import {
+	SCENE_COLOR,
+	SCENE_KIND,
+	SCENE_KIND_PLAYER,
+	SCENE_RADIUS,
+	SCENE_STRIDE,
+	SCENE_X,
+	SCENE_Y,
+} from "../application/renderScene";
+import { GAME_COLORS } from "../domain/constants";
 import type { ScreenSize } from "../domain/types";
 import { useTilt } from "./tilt/TiltProvider";
 
 interface GameCanvasProps {
-	/** All dots to draw this frame (player last), written every frame by the frame clock */
-	scene: SharedValue<SceneDot[]>;
+	/** All dots to draw this frame (player last) as flat records, written every frame by the frame clock */
+	scene: SharedValue<Float32Array>;
 	onLayout: (size: ScreenSize) => void;
 	/** 0 = live; 1 = fully frosted (blurred) for pause / game over */
 	frost: SharedValue<number>;
@@ -43,6 +52,60 @@ const GLARE_MAX_OFFSET = 0.55;
 /** Halo (soft glow behind each non-player dot) size relative to its radius */
 const HALO_SCALE = 1.9;
 const FROST_MAX_SIGMA = 14;
+
+// Paints and colours are built once on the JS thread and captured by the picture worklet,
+// so a frame only sets the fill colour and draws.
+
+/** Body colours, indexed by the scene's colour index (GAME_COLORS order) */
+const FILL_COLORS = GAME_COLORS.map((color) => Skia.Color(color));
+
+const FILL_PAINT = Skia.Paint();
+FILL_PAINT.setAntiAlias(true);
+
+/** White core ring on the player, in unit-radius space */
+const RING_PAINT = Skia.Paint();
+RING_PAINT.setAntiAlias(true);
+RING_PAINT.setStyle(PaintStyle.Stroke);
+RING_PAINT.setStrokeWidth(0.09);
+RING_PAINT.setColor(Skia.Color("rgba(255,255,255,0.85)"));
+
+/**
+ * Specular glare centred on the origin in unit-radius space. Instead of moving the shader
+ * with the light, the canvas is shifted so the origin sits at the glare centre and the dot
+ * is drawn offset by the opposite amount.
+ */
+const GLARE_PAINT = Skia.Paint();
+GLARE_PAINT.setAntiAlias(true);
+GLARE_PAINT.setShader(
+	Skia.Shader.MakeRadialGradient(
+		vec(0, 0),
+		GLARE_RADIUS,
+		[Skia.Color("rgba(255,255,255,0.55)"), Skia.Color("rgba(255,255,255,0)")],
+		null,
+		TileMode.Clamp,
+	),
+);
+
+/** Unit-space soft glow per game colour, indexed like FILL_COLORS */
+const HALO_PAINTS = FILL_COLORS.map((color) => {
+	const paint = Skia.Paint();
+	paint.setAntiAlias(true);
+	const withAlpha = (alpha: number) => {
+		const c = Float32Array.from(color);
+		c[3] = alpha;
+		return c;
+	};
+	paint.setShader(
+		Skia.Shader.MakeRadialGradient(
+			vec(0, 0),
+			1,
+			[withAlpha(0.5), withAlpha(0.16), withAlpha(0)],
+			[0.3, 0.6, 1],
+			TileMode.Clamp,
+		),
+	);
+	return paint;
+});
 
 /**
  * Skia game canvas. The whole scene is recorded into one Picture on the UI thread every
@@ -106,88 +169,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 
 	const picture = useDerivedValue(() =>
 		createPicture((canvas) => {
-			const lx = lightX.get();
-			const ly = lightY.get();
-
-			const fill = Skia.Paint();
-			fill.setAntiAlias(true);
-
-			const ring = Skia.Paint();
-			ring.setAntiAlias(true);
-			ring.setStyle(PaintStyle.Stroke);
-			ring.setColor(Skia.Color("rgba(255,255,255,0.85)"));
-
-			// One unit-space glare shader per frame; its centre follows the light
+			// The glare slides across each dot with the light; see GLARE_PAINT for the transform
 			const gx = Math.max(
 				-GLARE_MAX_OFFSET,
-				Math.min(GLARE_MAX_OFFSET, GLARE_OFFSET - lx * GLARE_TILT_GAIN),
+				Math.min(GLARE_MAX_OFFSET, GLARE_OFFSET - lightX.get() * GLARE_TILT_GAIN),
 			);
 			const gy = Math.max(
 				-GLARE_MAX_OFFSET,
-				Math.min(GLARE_MAX_OFFSET, GLARE_OFFSET - ly * GLARE_TILT_GAIN),
+				Math.min(GLARE_MAX_OFFSET, GLARE_OFFSET - lightY.get() * GLARE_TILT_GAIN),
 			);
-			const glare = Skia.Paint();
-			glare.setAntiAlias(true);
-			glare.setShader(
-				Skia.Shader.MakeRadialGradient(
-					vec(gx, gy),
-					GLARE_RADIUS,
-					[Skia.Color("rgba(255,255,255,0.55)"), Skia.Color("rgba(255,255,255,0)")],
-					null,
-					TileMode.Clamp,
-				),
-			);
-
-			// Unit-space halo shaders, one per colour seen this frame
-			const halos: Record<string, ReturnType<typeof Skia.Paint>> = {};
-			const haloFor = (color: string) => {
-				let paint = halos[color];
-				if (!paint) {
-					paint = Skia.Paint();
-					paint.setAntiAlias(true);
-					const c = Skia.Color(color);
-					const faded = Float32Array.from(c);
-					faded[3] = 0;
-					const mid = Float32Array.from(c);
-					mid[3] = 0.16;
-					const core = Float32Array.from(c);
-					core[3] = 0.5;
-					paint.setShader(
-						Skia.Shader.MakeRadialGradient(
-							vec(0, 0),
-							1,
-							[core, mid, faded],
-							[0.3, 0.6, 1],
-							TileMode.Clamp,
-						),
-					);
-					halos[color] = paint;
-				}
-				return paint;
-			};
 
 			const dots = scene.get();
+			const end = dots.length;
 			// Halos first so no glow sits on top of a neighbouring body
-			for (const dot of dots) {
-				if (dot.radius <= 0 || dot.kind === "player") continue;
-				const scale = dot.radius * HALO_SCALE;
+			for (let i = 0; i < end; i += SCENE_STRIDE) {
+				const radius = dots[i + SCENE_RADIUS];
+				if (radius <= 0 || dots[i + SCENE_KIND] === SCENE_KIND_PLAYER) continue;
+				const scale = radius * HALO_SCALE;
 				canvas.save();
-				canvas.translate(dot.x, dot.y);
+				canvas.translate(dots[i + SCENE_X], dots[i + SCENE_Y]);
 				canvas.scale(scale, scale);
-				canvas.drawCircle(0, 0, 1, haloFor(dot.color));
+				canvas.drawCircle(0, 0, 1, HALO_PAINTS[dots[i + SCENE_COLOR]]);
 				canvas.restore();
 			}
-			for (const dot of dots) {
-				if (dot.radius <= 0) continue;
-				fill.setColor(Skia.Color(dot.color));
-				canvas.drawCircle(dot.x, dot.y, dot.radius, fill);
+			for (let i = 0; i < end; i += SCENE_STRIDE) {
+				const radius = dots[i + SCENE_RADIUS];
+				if (radius <= 0) continue;
+				const x = dots[i + SCENE_X];
+				const y = dots[i + SCENE_Y];
+				FILL_PAINT.setColor(FILL_COLORS[dots[i + SCENE_COLOR]]);
+				canvas.drawCircle(x, y, radius, FILL_PAINT);
 				canvas.save();
-				canvas.translate(dot.x, dot.y);
-				canvas.scale(dot.radius, dot.radius);
-				canvas.drawCircle(0, 0, 1, glare);
-				if (dot.kind === "player") {
-					ring.setStrokeWidth(0.09);
-					canvas.drawCircle(0, 0, 0.62, ring);
+				canvas.translate(x + gx * radius, y + gy * radius);
+				canvas.scale(radius, radius);
+				canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+				if (dots[i + SCENE_KIND] === SCENE_KIND_PLAYER) {
+					canvas.drawCircle(-gx, -gy, 0.62, RING_PAINT);
 				}
 				canvas.restore();
 			}

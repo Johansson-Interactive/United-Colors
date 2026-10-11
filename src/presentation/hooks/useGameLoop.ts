@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSharedValue } from "react-native-reanimated";
 import type { GameAudio } from "../../application/GameAudio";
 import type { GameStore } from "../../application/GameStore";
-import { buildScene, type SceneDot } from "../../application/renderScene";
+import { createSceneBuilder } from "../../application/renderScene";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import type { ScreenSize } from "../../domain/types";
 import { FrameClock } from "../../infrastructure/FrameClock";
@@ -16,7 +16,8 @@ const DEFAULT_DENSITY = 400;
  * the canvas draws on the UI thread without a React render.
  */
 export function useGameLoop(store: GameStore, audio: GameAudio) {
-	const scene = useSharedValue<SceneDot[]>([]);
+	const scene = useSharedValue<Float32Array>(new Float32Array(0));
+	const [buildScene] = useState(createSceneBuilder);
 	const engineRef = useRef<GameEngine | null>(null);
 	const clockRef = useRef<FrameClock | null>(null);
 	const screenRef = useRef<ScreenSize>(DEFAULT_SCREEN);
@@ -45,7 +46,7 @@ export function useGameLoop(store: GameStore, audio: GameAudio) {
 		(alpha: number) => {
 			scene.set(buildScene(store.getState().frame, alpha, getEngine().getPlayerPosition()));
 		},
-		[store, getEngine, scene],
+		[store, getEngine, scene, buildScene],
 	);
 
 	const startClock = useCallback(() => {
