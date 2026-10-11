@@ -1,17 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DEFAULT_SETTINGS } from "../domain/constants";
 import type { GameSettings, StoragePort } from "../domain/types";
 
 const KEYS = {
 	highScore: "@united_colors/high_score",
 	settings: "@united_colors/settings",
 } as const;
-
-const DEFAULT_SETTINGS: GameSettings = {
-	soundEnabled: true,
-	musicEnabled: true,
-	tiltZero: null,
-	tiltZeroDown: null,
-};
 
 /**
  * Persistence layer using AsyncStorage.

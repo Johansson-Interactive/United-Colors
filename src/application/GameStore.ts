@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import { DEFAULT_SETTINGS } from "../domain/constants";
 import type { GameSettings, RenderFrame } from "../domain/types";
 
 export interface GameStoreState {
@@ -9,13 +10,6 @@ export interface GameStoreState {
 	setHighScore: (score: number) => void;
 	updateSettings: (patch: Partial<GameSettings>) => void;
 }
-
-const DEFAULT_SETTINGS: GameSettings = {
-	soundEnabled: true,
-	musicEnabled: true,
-	tiltZero: null,
-	tiltZeroDown: null,
-};
 
 const DEFAULT_FRAME: RenderFrame = {
 	phase: "KIOSK",

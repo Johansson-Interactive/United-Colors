@@ -1,3 +1,5 @@
+import type { GameSettings } from "./types";
+
 /**
  * Game constants ported from legacy GameRules.java.
  * All ratios are relative to screen density (applied at runtime).
@@ -42,3 +44,11 @@ export const COLOR_REPEAT_FACTOR = 1 / 3;
 
 /** Point-dot pulse contracts to this fraction of full size */
 export const POINT_DOT_PULSE_SCALE = 0.85;
+
+/** Settings a fresh install starts with. Copy before use (`{ ...DEFAULT_SETTINGS }`). */
+export const DEFAULT_SETTINGS: GameSettings = {
+	soundEnabled: true,
+	musicEnabled: true,
+	tiltZero: null,
+	tiltZeroDown: null,
+};
