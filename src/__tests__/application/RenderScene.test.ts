@@ -1,23 +1,29 @@
 import {
 	createSceneBuilder,
+	MERGE_SWELL_MAX,
+	mergeSlide,
+	mergeSwell,
 	SCENE_COLOR,
 	SCENE_KIND,
+	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
 	SCENE_KIND_POINT,
 	SCENE_KIND_SMALL,
+	SCENE_MERGE,
 	SCENE_RADIUS,
 	SCENE_STRIDE,
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
-import { GAME_COLORS } from "../../domain/constants";
+import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../../domain/constants";
 import type { DotView, GamePhase, RenderFrame } from "../../domain/types";
 
 const KIND_NAMES = {
 	[SCENE_KIND_SMALL]: "small",
 	[SCENE_KIND_POINT]: "point",
 	[SCENE_KIND_PLAYER]: "player",
-} as Record<number, DotView["kind"]>;
+	[SCENE_KIND_MERGING]: "merging",
+} as Record<number, DotView["kind"] | "merging">;
 
 /** Decode the flat scene back into one object per dot, for readable assertions */
 function decode(scene: Float32Array) {
@@ -29,6 +35,7 @@ function decode(scene: Float32Array) {
 			radius: scene[i + SCENE_RADIUS],
 			color: GAME_COLORS[scene[i + SCENE_COLOR]],
 			kind: KIND_NAMES[scene[i + SCENE_KIND]],
+			merge: scene[i + SCENE_MERGE],
 		});
 	}
 	return dots;
@@ -89,7 +96,14 @@ describe("buildScene", () => {
 			PLAYER_POS,
 		);
 		expect(scene).toHaveLength(2);
-		expect(scene[1]).toEqual({ x: 50, y: 60, radius: 25, color: "#2196F3", kind: "player" });
+		expect(scene[1]).toEqual({
+			x: 50,
+			y: 60,
+			radius: 25,
+			color: "#2196F3",
+			kind: "player",
+			merge: 0,
+		});
 	});
 
 	it("omits the player when not in the frame (kiosk)", () => {
@@ -138,5 +152,81 @@ describe("buildScene", () => {
 		const scene = build(frame([dot({}), dot({}), dot({ kind: "player" })]), 0, PLAYER_POS);
 		expect(decode(scene)).toHaveLength(3);
 		expect(decode(scene)[2]).toMatchObject({ x: 50, y: 60, kind: "player" });
+	});
+
+	describe("merging dots", () => {
+		const F = ABSORB_MERGE_FRACTION;
+		const player = dot({ id: "p", kind: "player", x: 0, y: 0, radius: 20 });
+
+		it("slides from where it was caught into the live player, shrinking, as it merges", () => {
+			const caught = dot({ id: "c", x: 100, y: 100, radius: 10, absorb: F, prevAbsorb: F });
+			const [c] = buildScene(frame([player, caught]), 0, PLAYER_POS);
+			expect(c.kind).toBe("merging");
+			expect(c.merge).toBe(1);
+			expect(c).toMatchObject({ x: PLAYER_POS.x, y: PLAYER_POS.y });
+			expect(c.radius).toBeLessThan(10);
+			expect(c.radius).toBeGreaterThan(0);
+
+			const [start] = buildScene(
+				frame([player, dot({ id: "c", x: 100, y: 100, absorb: 0, prevAbsorb: 0 })]),
+				0,
+				PLAYER_POS,
+			);
+			expect(start).toMatchObject({ kind: "merging", x: 100, y: 100, radius: 10, merge: 0 });
+		});
+
+		it("interpolates the merge progress between ticks, and freezes it when paused", () => {
+			const caught = dot({ id: "c", x: 100, y: 100, absorb: F, prevAbsorb: 0 });
+			const [half] = buildScene(frame([player, caught]), 0.5, PLAYER_POS);
+			expect(half.merge).toBeCloseTo(mergeSlide(F / 2));
+			const [paused] = buildScene(frame([player, caught], "PAUSED"), 0.5, PLAYER_POS);
+			expect(paused.merge).toBe(1);
+		});
+
+		it("swells the player by the volume it takes in, then settles back", () => {
+			const radiusAt = (absorb: number) =>
+				buildScene(
+					frame([player, dot({ id: "c", radius: 20, prevRadius: 20, absorb, prevAbsorb: absorb })]),
+					0,
+					PLAYER_POS,
+				)[1].radius;
+			expect(radiusAt(0)).toBe(20);
+			expect(radiusAt(F)).toBeCloseTo(20 * MERGE_SWELL_MAX);
+			expect(radiusAt((F + 1) / 2)).toBeGreaterThan(20);
+			expect(radiusAt((F + 1) / 2)).toBeLessThan(20 * MERGE_SWELL_MAX);
+			expect(radiusAt(1)).toBeCloseTo(20);
+		});
+
+		it("caps the swell with several dots arriving at once", () => {
+			const arriving = [0, 1, 2].map((i) =>
+				dot({ id: `c${i}`, radius: 20, prevRadius: 20, absorb: F, prevAbsorb: F }),
+			);
+			const scene = buildScene(frame([player, ...arriving]), 0, PLAYER_POS);
+			expect(scene[3].radius).toBeCloseTo(20 * MERGE_SWELL_MAX);
+		});
+	});
+
+	describe("merge curves", () => {
+		it("the slide eases in from 0 at catch to 1 at the end of the merge phase", () => {
+			expect(mergeSlide(0)).toBe(0);
+			expect(mergeSlide(ABSORB_MERGE_FRACTION)).toBe(1);
+			expect(mergeSlide(1)).toBe(1);
+			const early = mergeSlide(ABSORB_MERGE_FRACTION * 0.25);
+			const late =
+				mergeSlide(ABSORB_MERGE_FRACTION * 0.75) - mergeSlide(ABSORB_MERGE_FRACTION * 0.5);
+			expect(late).toBeGreaterThan(early);
+		});
+
+		it("the swell peaks when the dot arrives and is gone by the end of the absorb", () => {
+			expect(mergeSwell(0)).toBe(0);
+			expect(mergeSwell(ABSORB_MERGE_FRACTION / 2)).toBe(0);
+			expect(mergeSwell(ABSORB_MERGE_FRACTION)).toBe(1);
+			expect(mergeSwell(1)).toBe(0);
+			let previous = 1;
+			for (let a = ABSORB_MERGE_FRACTION; a <= 1; a += 0.05) {
+				expect(mergeSwell(a)).toBeLessThanOrEqual(previous);
+				previous = mergeSwell(a);
+			}
+		});
 	});
 });
