@@ -1,14 +1,5 @@
 import type { GamePhase } from "../types";
 
-export type StateTransition =
-	| { from: "KIOSK"; to: "RUNNING" }
-	| { from: "RUNNING"; to: "PAUSED" }
-	| { from: "RUNNING"; to: "GAME_OVER" }
-	| { from: "PAUSED"; to: "RUNNING" }
-	| { from: "PAUSED"; to: "KIOSK" }
-	| { from: "GAME_OVER"; to: "KIOSK" }
-	| { from: "GAME_OVER"; to: "RUNNING" };
-
 const VALID_TRANSITIONS: ReadonlySet<string> = new Set<string>([
 	"KIOSK->RUNNING",
 	"RUNNING->PAUSED",

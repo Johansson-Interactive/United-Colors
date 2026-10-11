@@ -5,10 +5,6 @@
 
 /** Game simulation runs at 30 Hz fixed step */
 export const GAME_HERTZ = 30.0;
-export const TIME_BETWEEN_UPDATES_NS = 1_000_000_000.0 / GAME_HERTZ;
-
-/** Target render FPS */
-export const TARGET_FPS = 60.0;
 
 /** Small dot rules */
 export const SMALL_DOT_SPEED_RATIO = 0.02;
@@ -25,8 +21,6 @@ export const POINT_DOT_PULSE_SPEED = 12;
 
 /** Player dot rules */
 export const PLAYER_DOT_SIZE_RATIO = 0.125;
-export const PLAYER_DOT_SIZE_INCREMENT_SMALL = 0.008;
-export const PLAYER_DOT_SIZE_INCREMENT_POINT = 0.02;
 
 /** Player speed in px/s per degree of tilt. Speed follows tilt linearly with no threshold. */
 export const PLAYER_SPEED_PER_DEGREE = 40;

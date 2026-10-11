@@ -11,7 +11,7 @@ export interface GameStoreState {
 	updateSettings: (patch: Partial<GameSettings>) => void;
 }
 
-export const DEFAULT_SETTINGS: GameSettings = {
+const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
 	gyroSensitivity: 1.0,
@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
 	tiltZeroDown: null,
 };
 
-export const DEFAULT_FRAME: RenderFrame = {
+const DEFAULT_FRAME: RenderFrame = {
 	phase: "KIOSK",
 	score: 0,
 	dots: [],
