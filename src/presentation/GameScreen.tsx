@@ -5,7 +5,7 @@ import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameAudio } from "../application/GameAudio";
-import { createGameStore } from "../application/GameStore";
+import type { GameStore } from "../application/GameStore";
 import { bindMusic } from "../application/useCases/BindMusic";
 import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
@@ -18,8 +18,7 @@ import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
 import { updateSettings } from "../application/useCases/UpdateSettings";
-import type { ScreenSize, SensorPort, SensorSample, TiltZero } from "../domain/types";
-import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
+import type { ScreenSize, SensorPort, SensorSample, StoragePort, TiltZero } from "../domain/types";
 import { watchAppActive } from "../infrastructure/watchAppActive";
 import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
@@ -39,9 +38,6 @@ import { INK, INK_LIFT, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
 
-const store = createGameStore();
-const storage = new AsyncStorageRepository();
-
 /**
  * The settle bowl is open: where play continues afterwards, the colour of the dot that settles,
  * and the level pose it replaces
@@ -53,12 +49,14 @@ interface SettleRequest {
 }
 
 interface GameScreenProps {
+	store: GameStore;
+	storage: StoragePort;
 	audio: GameAudio;
 	/** Shared with the interface tilt, which starts and stops it; the game only listens */
 	sensor: SensorPort;
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ store, storage, audio, sensor }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
 	// Subscribe to phase/score only: dot positions never go through React
@@ -104,13 +102,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 			unbindSound();
 			audio.dispose();
 		};
-	}, [audio]);
+	}, [audio, store]);
 
 	// Restore persisted settings and high score
 	useEffect(() => {
 		void loadSettings(store, storage);
 		void loadHighScore(store, storage);
-	}, []);
+	}, [store, storage]);
 
 	// The level pose reaches the engine and the interface together, so the dot in the game and
 	// the dots on the menus rest in the same hand position
@@ -121,7 +119,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 				tilt.zero.set(zero ?? NO_ZERO);
 				tilt.zeroDown.set(zeroDown ?? NO_ZERO);
 			}),
-		[getEngine, tilt],
+		[getEngine, tilt, store],
 	);
 
 	// Reads the latest control mode without resubscribing the sensor when it changes
@@ -141,7 +139,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 			stopClock();
 			handleGameOver(getEngine(), store, storage);
 		}
-	}, [phase, getEngine, stopClock]);
+	}, [phase, getEngine, stopClock, store, storage]);
 
 	const handleLayout = useCallback(
 		(size: ScreenSize) => {
@@ -153,7 +151,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 			store.getState().updateFrame(engine.getFrame());
 			startClock();
 		},
-		[getEngine, setScreen, startClock],
+		[getEngine, setScreen, startClock, store],
 	);
 
 	const handleStart = useCallback(
@@ -164,7 +162,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 			detectGyro();
 			startClock();
 		},
-		[getEngine, startClock, detectGyro],
+		[getEngine, startClock, detectGyro, store],
 	);
 
 	const handlePause = useCallback(() => {
@@ -172,22 +170,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 		pauseGame(getEngine(), store);
 		// Frozen at tick positions; resume restarts at alpha 0, so no jump
 		drawScene(0);
-	}, [getEngine, stopClock, drawScene]);
+	}, [getEngine, stopClock, drawScene, store]);
 
 	// Leaving the app mid-run lands on the pause screen when the player comes back
-	useEffect(() => bindPauseOnLeave(store, watchAppActive, handlePause), [handlePause]);
+	useEffect(() => bindPauseOnLeave(store, watchAppActive, handlePause), [handlePause, store]);
 
 	const handleResume = useCallback(() => {
 		resumeGame(getEngine(), store);
 		startClock();
-	}, [getEngine, startClock]);
+	}, [getEngine, startClock, store]);
 
 	const handleBack = useCallback(() => {
 		const engine = getEngine();
 		engine.startKiosk();
 		store.getState().updateFrame(engine.getFrame());
 		startClock();
-	}, [getEngine, startClock]);
+	}, [getEngine, startClock, store]);
 
 	// Transitions: a dot grows from under the finger, the scene changes, and it lifts.
 	// A first game starts by setting the level pose; the settled dot then floods into play.
@@ -195,7 +193,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 	const currentZero = useCallback(() => {
 		const { settings } = store.getState();
 		return tilt.raw.facingDown.get() ? settings.tiltZeroDown : settings.tiltZero;
-	}, [tilt]);
+	}, [tilt, store]);
 	const handleStartPress = useCallback(
 		(point: PressPoint, color: string) => {
 			if (store.getState().settings.tiltZero) {
@@ -204,7 +202,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 				setSettle({ from: "start", color, zero: null });
 			}
 		},
-		[flood, handleStart],
+		[flood, handleStart, store],
 	);
 	const handleCalibratePress = useCallback(() => {
 		setSettle({ from: "pause", color: playerColor, zero: currentZero() });
@@ -230,7 +228,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 				next();
 			});
 		},
-		[settle, flood, handleStart, handleResume],
+		[settle, flood, handleStart, handleResume, store, storage],
 	);
 	const handleSettleBack = useCallback(() => setSettle(null), []);
 	const handleSettleSnap = useCallback(() => audio.playCollect(), [audio]);
@@ -250,11 +248,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio, sensor }) => {
 	const handleToggleSound = useCallback(() => {
 		const settings = store.getState().settings;
 		void updateSettings({ ...settings, soundEnabled: !settings.soundEnabled }, store, storage);
-	}, []);
+	}, [store, storage]);
 	const handleToggleMusic = useCallback(() => {
 		const settings = store.getState().settings;
 		void updateSettings({ ...settings, musicEnabled: !settings.musicEnabled }, store, storage);
-	}, []);
+	}, [store, storage]);
 
 	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
 	// runs under the home indicator, as before; the interface layer also respects the bottom

@@ -1,9 +1,14 @@
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { createGameStore } from "./src/application/GameStore";
+import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
+
+const store = createGameStore();
+const storage = new AsyncStorageRepository();
 
 /** One device-motion source: the interface tilt owns it, the game listens to it */
 const sensor = new DeviceMotionAdapter();
@@ -26,7 +31,7 @@ export default function App() {
 		<SafeAreaProvider>
 			<StatusBar style="light" hidden />
 			<TiltProvider sensor={sensor}>
-				<GameScreen audio={audio} sensor={sensor} />
+				<GameScreen store={store} storage={storage} audio={audio} sensor={sensor} />
 			</TiltProvider>
 		</SafeAreaProvider>
 	);
