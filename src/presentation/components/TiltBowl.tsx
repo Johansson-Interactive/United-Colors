@@ -1,7 +1,12 @@
 import { Canvas, Circle, Group, RadialGradient, vec } from "@shopify/react-native-skia";
 import type React from "react";
+import { createContext, use } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
+import Animated, {
+	type SharedValue,
+	useAnimatedStyle,
+	useDerivedValue,
+} from "react-native-reanimated";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface TiltBowlProps {
@@ -10,6 +15,18 @@ interface TiltBowlProps {
 	/** Diameter of the dot that rolls inside (the child) */
 	dotSize: number;
 	children: React.ReactNode;
+}
+
+interface BowlOffset {
+	x: number;
+	y: number;
+}
+
+const BowlOffsetContext = createContext<SharedValue<BowlOffset> | null>(null);
+
+/** How far the dot in the enclosing bowl has rolled from the centre (px); null outside a bowl */
+export function useBowlOffset(): SharedValue<BowlOffset> | null {
+	return use(BowlOffsetContext);
 }
 
 /** Pixels the dot rolls per radian of tilt */
@@ -24,7 +41,7 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) =
 	const rim = size / 2;
 	const travel = rim - dotSize / 2 - 6;
 
-	const offset = useDerivedValue(() => {
+	const offset = useDerivedValue((): BowlOffset => {
 		let x = tilt.x.get() * ROLL_GAIN;
 		let y = tilt.y.get() * ROLL_GAIN;
 		const d = Math.hypot(x, y);
@@ -77,7 +94,9 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) =
 					/>
 				</Circle>
 			</Canvas>
-			<Animated.View style={[styles.dot, dotStyle]}>{children}</Animated.View>
+			<Animated.View style={[styles.dot, dotStyle]}>
+				<BowlOffsetContext value={offset}>{children}</BowlOffsetContext>
+			</Animated.View>
 		</View>
 	);
 };

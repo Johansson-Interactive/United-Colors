@@ -1,19 +1,34 @@
-import { BlurMask, Canvas, Circle, Group, RadialGradient, vec } from "@shopify/react-native-skia";
+import {
+	BlurMask,
+	Canvas,
+	Circle,
+	Group,
+	RadialGradient,
+	Rect,
+	Shader,
+	Skia,
+	vec,
+} from "@shopify/react-native-skia";
 import type React from "react";
 import { useCallback } from "react";
 import { type GestureResponderEvent, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
+	convertToRGBA,
 	type SharedValue,
 	useAnimatedStyle,
 	useDerivedValue,
+	useFrameCallback,
 	useSharedValue,
 	withSpring,
 	withTiming,
 } from "react-native-reanimated";
+import { JELLY_AT_REST, jellyShape, stepJelly } from "../../application/jelly";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
+import { DROP_SKSL } from "../liquidShader";
 import { WHITE } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
 import { DotMatrixText } from "./DotMatrixText";
+import { useBowlOffset } from "./TiltBowl";
 
 export interface PressPoint {
 	/** Window coordinates of the touch, for transitions that grow from the finger */
@@ -30,6 +45,11 @@ interface DotButtonProps {
 	labelPitch?: number;
 	/** "solid" is a game dot; "ghost" is an outlined ring */
 	variant?: "solid" | "ghost";
+	/**
+	 * A solid dot made of the player's liquid: it sloshes as it rolls in a TiltBowl and
+	 * ripples at rest, so the button already feels like the dot you will play
+	 */
+	liquid?: boolean;
 	onPress: (point: PressPoint) => void;
 	accessibilityLabel: string;
 	/** Custom Skia content drawn inside the dot (icons) */
@@ -46,11 +66,16 @@ export const GLOW_PAD = 1.5;
 const LABEL_MAX_WIDTH = 0.66;
 /** Glare centre offset per radian of tilt (fraction of the radius) */
 const GLARE_TILT_GAIN = 0.4;
+/** Longest frame (ms) the liquid integrates, so a stall does not kick it */
+const LIQUID_MAX_FRAME_MS = 100;
+
+const DROP_EFFECT = Skia.RuntimeEffect.Make(DROP_SKSL);
+if (!DROP_EFFECT) throw new Error("drop shader failed to compile");
 
 /**
  * A button that is a dot. Solid dots look like the player's dot: lit glass with a glare
  * that follows the device tilt and a glow that brightens on touch. Ghost dots are thin
- * rings for secondary actions.
+ * rings for secondary actions. A liquid dot is a drop of the player's own liquid.
  */
 export const DotButton: React.FC<DotButtonProps> = ({
 	size,
@@ -58,6 +83,7 @@ export const DotButton: React.FC<DotButtonProps> = ({
 	label,
 	labelPitch,
 	variant = "solid",
+	liquid = false,
 	onPress,
 	accessibilityLabel,
 	children,
@@ -80,6 +106,26 @@ export const DotButton: React.FC<DotButtonProps> = ({
 			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.y.get() * GLARE_TILT_GAIN)),
 		),
 	);
+
+	// The liquid follows the bowl's roll (or sits still outside one) and keeps rippling
+	const bowl = useBowlOffset();
+	const body = useSharedValue(JELLY_AT_REST);
+	useFrameCallback((info) => {
+		const dt = Math.min(LIQUID_MAX_FRAME_MS, info.timeSincePreviousFrame ?? 0);
+		const at = bowl?.get() ?? { x: 0, y: 0 };
+		body.set(stepJelly(body.get(), at.x, at.y, radius, dt));
+	}, liquid);
+	const dropUniforms = useDerivedValue(() => {
+		const shape = jellyShape(body.get(), radius);
+		const glare = glareCentre.get();
+		return {
+			center: vec(centre, centre),
+			radius,
+			jelly: [shape.stretchX, shape.stretchY, shape.wobble],
+			color: convertToRGBA(fill.get()),
+			glare: [glare.x, glare.y, radius * 0.8],
+		};
+	});
 
 	const animatedStyle = useAnimatedStyle(() => ({
 		transform: [{ scale: 1 - pressed.get() * 0.08 }],
@@ -126,14 +172,22 @@ export const DotButton: React.FC<DotButtonProps> = ({
 								<BlurMask blur={glowBlur} style="normal" />
 							</Circle>
 						</Group>
-						<Circle cx={centre} cy={centre} r={radius} color={fill} />
-						<Circle cx={centre} cy={centre} r={radius}>
-							<RadialGradient
-								c={glareCentre}
-								r={radius * 0.8}
-								colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
-							/>
-						</Circle>
+						{liquid ? (
+							<Rect x={0} y={0} width={canvasSize} height={canvasSize}>
+								<Shader source={DROP_EFFECT} uniforms={dropUniforms} />
+							</Rect>
+						) : (
+							<>
+								<Circle cx={centre} cy={centre} r={radius} color={fill} />
+								<Circle cx={centre} cy={centre} r={radius}>
+									<RadialGradient
+										c={glareCentre}
+										r={radius * 0.8}
+										colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
+									/>
+								</Circle>
+							</>
+						)}
 					</>
 				) : (
 					<>

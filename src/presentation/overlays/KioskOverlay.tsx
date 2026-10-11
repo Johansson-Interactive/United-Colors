@@ -43,8 +43,8 @@ function heldColor(cycle: number): string {
 
 /**
  * Title / attract screen, drawn over the kiosk simulation. The name is set in living dots
- * that drift with the tilt; the play dot rolls in a bowl the way the player will, and the
- * best score waits at the bottom.
+ * that drift with the tilt; the play dot is a drop of the player's liquid rolling in a bowl
+ * the way the player will, and the best score waits at the bottom.
  */
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
@@ -96,6 +96,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 					<DotButton
 						size={PLAY_SIZE}
 						color={playColor}
+						liquid
 						label="PLAY"
 						labelPitch={4}
 						onPress={(point) => onStart(point, heldColor(cycle.get() + startIndex))}
