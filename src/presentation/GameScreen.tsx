@@ -5,9 +5,11 @@ import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameAudio } from "../application/GameAudio";
+import type { GameHaptics } from "../application/GameHaptics";
 import type { GameStore } from "../application/GameStore";
 import { bindMusic } from "../application/useCases/BindMusic";
 import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
+import { bindRejectHaptic } from "../application/useCases/BindRejectHaptic";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
@@ -52,11 +54,18 @@ interface GameScreenProps {
 	store: GameStore;
 	storage: StoragePort;
 	audio: GameAudio;
+	haptics: GameHaptics;
 	/** Shared with the interface tilt, which starts and stops it; the game only listens */
 	sensor: SensorPort;
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ store, storage, audio, sensor }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({
+	store,
+	storage,
+	audio,
+	haptics,
+	sensor,
+}) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
 	// Subscribe to phase/score only: dot positions never go through React
@@ -103,6 +112,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ store, storage, audio, s
 			audio.dispose();
 		};
 	}, [audio, store]);
+
+	// A buzz as the player spits out a wrong-colour dot
+	useEffect(() => bindRejectHaptic(store, haptics), [store, haptics]);
 
 	// Restore persisted settings and high score
 	useEffect(() => {
@@ -166,6 +178,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ store, storage, audio, s
 	);
 
 	const handlePause = useCallback(() => {
+		// A refusal plays out to the game over; only a running game pauses
+		if (store.getState().frame.phase !== "RUNNING") return;
 		stopClock();
 		pauseGame(getEngine(), store);
 		// Frozen at tick positions; resume restarts at alpha 0, so no jump
@@ -290,7 +304,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ store, storage, audio, s
 
 			<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
 				<View style={styles.stage} pointerEvents="box-none">
-					{phase === "RUNNING" && <HUD score={score} color={playerColor} onPause={handlePause} />}
+					{(phase === "RUNNING" || phase === "REJECTING") && (
+						<HUD score={score} color={playerColor} onPause={handlePause} />
+					)}
 
 					{phase === "KIOSK" && !settle && (
 						<KioskOverlay

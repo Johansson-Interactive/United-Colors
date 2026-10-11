@@ -4,6 +4,7 @@ import { createGameStore } from "./src/application/GameStore";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
+import { HapticsService } from "./src/infrastructure/HapticsService";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
 
@@ -26,12 +27,20 @@ const audio = new AudioService(
 	},
 );
 
+const haptics = new HapticsService();
+
 export default function App() {
 	return (
 		<SafeAreaProvider>
 			<StatusBar style="light" hidden />
 			<TiltProvider sensor={sensor}>
-				<GameScreen store={store} storage={storage} audio={audio} sensor={sensor} />
+				<GameScreen
+					store={store}
+					storage={storage}
+					audio={audio}
+					haptics={haptics}
+					sensor={sensor}
+				/>
 			</TiltProvider>
 		</SafeAreaProvider>
 	);
