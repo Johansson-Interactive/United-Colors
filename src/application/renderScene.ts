@@ -1,6 +1,7 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import type { DotView, RenderFrame } from "../domain/types";
 import { createJelly, JELLY_MAX_STRETCH } from "./jelly";
+import { leanReach } from "./lean";
 import {
 	REJECT_PRESS_DEPTH,
 	REJECT_RECOIL,
@@ -14,7 +15,7 @@ import {
  * The drawable scene is a flat Float32Array with one record of SCENE_STRIDE floats per dot,
  * so one typed-array copy crosses to the UI thread per frame instead of an object per dot.
  */
-export const SCENE_STRIDE = 10;
+export const SCENE_STRIDE = 11;
 export const SCENE_X = 0;
 export const SCENE_Y = 1;
 export const SCENE_RADIUS = 2;
@@ -24,7 +25,10 @@ export const SCENE_COLOR = 3;
 export const SCENE_KIND = 4;
 /** For SCENE_KIND_MERGING dots: how far the slide into the player has come, 0..1 */
 export const SCENE_MERGE = 5;
-/** For the player: its liquid stretch vector and wobble clock (see jelly.ts); 0 otherwise */
+/**
+ * For the player: its liquid stretch vector and wobble clock (see jelly.ts). For a point
+ * dot: its lean toward the player as a stretch vector (see lean.ts). 0 otherwise.
+ */
 export const SCENE_STRETCH_X = 6;
 export const SCENE_STRETCH_Y = 7;
 export const SCENE_WOBBLE = 8;
@@ -33,6 +37,11 @@ export const SCENE_WOBBLE = 8;
  * presses and falling to 0 as it is pushed clear (so no dent is left once it is out)
  */
 export const SCENE_DENT = 9;
+/**
+ * For a point dot: the GAME_COLORS index of its yolk, the colour the player turns into on
+ * catching it, while its shell (SCENE_COLOR) is the player's own colour; -1 for no yolk
+ */
+export const SCENE_CORE = 10;
 
 export const SCENE_KIND_SMALL = 0;
 export const SCENE_KIND_POINT = 1;
@@ -98,12 +107,13 @@ export function addStretches(ax: number, ay: number, bx: number, by: number): [n
 	return [Math.cos(angle) * e, Math.sin(angle) * e];
 }
 
-/** Zero the fields only the player or a refused dot use */
+/** Zero the fields only the player, a point dot or a refused dot use */
 function clearExtraFields(buffer: Float32Array, offset: number): void {
 	buffer[offset + SCENE_STRETCH_X] = 0;
 	buffer[offset + SCENE_STRETCH_Y] = 0;
 	buffer[offset + SCENE_WOBBLE] = 0;
 	buffer[offset + SCENE_DENT] = 0;
+	buffer[offset + SCENE_CORE] = -1;
 }
 
 function colorIndex(color: string): number {
@@ -122,6 +132,9 @@ function colorIndex(color: string): number {
  *   extrapolating them would overshoot when a pulse reverses.
  * - Caught dots slide from where they were caught into the player's live position, shrinking
  *   as they go, and the player swells by the volume it takes in before settling back.
+ * - A point dot is drawn as a yolk: a shell in the player's colour, since it is safe to catch
+ *   like any dot of that colour, round a core in the colour it turns the player into. As the
+ *   player nears it leans toward them, its back edge held still (see lean.ts).
  * - A refused wrong-colour dot presses into the player along the line from the player
  *   through it and is pushed back out, while the player squashes across that line and then
  *   recoils the other way (see rejection.ts).
@@ -204,12 +217,31 @@ export function createSceneBuilder() {
 				playerX -= nx * recoil;
 				playerY -= ny * recoil;
 			} else {
-				buffer[offset + SCENE_X] = dot.x + dot.vx * moveT;
-				buffer[offset + SCENE_Y] = dot.y + dot.vy * moveT;
+				const x = dot.x + dot.vx * moveT;
+				const y = dot.y + dot.vy * moveT;
+				buffer[offset + SCENE_X] = x;
+				buffer[offset + SCENE_Y] = y;
 				buffer[offset + SCENE_RADIUS] = radius;
 				buffer[offset + SCENE_KIND] = kindCode(dot.kind);
 				buffer[offset + SCENE_MERGE] = 0;
 				clearExtraFields(buffer, offset);
+				if (dot.kind === "point" && playerDot && radius > 0) {
+					buffer[offset + SCENE_COLOR] = colorIndex(playerDot.color);
+					buffer[offset + SCENE_CORE] = colorIndex(dot.color);
+					const dx = player.x - x;
+					const dy = player.y - y;
+					const distance = Math.hypot(dx, dy);
+					const reach = leanReach(distance - playerDot.radius - radius, playerDot.radius, radius);
+					if (reach > 0) {
+						// Stretched along the lean, the tip moves out by twice the centre's shift
+						const nx = dx / distance;
+						const ny = dy / distance;
+						buffer[offset + SCENE_X] = x + (nx * reach) / 2;
+						buffer[offset + SCENE_Y] = y + (ny * reach) / 2;
+						buffer[offset + SCENE_STRETCH_X] = (nx * reach) / (2 * radius);
+						buffer[offset + SCENE_STRETCH_Y] = (ny * reach) / (2 * radius);
+					}
+				}
 			}
 			offset += SCENE_STRIDE;
 		}
@@ -228,6 +260,7 @@ export function createSceneBuilder() {
 			buffer[offset + SCENE_STRETCH_Y] = stretchY;
 			buffer[offset + SCENE_WOBBLE] = shape.wobble;
 			buffer[offset + SCENE_DENT] = 0;
+			buffer[offset + SCENE_CORE] = -1;
 			offset += SCENE_STRIDE;
 		}
 

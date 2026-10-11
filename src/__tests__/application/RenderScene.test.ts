@@ -1,4 +1,5 @@
 import { JELLY_MAX_STRETCH } from "../../application/jelly";
+import { LEAN_GAP_SHARE, LEAN_RANGE, leanReach } from "../../application/lean";
 import {
 	REJECT_PRESS_DEPTH,
 	REJECT_PRESS_END,
@@ -13,6 +14,7 @@ import {
 	mergeSlide,
 	mergeSwell,
 	SCENE_COLOR,
+	SCENE_CORE,
 	SCENE_DENT,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
@@ -52,6 +54,8 @@ function decode(scene: Float32Array) {
 			kind: KIND_NAMES[scene[i + SCENE_KIND]],
 			merge: scene[i + SCENE_MERGE],
 			dent: scene[i + SCENE_DENT],
+			core: scene[i + SCENE_CORE] < 0 ? undefined : GAME_COLORS[scene[i + SCENE_CORE]],
+			stretch: [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y]],
 		});
 	}
 	return dots;
@@ -120,6 +124,7 @@ describe("buildScene", () => {
 			kind: "player",
 			merge: 0,
 			dent: 0,
+			stretch: [0, 0],
 		});
 	});
 
@@ -241,6 +246,60 @@ describe("buildScene", () => {
 			);
 			const scene = buildScene(frame([player, ...arriving]), 0, PLAYER_POS);
 			expect(scene[3].radius).toBeCloseTo(20 * MERGE_SWELL_MAX);
+		});
+	});
+
+	describe("a point dot", () => {
+		const player = dot({ id: "p", kind: "player", radius: 20, color: GAME_COLORS[0] });
+		const point = (x: number, partial: Partial<DotView> = {}) =>
+			dot({ id: "pt", kind: "point", x, y: 60, radius: 10, color: GAME_COLORS[1], ...partial });
+		const drawn = (x: number, partial?: Partial<DotView>) =>
+			buildScene(frame([point(x, partial), player]), 0, PLAYER_POS)[0];
+
+		it("has a shell in the player's colour round a yolk in the colour it turns them into", () => {
+			expect(drawn(400)).toMatchObject({ color: GAME_COLORS[0], core: GAME_COLORS[1] });
+		});
+
+		it("keeps its own colour and no yolk once caught, or with no player to match", () => {
+			const caught = drawn(80, { absorb: 0.1, prevAbsorb: 0.1 });
+			expect(caught).toMatchObject({ kind: "merging", color: GAME_COLORS[1], core: undefined });
+			const [alone] = buildScene(frame([point(400)], "KIOSK"), 0, PLAYER_POS);
+			expect(alone).toMatchObject({ color: GAME_COLORS[1], core: undefined });
+		});
+
+		it("is the only dot with a yolk", () => {
+			const scene = buildScene(frame([dot({}), point(400), player]), 0, PLAYER_POS);
+			expect(scene.map((d) => d.core)).toEqual([undefined, GAME_COLORS[1], undefined]);
+		});
+
+		it("sits round and still while the player is out of range", () => {
+			const far = 50 + 20 + 10 + LEAN_RANGE * 20 + 1;
+			expect(drawn(far)).toMatchObject({ x: far, y: 60, stretch: [0, 0] });
+		});
+
+		it("leans toward a nearby player with its back edge held still", () => {
+			// 30 px between the surfaces, the player to the left
+			const d = drawn(110);
+			const reach = leanReach(30, 20, 10);
+			expect(reach).toBeGreaterThan(0);
+			expect(d.stretch[0]).toBeCloseTo(-reach / 20);
+			expect(d.stretch[1]).toBeCloseTo(0);
+			const halfLength = 10 * (1 + Math.abs(d.stretch[0]));
+			expect(d.x + halfLength).toBeCloseTo(110 + 10);
+			expect(d.x - halfLength).toBeCloseTo(110 - 10 - reach);
+		});
+
+		it("never reaches the player before it is caught", () => {
+			for (let x = 81; x < 200; x += 1) {
+				const d = drawn(x);
+				const tip = d.x - 10 * (1 + Math.abs(d.stretch[0]));
+				const gap = x - 10 - (50 + 20);
+				expect(tip - (50 + 20)).toBeGreaterThanOrEqual(gap * (1 - LEAN_GAP_SHARE) - 1e-3);
+			}
+		});
+
+		it("does not lean while it is caught", () => {
+			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 }).stretch).toEqual([0, 0]);
 		});
 	});
 
