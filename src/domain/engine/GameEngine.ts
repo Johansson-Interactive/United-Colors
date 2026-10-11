@@ -38,8 +38,8 @@ export class GameEngine {
 	private random: () => number;
 	/** Player speed in px/s per radian of tilt */
 	private playerSpeed: number;
-	/** Dot radii at the start of the current tick (for DotView.prevRadius) */
-	private prevRadii = new Map<string, number>();
+	/** Set when a dot may have become removable since the last removal pass */
+	private hasFlaggedDots = false;
 	/** Pose that counts as no tilt; null means the raw sensor frame (flat) */
 	private tiltZero: TiltZero | null = null;
 	/** The same with the screen facing down */
@@ -146,7 +146,8 @@ export class GameEngine {
 		this.timeStep++;
 		// Dots collected between ticks (per-frame collisions) leave before spawn limits apply
 		this.removeFlaggedDots();
-		this.prevRadii = new Map(this.dots.map((d) => [d.id, d.size / 2]));
+		for (const dot of this.dots) dot.prevSize = dot.size;
+		const spawnedFrom = this.dots.length;
 
 		// Spawn small dots
 		const newDot = this.spawnSystem.trySpawnSmallDot(
@@ -175,6 +176,12 @@ export class GameEngine {
 		// Update all dots (player moves per frame via advancePlayer)
 		for (const dot of this.dots) {
 			dot.update(this.timeStep);
+			if (dot.isFlaggedForRemoval) this.hasFlaggedDots = true;
+		}
+		// Dots spawned this tick show their post-update size from the start, with no growth
+		for (let i = spawnedFrom; i < this.dots.length; i++) {
+			const dot = this.dots[i];
+			dot.prevSize = dot.size;
 		}
 
 		// Bounce small dots off screen edges
@@ -194,23 +201,25 @@ export class GameEngine {
 	/** Produce a RenderFrame for the presentation layer */
 	getFrame(): RenderFrame {
 		// Skip dots collected between ticks; they are removed at the next tick
-		const dots: DotView[] = this.dots
-			.filter((dot) => !dot.isFlaggedForRemoval)
-			.map((dot) => {
-				const radius = dot.size / 2;
-				return {
-					id: dot.id,
-					x: dot.x,
-					y: dot.y,
-					radius,
-					prevRadius: this.prevRadii.get(dot.id) ?? radius,
-					color: dot.color,
-					kind: dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small",
-					// Matches Dot.update; 0 for the player (moved per frame) and stationary point dots
-					vx: dot instanceof PlayerDot ? 0 : dot.vx * dot.velocity,
-					vy: dot instanceof PlayerDot ? 0 : dot.vy * dot.velocity,
-				};
+		const dots: DotView[] = [];
+		for (const dot of this.dots) {
+			if (dot.isFlaggedForRemoval) continue;
+			const kind =
+				dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small";
+			const moves = kind !== "player";
+			dots.push({
+				id: dot.id,
+				x: dot.x,
+				y: dot.y,
+				radius: dot.size / 2,
+				prevRadius: dot.prevSize / 2,
+				color: dot.color,
+				kind,
+				// Matches Dot.update; 0 for the player (moved per frame) and stationary point dots
+				vx: moves ? dot.vx * dot.velocity : 0,
+				vy: moves ? dot.vy * dot.velocity : 0,
 			});
+		}
 
 		return {
 			phase: this.stateMachine.phase,
@@ -249,8 +258,15 @@ export class GameEngine {
 		else if (dot.y + halfSize > this.screen.height) dot.vy = -Math.abs(dot.vy);
 	}
 
+	/** Compact flagged dots out in place; a no-op unless something was flagged */
 	private removeFlaggedDots(): void {
-		this.dots = this.dots.filter((d) => !d.isFlaggedForRemoval);
+		if (!this.hasFlaggedDots) return;
+		this.hasFlaggedDots = false;
+		let kept = 0;
+		for (const dot of this.dots) {
+			if (!dot.isFlaggedForRemoval) this.dots[kept++] = dot;
+		}
+		this.dots.length = kept;
 	}
 
 	/** Player vs other dots, with other dots advanced `alpha` of a tick along their velocity */
@@ -268,10 +284,12 @@ export class GameEngine {
 				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
 				(dot as PointDot).forceRemove();
+				this.hasFlaggedDots = true;
 				this.audio?.playLargeCollect();
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
 				dot.flagForRemoval();
+				this.hasFlaggedDots = true;
 				this.audio?.playCollect();
 			} else {
 				// Wrong color -- game over

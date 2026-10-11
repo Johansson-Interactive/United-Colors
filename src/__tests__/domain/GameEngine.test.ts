@@ -1,6 +1,8 @@
 import {
 	GAME_COLORS,
 	PLAYER_SPEED_PER_DEGREE,
+	POINT_DOT_PULSE_SPEED,
+	POINT_DOT_SIZE_ANIMATION_TIME,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
 } from "../../domain/constants";
@@ -336,6 +338,50 @@ describe("GameEngine", () => {
 			engine.onSensorInput(0.5, 0.5);
 			const player = engine.getFrame().dots.find((d) => d.kind === "player");
 			expect(player).toMatchObject({ vx: 0, vy: 0 });
+		});
+		it("a pulsing point dot's prevRadius is its radius at the previous tick", () => {
+			const engine = new GameEngine({
+				density: 100,
+				// Large screen so small dots rarely reach the stationary player
+				screen: { width: 4000, height: 8000 },
+				random: (() => {
+					let n = 0;
+					return () => ((++n * 9301 + 49297) % 233280) / 233280;
+				})(),
+			});
+			engine.startGame();
+			const point = () => engine.getFrame().dots.find((d) => d.kind === "point");
+
+			for (let i = 0; i < 1000 && !point(); i++) engine.tick();
+			const spawned = point();
+			expect(spawned).toBeDefined();
+			// A dot spawned this tick starts at its drawn size, with nothing to grow from
+			expect(spawned?.prevRadius).toBe(spawned?.radius);
+
+			// Past the zoom-in, into the pulse
+			for (let i = 0; i < POINT_DOT_SIZE_ANIMATION_TIME + 1; i++) engine.tick();
+			let previous = point();
+			let changed = 0;
+			for (let i = 0; i < POINT_DOT_PULSE_SPEED * 2; i++) {
+				engine.tick();
+				const current = point();
+				expect(current?.prevRadius).toBe(previous?.radius);
+				if (current?.radius !== previous?.radius) changed++;
+				previous = current;
+			}
+			expect(changed).toBeGreaterThan(0);
+		});
+
+		it("keeps the same dot array across a tick with no removals", () => {
+			const engine = createEngine();
+			engine.startKiosk();
+			const dotsOf = (e: GameEngine) => (e as unknown as { dots: unknown[] }).dots;
+			// Kiosk dots never collide, so nothing is removed
+			for (let i = 0; i < 500 && dotsOf(engine).length === 0; i++) engine.tick();
+			const before = dotsOf(engine);
+			expect(before.length).toBeGreaterThan(0);
+			engine.tick();
+			expect(dotsOf(engine)).toBe(before);
 		});
 	});
 

@@ -9,6 +9,8 @@ export class Dot {
 	vy: number;
 	color: string;
 	velocity: number;
+	/** Size at the start of the current tick, for interpolating size changes between ticks */
+	prevSize: number;
 	private _size: number;
 	private _flaggedForRemoval = false;
 
@@ -28,6 +30,7 @@ export class Dot {
 		this.vy = vy;
 		this.color = color;
 		this._size = size;
+		this.prevSize = size;
 		this.velocity = velocity;
 	}
 
