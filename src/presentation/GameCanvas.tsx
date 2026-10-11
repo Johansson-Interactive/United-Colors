@@ -23,7 +23,9 @@ import { scheduleOnRN } from "react-native-worklets";
 import {
 	SCENE_COLOR,
 	SCENE_KIND,
+	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
+	SCENE_MERGE,
 	SCENE_RADIUS,
 	SCENE_STRIDE,
 	SCENE_X,
@@ -31,6 +33,7 @@ import {
 } from "../application/renderScene";
 import { GAME_COLORS } from "../domain/constants";
 import type { ScreenSize } from "../domain/types";
+import { MERGE_SKSL, packMergeUniforms } from "./mergeShader";
 import { useTilt } from "./tilt/TiltProvider";
 
 interface GameCanvasProps {
@@ -86,6 +89,15 @@ GLARE_PAINT.setShader(
 	),
 );
 
+/**
+ * The player and the dots merging into it, drawn as one liquid body by the metaball shader
+ * (see mergeShader.ts). Compiled once; the uniforms are rebuilt every frame.
+ */
+const MERGE_EFFECT = Skia.RuntimeEffect.Make(MERGE_SKSL);
+if (!MERGE_EFFECT) throw new Error("merge shader failed to compile");
+const MERGE_PAINT = Skia.Paint();
+MERGE_PAINT.setAntiAlias(true);
+
 /** Unit-space soft glow per game colour, indexed like FILL_COLORS */
 const HALO_PAINTS = FILL_COLORS.map((color) => {
 	const paint = Skia.Paint();
@@ -115,6 +127,9 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
  * specular glare whose position follows the device tilt, so the dots read as physical
  * objects under a fixed light. The player dot has no halo, so its edge stays sharp and the
  * gap to other dots is easy to judge; it gets a white core ring instead.
+ * Caught dots merge into the player like water droplets: the player and every merging dot
+ * are one body under the metaball shader, so a neck forms between them as the dot slides in
+ * and the player swells and settles once it has flowed in.
  * The canvas is transparent over the ambient background. Lighting freezes while frosted,
  * and the blur layer only exists while frosted, so a live scene pays nothing for it.
  */
@@ -181,20 +196,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 
 			const dots = scene.get();
 			const end = dots.length;
-			// Halos first so no glow sits on top of a neighbouring body
+			// Halos first so no glow sits on top of a neighbouring body; a merging dot's halo
+			// shrinks away as the dot slides into the player
 			for (let i = 0; i < end; i += SCENE_STRIDE) {
 				const radius = dots[i + SCENE_RADIUS];
-				if (radius <= 0 || dots[i + SCENE_KIND] === SCENE_KIND_PLAYER) continue;
-				const scale = radius * HALO_SCALE;
+				const kind = dots[i + SCENE_KIND];
+				if (radius <= 0 || kind === SCENE_KIND_PLAYER) continue;
+				const fade = kind === SCENE_KIND_MERGING ? 1 - dots[i + SCENE_MERGE] : 1;
+				const scale = radius * HALO_SCALE * fade;
+				if (scale <= 0) continue;
 				canvas.save();
 				canvas.translate(dots[i + SCENE_X], dots[i + SCENE_Y]);
 				canvas.scale(scale, scale);
 				canvas.drawCircle(0, 0, 1, HALO_PAINTS[dots[i + SCENE_COLOR]]);
 				canvas.restore();
 			}
+			// Free dots: body and glare
 			for (let i = 0; i < end; i += SCENE_STRIDE) {
 				const radius = dots[i + SCENE_RADIUS];
-				if (radius <= 0) continue;
+				const kind = dots[i + SCENE_KIND];
+				if (radius <= 0 || kind === SCENE_KIND_PLAYER || kind === SCENE_KIND_MERGING) continue;
 				const x = dots[i + SCENE_X];
 				const y = dots[i + SCENE_Y];
 				FILL_PAINT.setColor(FILL_COLORS[dots[i + SCENE_COLOR]]);
@@ -203,11 +224,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.translate(x + gx * radius, y + gy * radius);
 				canvas.scale(radius, radius);
 				canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-				if (dots[i + SCENE_KIND] === SCENE_KIND_PLAYER) {
-					canvas.drawCircle(-gx, -gy, 0.62, RING_PAINT);
-				}
 				canvas.restore();
 			}
+			// The player and whatever is merging into it, as one liquid body
+			const merge = packMergeUniforms(dots);
+			if (merge === null) return;
+			const playerOffset = end - SCENE_STRIDE;
+			const color = FILL_COLORS[dots[playerOffset + SCENE_COLOR]];
+			merge.values.push(color[0], color[1], color[2], color[3]);
+			MERGE_PAINT.setShader(MERGE_EFFECT.makeShader(merge.values));
+			canvas.drawRect(
+				Skia.XYWHRect(merge.left, merge.top, merge.right - merge.left, merge.bottom - merge.top),
+				MERGE_PAINT,
+			);
+			// Glare on the liquid: fading on each merging dot, full on the player, plus its ring
+			for (let i = 0; i < end; i += SCENE_STRIDE) {
+				const radius = dots[i + SCENE_RADIUS];
+				const kind = dots[i + SCENE_KIND];
+				if (radius <= 0 || (kind !== SCENE_KIND_PLAYER && kind !== SCENE_KIND_MERGING)) continue;
+				const x = dots[i + SCENE_X];
+				const y = dots[i + SCENE_Y];
+				const isPlayer = kind === SCENE_KIND_PLAYER;
+				GLARE_PAINT.setAlphaf(isPlayer ? 1 : 1 - dots[i + SCENE_MERGE]);
+				canvas.save();
+				canvas.translate(x + gx * radius, y + gy * radius);
+				canvas.scale(radius, radius);
+				canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+				if (isPlayer) canvas.drawCircle(-gx, -gy, 0.62, RING_PAINT);
+				canvas.restore();
+			}
+			GLARE_PAINT.setAlphaf(1);
 		}),
 	);
 
