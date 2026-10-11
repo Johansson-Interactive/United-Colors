@@ -1,0 +1,6 @@
+{
+	"$schema": "./node_modules/knip/schema-jsonc.json",
+	// Entry points come from knip's Expo, Vitest, Babel and Metro plugins; .gitignore'd paths are skipped.
+	// Knip's Expo plugin expects expo-updates unless app.json opts out; this app doesn't ship OTA updates.
+	"ignoreDependencies": ["expo-updates"]
+}

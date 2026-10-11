@@ -23,8 +23,9 @@
 		"format:fix": "biome format --write .",
 		"doctor:react": "CI=true react-doctor . --blocking warning --no-score",
 		"doctor:expo": "EXPO_NO_TELEMETRY=1 expo-doctor",
+		"lint:unused": "knip",
 		"doctors": "pnpm run doctor:react && pnpm run doctor:expo",
-		"verify": "biome ci . && pnpm run typecheck && pnpm run test && pnpm run doctors",
+		"verify": "biome ci . && pnpm run typecheck && pnpm run test && pnpm run lint:unused && pnpm run doctors",
 		"preflight": "biome check --write . && pnpm run verify",
 		"test": "vitest run --config vitest.config.mts"
 	},
@@ -51,6 +52,7 @@
 		"@biomejs/biome": "2.5.15",
 		"@types/react": "~19.2.2",
 		"expo-doctor": "1.20.4",
+		"knip": "6.41.0",
 		"react-doctor": "0.9.17",
 		"typescript": "~6.0.3",
 		"vite": "^8.3.4",
