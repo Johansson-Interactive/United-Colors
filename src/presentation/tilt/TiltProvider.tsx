@@ -2,6 +2,7 @@ import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import type { SensorPort, TiltZero } from "../../domain/types";
+import { smoothTowards } from "./smoothTilt";
 import { NO_ZERO } from "./tiltZero";
 
 /**
@@ -23,9 +24,6 @@ export interface Tilt {
 }
 
 const TiltContext = createContext<Tilt | null>(null);
-
-/** Fraction of the remaining distance closed per frame at 60 Hz */
-const SMOOTHING = 0.18;
 
 interface TiltProviderProps {
 	sensor: SensorPort;
@@ -57,12 +55,13 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 		};
 	}, [sensor, rawX, rawY, rawFacingDown, available]);
 
+	// Once the smoothed tilt snaps onto a still target, these writes repeat the same value and
+	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
 		const level = rawFacingDown.get() ? zeroDown.get() : zero.get();
-		x.set(x.get() + (rawX.get() - level.x - x.get()) * k);
-		y.set(y.get() + (rawY.get() - level.y - y.get()) * k);
+		x.set(smoothTowards(x.get(), rawX.get() - level.x, dt));
+		y.set(smoothTowards(y.get(), rawY.get() - level.y, dt));
 	});
 
 	const value = useMemo<Tilt>(
