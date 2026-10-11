@@ -19,6 +19,7 @@ import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
 import { BOWL_SIZE, CAPTION, TRIO } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
+import { playColourAt } from "./playColour";
 
 interface KioskOverlayProps {
 	highScore: number;
@@ -69,11 +70,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 		return () => cancelAnimation(cycle);
 	}, [cycle]);
 	const playColor = useDerivedValue(() =>
-		interpolateColor(
-			(cycle.get() + startIndex) % TRIO.length,
-			[0, 0.88, 1, 1.88, 2, 2.88, 3],
-			[TRIO[0], TRIO[0], TRIO[1], TRIO[1], TRIO[2], TRIO[2], TRIO[0]],
-		),
+		playColourAt((cycle.get() + startIndex) % TRIO.length, interpolateColor),
 	);
 
 	return (
