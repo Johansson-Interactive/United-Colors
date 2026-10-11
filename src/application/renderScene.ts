@@ -1,12 +1,13 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import type { DotView, RenderFrame } from "../domain/types";
 import { createJelly } from "./jelly";
+import { REJECT_RECOIL, REJECT_SPIT_GAP, rejectPush, rejectRecoil, rejectWrap } from "./rejection";
 
 /**
  * The drawable scene is a flat Float32Array with one record of SCENE_STRIDE floats per dot,
  * so one typed-array copy crosses to the UI thread per frame instead of an object per dot.
  */
-export const SCENE_STRIDE = 9;
+export const SCENE_STRIDE = 10;
 export const SCENE_X = 0;
 export const SCENE_Y = 1;
 export const SCENE_RADIUS = 2;
@@ -20,12 +21,16 @@ export const SCENE_MERGE = 5;
 export const SCENE_STRETCH_X = 6;
 export const SCENE_STRETCH_Y = 7;
 export const SCENE_WOBBLE = 8;
+/** For a SCENE_KIND_REJECTED dot: how far the player's film has spread round it (rejectWrap) */
+export const SCENE_WRAP = 9;
 
 export const SCENE_KIND_SMALL = 0;
 export const SCENE_KIND_POINT = 1;
 export const SCENE_KIND_PLAYER = 2;
 /** A caught dot sliding into the player; drawn as one liquid body with it */
 export const SCENE_KIND_MERGING = 3;
+/** The wrong-colour dot the player is refusing; drawn on top of the player's liquid */
+export const SCENE_KIND_REJECTED = 4;
 
 /** The player may swell to at most this multiple of its radius while taking dots in */
 export const MERGE_SWELL_MAX = 1.3;
@@ -63,10 +68,12 @@ export function mergeSwell(absorb: number): number {
 	return 1 - eased;
 }
 
-function clearPlayerFields(buffer: Float32Array, offset: number): void {
+/** Zero the fields only the player or a refused dot use */
+function clearExtraFields(buffer: Float32Array, offset: number): void {
 	buffer[offset + SCENE_STRETCH_X] = 0;
 	buffer[offset + SCENE_STRETCH_Y] = 0;
 	buffer[offset + SCENE_WOBBLE] = 0;
+	buffer[offset + SCENE_WRAP] = 0;
 }
 
 function colorIndex(color: string): number {
@@ -85,6 +92,8 @@ function colorIndex(color: string): number {
  *   extrapolating them would overshoot when a pulse reverses.
  * - Caught dots slide from where they were caught into the player's live position, shrinking
  *   as they go, and the player swells by the volume it takes in before settling back.
+ * - A refused wrong-colour dot is spat out along the line from the player through it, and
+ *   the player recoils the other way (see rejection.ts).
  * - The player is drawn at its live position (moved every frame) and always last (on top),
  *   with the liquid shape its movement over the last `dtMs` gives it.
  * - When the simulation is frozen (paused / game over) dots are drawn exactly as simulated.
@@ -113,6 +122,9 @@ export function createSceneBuilder() {
 		const playerDot = frame.dots.find((d) => d.kind === "player");
 		// Sum of (caught radius / player radius)^2 weighted by how much of each is in the player
 		let swell = 0;
+		// Where the player is drawn: its live position, less any recoil from a refused dot
+		let playerX = player.x;
+		let playerY = player.y;
 		for (const dot of frame.dots) {
 			if (dot.kind === "player") continue;
 			const radius = dot.prevRadius + (dot.radius - dot.prevRadius) * sizeT;
@@ -126,26 +138,48 @@ export function createSceneBuilder() {
 				buffer[offset + SCENE_RADIUS] = radius * (1 - (1 - MERGE_SHRINK) * slide);
 				buffer[offset + SCENE_KIND] = SCENE_KIND_MERGING;
 				buffer[offset + SCENE_MERGE] = slide;
-				clearPlayerFields(buffer, offset);
+				clearExtraFields(buffer, offset);
 				if (playerDot && playerDot.radius > 0) {
 					const ratio = radius / playerDot.radius;
 					swell += ratio * ratio * mergeSwell(absorb);
 				}
+			} else if (dot.reject !== undefined) {
+				const prev = dot.prevReject ?? dot.reject;
+				const reject = prev + (dot.reject - prev) * sizeT;
+				// The line from the player through the dot, along which it is spat out
+				const dx = dot.x - player.x;
+				const dy = dot.y - player.y;
+				const distance = Math.hypot(dx, dy);
+				const nx = distance > 1e-6 ? dx / distance : 1;
+				const ny = distance > 1e-6 ? dy / distance : 0;
+				const playerRadius = playerDot?.radius ?? 0;
+				const clear = playerRadius + radius * (1 + REJECT_SPIT_GAP);
+				const spat = distance + Math.max(0, clear - distance) * rejectPush(reject);
+				buffer[offset + SCENE_X] = player.x + nx * spat;
+				buffer[offset + SCENE_Y] = player.y + ny * spat;
+				buffer[offset + SCENE_RADIUS] = radius;
+				buffer[offset + SCENE_KIND] = SCENE_KIND_REJECTED;
+				buffer[offset + SCENE_MERGE] = 0;
+				clearExtraFields(buffer, offset);
+				buffer[offset + SCENE_WRAP] = rejectWrap(reject);
+				const recoil = playerRadius * REJECT_RECOIL * rejectRecoil(reject);
+				playerX -= nx * recoil;
+				playerY -= ny * recoil;
 			} else {
 				buffer[offset + SCENE_X] = dot.x + dot.vx * moveT;
 				buffer[offset + SCENE_Y] = dot.y + dot.vy * moveT;
 				buffer[offset + SCENE_RADIUS] = radius;
 				buffer[offset + SCENE_KIND] = kindCode(dot.kind);
 				buffer[offset + SCENE_MERGE] = 0;
-				clearPlayerFields(buffer, offset);
+				clearExtraFields(buffer, offset);
 			}
 			offset += SCENE_STRIDE;
 		}
 
 		if (playerDot) {
-			const shape = jelly(player.x, player.y, playerDot.radius, frozen ? 0 : dtMs);
-			buffer[offset + SCENE_X] = player.x;
-			buffer[offset + SCENE_Y] = player.y;
+			const shape = jelly(playerX, playerY, playerDot.radius, frozen ? 0 : dtMs);
+			buffer[offset + SCENE_X] = playerX;
+			buffer[offset + SCENE_Y] = playerY;
 			buffer[offset + SCENE_RADIUS] =
 				playerDot.radius * Math.min(MERGE_SWELL_MAX, Math.sqrt(1 + swell));
 			buffer[offset + SCENE_COLOR] = colorIndex(playerDot.color);
@@ -154,6 +188,7 @@ export function createSceneBuilder() {
 			buffer[offset + SCENE_STRETCH_X] = shape.stretchX;
 			buffer[offset + SCENE_STRETCH_Y] = shape.stretchY;
 			buffer[offset + SCENE_WOBBLE] = shape.wobble;
+			buffer[offset + SCENE_WRAP] = 0;
 			offset += SCENE_STRIDE;
 		}
 

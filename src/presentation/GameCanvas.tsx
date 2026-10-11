@@ -24,6 +24,9 @@ import {
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
+	SCENE_KIND_POINT,
+	SCENE_KIND_REJECTED,
+	SCENE_KIND_SMALL,
 	SCENE_MERGE,
 	SCENE_RADIUS,
 	SCENE_STRETCH_X,
@@ -126,6 +129,8 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
  * Caught dots merge into the player like water droplets: the player and every merging dot
  * are one body under the metaball shader, so a neck forms between them as the dot slides in
  * and the player swells and settles once it has flowed in.
+ * A wrong-colour dot the player touches is refused: a film of the liquid reaches round it
+ * and lets go, and the dot is drawn on top of the liquid so it never looks taken in.
  * The canvas is transparent over the ambient background. Lighting freezes while frosted,
  * and the blur layer only exists while frosted, so a live scene pays nothing for it.
  */
@@ -207,11 +212,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.drawCircle(0, 0, 1, HALO_PAINTS[dots[i + SCENE_COLOR]]);
 				canvas.restore();
 			}
-			// Free dots: body and glare
-			for (let i = 0; i < end; i += SCENE_STRIDE) {
+			// A glass bead: body and glare
+			const drawBead = (i: number) => {
 				const radius = dots[i + SCENE_RADIUS];
-				const kind = dots[i + SCENE_KIND];
-				if (radius <= 0 || kind === SCENE_KIND_PLAYER || kind === SCENE_KIND_MERGING) continue;
 				const x = dots[i + SCENE_X];
 				const y = dots[i + SCENE_Y];
 				FILL_PAINT.setColor(FILL_COLORS[dots[i + SCENE_COLOR]]);
@@ -221,6 +224,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.scale(radius, radius);
 				canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
 				canvas.restore();
+			};
+			// Free dots
+			for (let i = 0; i < end; i += SCENE_STRIDE) {
+				const kind = dots[i + SCENE_KIND];
+				if (dots[i + SCENE_RADIUS] <= 0) continue;
+				if (kind === SCENE_KIND_SMALL || kind === SCENE_KIND_POINT) drawBead(i);
 			}
 			// The player and whatever is merging into it, as one liquid body
 			const merge = packMergeUniforms(dots);
@@ -261,6 +270,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.restore();
 			}
 			GLARE_PAINT.setAlphaf(1);
+			// A refused dot sits on top of the liquid reaching round it
+			for (let i = 0; i < end; i += SCENE_STRIDE) {
+				if (dots[i + SCENE_KIND] === SCENE_KIND_REJECTED && dots[i + SCENE_RADIUS] > 0) {
+					drawBead(i);
+				}
+			}
 		}),
 	);
 

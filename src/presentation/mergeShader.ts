@@ -3,11 +3,13 @@ import {
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
+	SCENE_KIND_REJECTED,
 	SCENE_RADIUS,
 	SCENE_STRETCH_X,
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
 	SCENE_WOBBLE,
+	SCENE_WRAP,
 	SCENE_X,
 	SCENE_Y,
 } from "../application/renderScene";
@@ -18,6 +20,13 @@ export const MERGE_MAX_BLOBS = 8;
 export const MERGE_BLEND = 0.9;
 /** Peak edge wobble of the player, as a fraction of its radius */
 export const MERGE_WOBBLE = 0.03;
+/** Half the arc the refusing film covers round a dot at full spread: two thirds of it */
+export const FILM_MAX_HALF_ANGLE = (2 * Math.PI) / 3;
+/** Film thickness, and the gap it keeps from the refused dot, as fractions of that dot's radius */
+export const FILM_THICKNESS = 0.24;
+export const FILM_GAP = 0.14;
+/** Smooth-min radius joining the film to the player, as a fraction of the refused dot's radius */
+const FILM_BLEND = 0.6;
 
 /**
  * Metaball shader: the player and the dots merging into it as one liquid body. Each body is
@@ -29,15 +38,23 @@ export const MERGE_WOBBLE = 0.03;
  * its jelly stretch vector, with a few slow ripples travelling round its edge. Its distance
  * is only approximate, which the one-point anti-aliasing never shows at these strains.
  *
+ * While the player refuses a wrong-colour dot, a film grows out of it: an arc of a ring
+ * hugging that dot a little way off, centred on the side facing the player and spreading
+ * round it (see rejection.ts). The dot itself is drawn on top, untouched by the liquid.
+ *
  * Uniforms, in order: `blobs` (x, y, radius per body), `count` (bodies in use), `blend`
  * (smooth-min radius in points), `jelly` (the player's stretch x, y and wobble clock in
- * seconds) and `color` (unpremultiplied RGBA).
+ * seconds), `film` (ring centre x, y, radius and thickness; no film at thickness 0),
+ * `filmArc` (unit axis from the ring centre toward the player, half the arc's angle and
+ * the smooth-min radius joining it to the player) and `color` (unpremultiplied RGBA).
  */
 export const MERGE_SKSL = `
 uniform float3 blobs[${MERGE_MAX_BLOBS}];
 uniform float count;
 uniform float blend;
 uniform float3 jelly;
+uniform float4 film;
+uniform float4 filmArc;
 uniform float4 color;
 
 float smin(float a, float b, float k) {
@@ -58,12 +75,22 @@ float liquid(float2 q, float r) {
 	return (length(l) - r * (1.0 + ${MERGE_WOBBLE} * w)) / k;
 }
 
+// Distance to an arc of the ring (radius r, thickness w) spanning +-phi about axis u
+float arc(float2 q, float2 u, float r, float w, float phi) {
+	float2 l = float2(dot(q, u), abs(u.x * q.y - u.y * q.x));
+	if (atan(l.y, l.x) <= phi) return abs(length(l) - r) - w * 0.5;
+	return length(l - r * float2(cos(phi), sin(phi))) - w * 0.5;
+}
+
 half4 main(float2 p) {
 	float d = liquid(p - blobs[0].xy, blobs[0].z);
 	for (int i = 1; i < ${MERGE_MAX_BLOBS}; i++) {
 		if (float(i) >= count) break;
 		float3 b = blobs[i];
 		d = smin(d, length(p - b.xy) - b.z, blend);
+	}
+	if (film.w > 0.0) {
+		d = smin(d, arc(p - film.xy, filmArc.xy, film.z, film.w, filmArc.z), filmArc.w);
 	}
 	float a = 1.0 - smoothstep(-0.5, 0.5, d);
 	return half4(color.rgb * a, a);
@@ -81,8 +108,9 @@ export interface MergeUniforms {
 }
 
 /**
- * Pack the player and every merging dot from the drawable scene into shader uniforms.
- * Returns null when the scene has no player. The player is always the first body.
+ * Pack the player, every merging dot and the film round a refused dot from the drawable
+ * scene into shader uniforms. Returns null when the scene has no player. The player is
+ * always the first body.
  */
 export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	"worklet";
@@ -94,6 +122,8 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	let bottom = Number.NEGATIVE_INFINITY;
 
 	let jelly = [0, 0, 0];
+	let playerX = 0;
+	let playerY = 0;
 
 	/** `reach` is how far the body can extend from its centre, if past its radius */
 	const add = (x: number, y: number, radius: number, reach = radius) => {
@@ -110,6 +140,8 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 		const reach = playerRadius * (1 + JELLY_MAX_STRETCH) * (1 + MERGE_WOBBLE);
 		add(scene[i + SCENE_X], scene[i + SCENE_Y], playerRadius, reach);
 		jelly = [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y], scene[i + SCENE_WOBBLE]];
+		playerX = scene[i + SCENE_X];
+		playerY = scene[i + SCENE_Y];
 		break;
 	}
 	if (blobs.length === 0) return null;
@@ -123,6 +155,40 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	while (blobs.length < MERGE_MAX_BLOBS * 3) blobs.push(0, 0, 0);
 	const blend = playerRadius * MERGE_BLEND;
 	blobs.push(count, blend, ...jelly);
+
+	let film = [0, 0, 0, 0, 1, 0, 0, 1];
+	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
+		if (scene[i + SCENE_KIND] !== SCENE_KIND_REJECTED) continue;
+		const wrap = scene[i + SCENE_WRAP];
+		if (wrap <= 0) break;
+		const x = scene[i + SCENE_X];
+		const y = scene[i + SCENE_Y];
+		const radius = scene[i + SCENE_RADIUS];
+		// Thin as it first buds and as it draws back, so it never ends as a stray bead
+		const thickness = radius * FILM_THICKNESS * Math.min(1, wrap * 4);
+		const ring = radius * (1 + FILM_GAP) + thickness / 2;
+		const ax = playerX - x;
+		const ay = playerY - y;
+		const axis = Math.hypot(ax, ay);
+		const filmBlend = radius * FILM_BLEND;
+		film = [
+			x,
+			y,
+			ring,
+			thickness,
+			axis > 1e-6 ? ax / axis : 1,
+			axis > 1e-6 ? ay / axis : 0,
+			Math.min(Math.PI, wrap * FILM_MAX_HALF_ANGLE),
+			filmBlend,
+		];
+		const reach = ring + thickness / 2 + filmBlend / 4;
+		left = Math.min(left, x - reach);
+		top = Math.min(top, y - reach);
+		right = Math.max(right, x + reach);
+		bottom = Math.max(bottom, y + reach);
+		break;
+	}
+	blobs.push(...film);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
 	const pad = blend / 4 + 1;
 	return {

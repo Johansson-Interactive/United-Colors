@@ -1,3 +1,4 @@
+import { REJECT_SPIT_GAP, rejectWrap } from "../../application/rejection";
 import {
 	createSceneBuilder,
 	MERGE_SWELL_MAX,
@@ -8,6 +9,7 @@ import {
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
 	SCENE_KIND_POINT,
+	SCENE_KIND_REJECTED,
 	SCENE_KIND_SMALL,
 	SCENE_MERGE,
 	SCENE_RADIUS,
@@ -15,6 +17,7 @@ import {
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
 	SCENE_WOBBLE,
+	SCENE_WRAP,
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
@@ -26,7 +29,8 @@ const KIND_NAMES = {
 	[SCENE_KIND_POINT]: "point",
 	[SCENE_KIND_PLAYER]: "player",
 	[SCENE_KIND_MERGING]: "merging",
-} as Record<number, DotView["kind"] | "merging">;
+	[SCENE_KIND_REJECTED]: "rejected",
+} as Record<number, DotView["kind"] | "merging" | "rejected">;
 
 /** Decode the flat scene back into one object per dot, for readable assertions */
 function decode(scene: Float32Array) {
@@ -39,6 +43,7 @@ function decode(scene: Float32Array) {
 			color: GAME_COLORS[scene[i + SCENE_COLOR]],
 			kind: KIND_NAMES[scene[i + SCENE_KIND]],
 			merge: scene[i + SCENE_MERGE],
+			wrap: scene[i + SCENE_WRAP],
 		});
 	}
 	return dots;
@@ -106,6 +111,7 @@ describe("buildScene", () => {
 			color: "#2196F3",
 			kind: "player",
 			merge: 0,
+			wrap: 0,
 		});
 	});
 
@@ -251,6 +257,47 @@ describe("buildScene", () => {
 				expect(mergeSwell(a)).toBeLessThanOrEqual(previous);
 				previous = mergeSwell(a);
 			}
+		});
+	});
+
+	describe("a refused dot", () => {
+		const player = dot({ id: "p", kind: "player", radius: 20 });
+		// Touching the player at (50, 60), 25 px to its right
+		const refused = (reject: number, prevReject = reject) =>
+			dot({ id: "r", x: 75, y: 60, radius: 10, prevRadius: 10, reject, prevReject });
+		const at = (reject: number, phase: GamePhase = "REJECTING") => {
+			const scene = buildScene(frame([player, refused(reject)], phase), 0, PLAYER_POS);
+			return {
+				dot: scene.find((d) => d.kind === "rejected"),
+				player: scene.find((d) => d.kind === "player"),
+			};
+		};
+
+		it("stays where it touched while the film spreads round it", () => {
+			const { dot: d, player: p } = at(0.3);
+			expect(d).toMatchObject({ x: 75, y: 60, radius: 10 });
+			expect(d?.wrap).toBeCloseTo(rejectWrap(0.3));
+			expect(p).toMatchObject({ x: 50, y: 60, wrap: 0 });
+		});
+
+		it("is spat clear along the line from the player while the player recoils", () => {
+			const spitting = at(0.75);
+			expect(spitting.dot?.x).toBeGreaterThan(75);
+			expect(spitting.dot?.y).toBeCloseTo(60);
+			expect(spitting.player?.x).toBeLessThan(50);
+			const done = at(1);
+			expect(done.dot?.x).toBeCloseTo(50 + 20 + 10 * (1 + REJECT_SPIT_GAP));
+			expect(done.dot?.wrap).toBe(0);
+			expect(done.player?.x).toBeCloseTo(50);
+		});
+
+		it("is drawn exactly spat out on the game over screen", () => {
+			expect(at(1, "GAME_OVER")).toEqual(at(1));
+		});
+
+		it("interpolates the refusal between ticks", () => {
+			const scene = buildScene(frame([player, refused(0.2, 0.1)]), 0.5, PLAYER_POS);
+			expect(scene.find((d) => d.kind === "rejected")?.wrap).toBeCloseTo(rejectWrap(0.15));
 		});
 	});
 });

@@ -1,4 +1,5 @@
 import { JELLY_MAX_STRETCH } from "../../application/jelly";
+import { rejectWrap } from "../../application/rejection";
 import {
 	createSceneBuilder,
 	SCENE_KIND,
@@ -13,6 +14,9 @@ import {
 } from "../../application/renderScene";
 import type { DotView, RenderFrame } from "../../domain/types";
 import {
+	FILM_GAP,
+	FILM_MAX_HALF_ANGLE,
+	FILM_THICKNESS,
 	MERGE_BLEND,
 	MERGE_MAX_BLOBS,
 	MERGE_SKSL,
@@ -62,8 +66,10 @@ describe("packMergeUniforms", () => {
 		expect(values.slice(6, MERGE_MAX_BLOBS * 3).every((v) => v === 0)).toBe(true);
 		expect(values[MERGE_MAX_BLOBS * 3]).toBe(2);
 		expect(values[MERGE_MAX_BLOBS * 3 + 1]).toBeCloseTo(20 * MERGE_BLEND);
-		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2)).toEqual([0, 0, 0]);
-		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 5);
+		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2, MERGE_MAX_BLOBS * 3 + 5)).toEqual([0, 0, 0]);
+		// No film: zero thickness
+		expect(values[MERGE_MAX_BLOBS * 3 + 8]).toBe(0);
+		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 13);
 	});
 
 	it("bounds cover every body, the player at full stretch and wobble, plus the bulge", () => {
@@ -83,7 +89,7 @@ describe("packMergeUniforms", () => {
 		s[SCENE_STRETCH_Y] = -0.05;
 		s[SCENE_WOBBLE] = 3;
 		const values = packMergeUniforms(s)?.values ?? [];
-		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2)).toEqual([
+		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2, MERGE_MAX_BLOBS * 3 + 5)).toEqual([
 			Math.fround(0.1),
 			Math.fround(-0.05),
 			3,
@@ -109,5 +115,28 @@ describe("packMergeUniforms", () => {
 		const s = scene([PLAYER]);
 		expect([s[SCENE_X], s[SCENE_Y], s[SCENE_RADIUS]]).toEqual([50, 60, 20]);
 		expect(MERGE_SKSL).toContain(`uniform float3 blobs[${MERGE_MAX_BLOBS}]`);
+	});
+
+	it("wraps a film round a refused dot, facing the player, and bounds it", () => {
+		const s = scene([PLAYER, dot({ id: "r", x: 80, y: 60, reject: 0.5, prevReject: 0.5 })]);
+		const packed = packMergeUniforms(s);
+		const film = packed?.values.slice(MERGE_MAX_BLOBS * 3 + 5) ?? [];
+		const wrap = rejectWrap(0.5);
+		const thickness = 10 * FILM_THICKNESS;
+		expect(film[0]).toBe(80);
+		expect(film[1]).toBe(60);
+		expect(film[2]).toBeCloseTo(10 * (1 + FILM_GAP) + thickness / 2);
+		expect(film[3]).toBeCloseTo(thickness);
+		// Axis from the dot back toward the player
+		expect(film[4]).toBeCloseTo(-1);
+		expect(film[5]).toBeCloseTo(0);
+		expect(film[6]).toBeCloseTo(wrap * FILM_MAX_HALF_ANGLE);
+		expect(packed?.right).toBeGreaterThan(80 + film[2] + thickness / 2);
+		expect(MERGE_SKSL).toContain("uniform float4 film;");
+	});
+
+	it("drops the film once it has drawn back", () => {
+		const s = scene([PLAYER, dot({ id: "r", x: 80, y: 60, reject: 1, prevReject: 1 })]);
+		expect(packMergeUniforms(s)?.values[MERGE_MAX_BLOBS * 3 + 8]).toBe(0);
 	});
 });
