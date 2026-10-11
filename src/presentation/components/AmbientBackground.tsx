@@ -16,7 +16,7 @@ const smoothstep = (t: number) => t * t * (3 - 2 * t);
 
 /** Light pool: bright centre easing out to nothing, no hard rim where a linear fade ends */
 const LIGHT_PEAK = 0.075;
-const LIGHT_ALPHAS = RAMP.map((t) => LIGHT_PEAK * (1 - smoothstep(t)));
+const LIGHT_COLORS = RAMP.map((t) => Float32Array.of(1, 1, 1, LIGHT_PEAK * (1 - smoothstep(t))));
 
 /** Edge wash: clear across the middle, easing in toward the corners */
 const WASH_START = 0.55;
@@ -65,7 +65,7 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 				Skia.Shader.MakeRadialGradient(
 					vec(width * (0.5 - lx * 0.6), height * (0.3 - ly * 0.6)),
 					Math.max(width, height) * 0.95,
-					LIGHT_ALPHAS.map((a) => Float32Array.of(1, 1, 1, a)),
+					LIGHT_COLORS,
 					RAMP,
 					TileMode.Clamp,
 				),
@@ -75,11 +75,15 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 			const wash = Skia.Paint();
 			wash.setDither(true);
 			const c = Skia.Color(accent.get());
+			// A plain loop, not .map(callback): the React Compiler hoists callbacks out of the
+			// worklet into plain JS functions, which the UI thread cannot call
+			const washColors: Float32Array[] = [];
+			for (const a of WASH_ALPHAS) washColors.push(Float32Array.of(c[0], c[1], c[2], a));
 			wash.setShader(
 				Skia.Shader.MakeRadialGradient(
 					vec(width / 2, height / 2),
 					Math.hypot(width, height) * 0.55,
-					WASH_ALPHAS.map((a) => Float32Array.of(c[0], c[1], c[2], a)),
+					washColors,
 					WASH_POSITIONS,
 					TileMode.Clamp,
 				),
