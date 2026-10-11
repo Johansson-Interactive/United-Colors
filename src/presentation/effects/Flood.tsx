@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import Animated, {
 	Easing,
@@ -10,6 +10,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { createFloodSequence } from "./floodSequence";
 
 const BASE_DIAMETER = 100;
 const COVER_MS = 420;
@@ -28,6 +29,8 @@ export interface FloodController {
 /**
  * Screen transitions are a dot swallowing the screen: tap a dot and it grows from under
  * your finger until everything is its colour, the scene changes underneath, and it lifts.
+ * The lift waits for React to commit the changed scene, so a slow mount (the title screen)
+ * never shows the old screen fading out from under a dot that has already gone.
  */
 export function useFlood(): FloodController {
 	const progress = useSharedValue(0);
@@ -35,30 +38,55 @@ export function useFlood(): FloodController {
 	const color = useSharedValue("#FFFFFF");
 	const originX = useSharedValue(0);
 	const originY = useSharedValue(0);
+	// Bumped when the dot covers the screen, in the same task as the scene change, so the
+	// effect below runs after the new scene has been committed
+	const [coveredTick, setCoveredTick] = useState(0);
+
+	const [sequence] = useState(() => {
+		const covered = () => {
+			setCoveredTick((tick) => tick + 1);
+			created.covered();
+		};
+		const lifted = () => created.lifted();
+		const created = createFloodSequence({
+			cover: () => {
+				opacity.set(1);
+				progress.set(0);
+				progress.set(
+					withTiming(1, { duration: COVER_MS, easing: Easing.in(Easing.quad) }, (finished) => {
+						if (finished) scheduleOnRN(covered);
+					}),
+				);
+			},
+			lift: () => {
+				opacity.set(
+					withDelay(
+						60,
+						withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
+							if (!done) return;
+							progress.set(0);
+							scheduleOnRN(lifted);
+						}),
+					),
+				);
+			},
+		});
+		return created;
+	});
+
+	// After the commit that followed the cover: the scene under the dot is the new one
+	useEffect(() => {
+		if (coveredTick > 0) sequence.sceneRendered();
+	}, [coveredTick, sequence]);
 
 	const run = useCallback(
-		(nextColor: string, x: number, y: number, onCovered: () => void) => {
+		(nextColor: string, x: number, y: number, onCoveredFn: () => void) => {
 			color.set(nextColor);
 			originX.set(x);
 			originY.set(y);
-			opacity.set(1);
-			progress.set(0);
-			progress.set(
-				withTiming(1, { duration: COVER_MS, easing: Easing.in(Easing.quad) }, (finished) => {
-					if (!finished) return;
-					scheduleOnRN(onCovered);
-					opacity.set(
-						withDelay(
-							60,
-							withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
-								if (done) progress.set(0);
-							}),
-						),
-					);
-				}),
-			);
+			sequence.run(onCoveredFn);
 		},
-		[color, originX, originY, opacity, progress],
+		[color, originX, originY, sequence],
 	);
 
 	return useMemo(
