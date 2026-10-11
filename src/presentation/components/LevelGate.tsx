@@ -1,4 +1,4 @@
-import { Canvas, Circle, Path, Skia } from "@shopify/react-native-skia";
+import { Canvas, Circle, Path, Skia, vec } from "@shopify/react-native-skia";
 import type React from "react";
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -72,10 +72,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 			x = (x / d) * travel;
 			y = (y / d) * travel;
 		}
-		return { x: centre + x, y: centre + y };
+		return vec(centre + x, centre + y);
 	});
-	const bubbleX = useDerivedValue(() => bubblePos.get().x);
-	const bubbleY = useDerivedValue(() => bubblePos.get().y);
 	const bubbleColor = useDerivedValue(() => (level.get() ? color : WHITE));
 	const targetColor = useDerivedValue(() => (level.get() ? color : "rgba(255,255,255,0.25)"));
 	const arc = useDerivedValue(() => {
@@ -110,8 +108,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 					style="stroke"
 					strokeWidth={1.5}
 				/>
-				<Circle cx={bubbleX} cy={bubbleY} r={bubble * 1.9} color="rgba(255,255,255,0.08)" />
-				<Circle cx={bubbleX} cy={bubbleY} r={bubble} color={bubbleColor} />
+				<Circle c={bubblePos} r={bubble * 1.9} color="rgba(255,255,255,0.08)" />
+				<Circle c={bubblePos} r={bubble} color={bubbleColor} />
 			</Canvas>
 			<Pressable
 				style={[StyleSheet.absoluteFill, { borderRadius: centre }]}
