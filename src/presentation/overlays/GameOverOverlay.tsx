@@ -10,7 +10,7 @@ interface GameOverOverlayProps {
 	score: number;
 	/** Best score before this run, to recognise a new record */
 	previousBest: number;
-	/** The player's final colour; the result and the retry dot wear it */
+	/** The player's final colour; the result and the retry drop of their liquid wear it */
 	color: string;
 	onRetry: (point: PressPoint) => void;
 	onBack: (point: PressPoint) => void;
@@ -60,6 +60,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 				<DotButton
 					size={124}
 					color={color}
+					liquid
 					label="AGAIN"
 					labelPitch={4}
 					onPress={onRetry}
