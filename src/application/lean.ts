@@ -14,11 +14,6 @@ export const LEAN_RANGE = 4;
 export const LEAN_MAX_REACH = 0.4;
 /** The tip closes at most this share of the gap to the player */
 export const LEAN_GAP_SHARE = 0.5;
-/**
- * The stretch (see jelly.ts) at the furthest reach: an area-preserving ellipse along the
- * lean with its back edge held still puts its tip 2 * stretch * radius out
- */
-export const LEAN_MAX_STRETCH = LEAN_MAX_REACH / 2;
 
 /**
  * How far (px) a point dot of radius `dotRadius` reaches its tip out toward a player of

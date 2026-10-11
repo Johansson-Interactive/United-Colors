@@ -1,10 +1,4 @@
-import {
-	LEAN_GAP_SHARE,
-	LEAN_MAX_REACH,
-	LEAN_MAX_STRETCH,
-	LEAN_RANGE,
-	leanReach,
-} from "../../application/lean";
+import { LEAN_GAP_SHARE, LEAN_MAX_REACH, LEAN_RANGE, leanReach } from "../../application/lean";
 
 describe("leanReach", () => {
 	it("is 0 out of range, touching, or with no size", () => {
@@ -34,10 +28,10 @@ describe("leanReach", () => {
 		}
 	});
 
-	it("scales with the dot, so its stretch never passes LEAN_MAX_STRETCH", () => {
+	it("scales with the dot, so its stretch never passes half its full reach", () => {
 		expect(leanReach(40, 20, 10)).toBeCloseTo(2 * leanReach(40, 20, 5));
 		for (let gap = 0.5; gap < LEAN_RANGE * 20; gap += 0.5) {
-			expect(leanReach(gap, 20, 10) / (2 * 10)).toBeLessThanOrEqual(LEAN_MAX_STRETCH);
+			expect(leanReach(gap, 20, 10) / (2 * 10)).toBeLessThanOrEqual(LEAN_MAX_REACH / 2);
 		}
 	});
 });
