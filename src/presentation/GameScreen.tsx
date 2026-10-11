@@ -7,6 +7,7 @@ import { useStore } from "zustand";
 import type { GameAudio } from "../application/GameAudio";
 import { createGameStore } from "../application/GameStore";
 import { bindMusic } from "../application/useCases/BindMusic";
+import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
@@ -20,6 +21,7 @@ import { updateSettings } from "../application/useCases/UpdateSettings";
 import type { ScreenSize, SensorSample, TiltZero } from "../domain/types";
 import { AsyncStorageRepository } from "../infrastructure/AsyncStorageRepository";
 import { DeviceMotionAdapter } from "../infrastructure/DeviceMotionAdapter";
+import { watchAppActive } from "../infrastructure/watchAppActive";
 import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
@@ -179,6 +181,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ audio }) => {
 		// Frozen at tick positions; resume restarts at alpha 0, so no jump
 		drawScene(0);
 	}, [getEngine, stopClock, drawScene]);
+
+	// Leaving the app mid-run lands on the pause screen when the player comes back
+	useEffect(() => bindPauseOnLeave(store, watchAppActive, handlePause), [handlePause]);
 
 	const handleResume = useCallback(() => {
 		resumeGame(getEngine(), store);
