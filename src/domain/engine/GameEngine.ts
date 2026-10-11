@@ -283,7 +283,7 @@ export class GameEngine {
 			if (dot instanceof PointDot) {
 				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
-				(dot as PointDot).forceRemove();
+				dot.forceRemove();
 				this.hasFlaggedDots = true;
 				this.audio?.playLargeCollect();
 			} else if (dot.color === this.player.color) {
