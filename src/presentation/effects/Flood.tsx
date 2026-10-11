@@ -5,16 +5,21 @@ import Animated, {
 	Easing,
 	type SharedValue,
 	useAnimatedStyle,
+	useFrameCallback,
 	useSharedValue,
 	withDelay,
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { createFloodSequence } from "./floodSequence";
+import { createFloodSequence, tallySmoothFrames } from "./floodSequence";
 
 const BASE_DIAMETER = 100;
 const COVER_MS = 420;
 const REVEAL_MS = 460;
+const REVEAL_DELAY_MS = 60;
+/** Steady frames the new scene must draw before the lift; a longer frame is a stall */
+const SMOOTH_FRAMES = 3;
+const SMOOTH_FRAME_MS = 34;
 
 export interface FloodController {
 	progress: SharedValue<number>;
@@ -29,8 +34,9 @@ export interface FloodController {
 /**
  * Screen transitions are a dot swallowing the screen: tap a dot and it grows from under
  * your finger until everything is its colour, the scene changes underneath, and it lifts.
- * The lift waits for React to commit the changed scene, so a slow mount (the title screen)
- * never shows the old screen fading out from under a dot that has already gone.
+ * The lift waits for React to commit the changed scene and then for the UI thread to draw
+ * it at a steady rate: a slow mount or first draw (the title screen) would otherwise push a
+ * timed lift to its end, showing the old screen fading out from under a dot already gone.
  */
 export function useFlood(): FloodController {
 	const progress = useSharedValue(0);
@@ -38,16 +44,18 @@ export function useFlood(): FloodController {
 	const color = useSharedValue("#FFFFFF");
 	const originX = useSharedValue(0);
 	const originY = useSharedValue(0);
-	// Bumped when the dot covers the screen, in the same task as the scene change, so the
-	// effect below runs after the new scene has been committed
-	const [coveredTick, setCoveredTick] = useState(0);
+	// True from the scene commit until the lift starts; the frame gate below watches for it
+	const awaitingSmoothFrames = useSharedValue(false);
+	const smoothFrames = useSharedValue(0);
+	// Bumped when the dot covers the screen (in the same task as the scene change, so the
+	// effect below runs after the new scene has been committed) and again when it has lifted
+	const [tick, setTick] = useState(0);
 
 	const [sequence] = useState(() => {
 		const covered = () => {
-			setCoveredTick((tick) => tick + 1);
+			setTick((t) => t + 1);
 			created.covered();
 		};
-		const lifted = () => created.lifted();
 		const created = createFloodSequence({
 			cover: () => {
 				opacity.set(1);
@@ -59,32 +67,52 @@ export function useFlood(): FloodController {
 				);
 			},
 			lift: () => {
-				opacity.set(
-					withDelay(
-						60,
-						withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
-							if (!done) return;
-							progress.set(0);
-							scheduleOnRN(lifted);
-						}),
-					),
-				);
+				smoothFrames.set(0);
+				awaitingSmoothFrames.set(true);
 			},
 		});
 		return created;
 	});
 
-	// After the commit that followed the cover: the scene under the dot is the new one
+	const lifted = useCallback(() => {
+		sequence.lifted();
+		setTick((t) => t + 1);
+	}, [sequence]);
+
+	// Lets the lift begin only once the new scene has drawn a few frames without a stall
+	const gate = useFrameCallback((frame) => {
+		if (!awaitingSmoothFrames.get()) return;
+		smoothFrames.set(
+			tallySmoothFrames(smoothFrames.get(), frame.timeSincePreviousFrame ?? 0, SMOOTH_FRAME_MS),
+		);
+		if (smoothFrames.get() < SMOOTH_FRAMES) return;
+		awaitingSmoothFrames.set(false);
+		opacity.set(
+			withDelay(
+				REVEAL_DELAY_MS,
+				withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (done) => {
+					if (!done) return;
+					progress.set(0);
+					scheduleOnRN(lifted);
+				}),
+			),
+		);
+	}, false);
+
+	// After the commit that followed the cover, the scene under the dot is the new one: arm the
+	// gate. After the lift, disarm it.
 	useEffect(() => {
-		if (coveredTick > 0) sequence.sceneRendered();
-	}, [coveredTick, sequence]);
+		if (tick === 0) return;
+		sequence.sceneRendered();
+		gate.setActive(sequence.stage === "lifting");
+	}, [tick, sequence, gate]);
 
 	const run = useCallback(
-		(nextColor: string, x: number, y: number, onCoveredFn: () => void) => {
+		(nextColor: string, x: number, y: number, onCovered: () => void) => {
 			color.set(nextColor);
 			originX.set(x);
 			originY.set(y);
-			sequence.run(onCoveredFn);
+			sequence.run(onCovered);
 		},
 		[color, originX, originY, sequence],
 	);

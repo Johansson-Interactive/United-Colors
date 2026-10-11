@@ -20,6 +20,16 @@ export interface FloodSequence {
 }
 
 /**
+ * Tally of consecutive frames drawn at a steady rate. A frame longer than `maxFrameMs` means
+ * the UI thread stalled (the title screen's first draw, say), which resets the tally: a
+ * timed animation started before a stall jumps to its end when frames resume.
+ */
+export function tallySmoothFrames(tally: number, frameMs: number, maxFrameMs: number): number {
+	"worklet";
+	return frameMs > 0 && frameMs <= maxFrameMs ? tally + 1 : 0;
+}
+
+/**
  * Orders a flood transition. The lift waits for the scene change to render, not for a
  * timer: mounting a new screen can take longer than the cover animation, and lifting
  * early would show the old screen fading out underneath.
