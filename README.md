@@ -58,7 +58,8 @@ pnpm install
 | `pnpm lint` / `pnpm lint:fix` | Biome lint |
 | `pnpm format` / `pnpm format:fix` | Biome format |
 | `pnpm test` | Unit tests (Vitest) |
-| `pnpm preflight` | Typecheck, tests, Biome format (writes fixes), React Doctor and Expo Doctor. Run before opening a PR |
+| `pnpm lint:unused` | Find unused files, exports and dependencies (Knip) |
+| `pnpm preflight` | Typecheck, tests, Biome format (writes fixes), Knip, React Doctor and Expo Doctor. Run before opening a PR |
 | `pnpm prebuild` | Regenerate the `ios/` and `android/` native projects |
 
 Biome is the only linter and formatter. Do not add ESLint or Prettier.
