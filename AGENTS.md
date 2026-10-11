@@ -8,4 +8,4 @@ React Native (Expo) remake of a legacy Android tilt game. The original Java app 
 - Use Biome for linting and formatting. Never add ESLint or Prettier.
 - `src/domain` is pure, deterministic TypeScript: no React, Expo, or device APIs. Game rules belong there, not in components.
 - Any behavior change needs a test in the same change (Vitest, `src/__tests__`).
-- Before you finish, run `pnpm preflight`. It runs typecheck, tests, formatting, linting, react-doctor, and expo-doctor.
+- Before you finish, run `pnpm preflight`. It applies Biome fixes, then runs `pnpm verify`: the read-only check (Biome, typecheck, tests, react-doctor, expo-doctor) that CI should run.
