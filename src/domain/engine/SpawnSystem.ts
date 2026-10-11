@@ -13,8 +13,11 @@ import { Dot } from "../entities/Dot";
 import type { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
 import type { ScreenSize } from "../types";
-import { didCollide } from "./Collision";
+import { circlesOverlap } from "./Collision";
 import { ColorPicker } from "./ColorPicker";
+
+/** Upper bound on random re-rolls when placing a point dot away from the player */
+const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
 
 /**
  * Handles spawning of small dots and point dots.
@@ -195,13 +198,14 @@ export class SpawnSystem {
 		color: string,
 	): PointDot {
 		const size = POINT_DOT_SIZE_RATIO * density;
-		const x = Math.floor(this.random() * (screen.width - size * 2)) + size;
-		const y = Math.floor(this.random() * (screen.height - size * 2)) + size;
-
-		// Check if spawning on player -- retry recursively
-		const tempDot = new Dot(x, y, 0, 0, player.color, size * 2, 0);
-		if (didCollide(player, tempDot)) {
-			return this.createPointDot(timeStep, player, screen, density, color);
+		let x = 0;
+		let y = 0;
+		// Re-roll while the candidate would land on the player. After the last attempt the
+		// final candidate is used even if it overlaps, so placement always terminates.
+		for (let attempt = 0; attempt < MAX_POINT_DOT_PLACEMENT_ATTEMPTS; attempt++) {
+			x = Math.floor(this.random() * (screen.width - size * 2)) + size;
+			y = Math.floor(this.random() * (screen.height - size * 2)) + size;
+			if (!circlesOverlap(player.x, player.y, player.size, x, y, size * 2)) break;
 		}
 
 		return new PointDot(timeStep, x, y, color, size, POINT_DOT_VALUE);

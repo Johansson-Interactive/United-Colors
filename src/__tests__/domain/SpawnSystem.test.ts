@@ -119,6 +119,36 @@ describe("SpawnSystem", () => {
 			expect(dot?.color).toBe(GAME_COLORS[2]);
 		});
 
+		it("re-rolls a point dot position that lands on the player", () => {
+			// Draws: timing (0.5), color (0.5), then x/y for the first candidate (0, 0) which
+			// sits on the player at (10, 10), then x/y for the second candidate (0.5, 0.5)
+			const rolls = [0.5, 0.5, 0, 0, 0.5, 0.5];
+			const scripted = new SpawnSystem(() => rolls.shift() ?? 0.5);
+			scripted.reset();
+
+			const dot = scripted.trySpawnPointDot(wait + 1, player, screen, 100);
+			// size 12.5: x = floor(0.5 * 375) + 12.5, y = floor(0.5 * 775) + 12.5
+			expect(dot?.x).toBe(199.5);
+			expect(dot?.y).toBe(399.5);
+		});
+
+		it("gives up re-rolling after a bounded number of attempts", () => {
+			let draws = 0;
+			// Every candidate is (12.5, 12.5), on top of the player
+			const alwaysOverlap = new SpawnSystem(() => {
+				draws++;
+				return draws === 1 || draws === 2 ? 0.5 : 0;
+			});
+			alwaysOverlap.reset();
+
+			const dot = alwaysOverlap.trySpawnPointDot(wait + 1, player, screen, 100);
+			expect(dot).not.toBeNull();
+			expect(dot?.x).toBe(12.5);
+			expect(dot?.y).toBe(12.5);
+			// timing + color + 10 attempts of x/y
+			expect(draws).toBe(2 + 2 * 10);
+		});
+
 		it("waits after a faded point dot is removed before respawning", () => {
 			const first = spawn.trySpawnPointDot(wait + 1, player, screen, 100);
 			let step = wait + 1;
