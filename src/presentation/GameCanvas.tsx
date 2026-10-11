@@ -129,8 +129,9 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
  * Caught dots merge into the player like water droplets: the player and every merging dot
  * are one body under the metaball shader, so a neck forms between them as the dot slides in
  * and the player swells and settles once it has flowed in.
- * A wrong-colour dot the player touches is refused: a film of the liquid reaches round it
- * and lets go, and the dot is drawn on top of the liquid so it never looks taken in.
+ * A wrong-colour dot the player touches is refused, like a ball hitting a water balloon: it
+ * presses a dent into the liquid and is pushed back out, drawn on top of the liquid so it
+ * never looks taken in.
  * The canvas is transparent over the ambient background. Lighting freezes while frosted,
  * and the blur layer only exists while frosted, so a live scene pays nothing for it.
  */
@@ -270,7 +271,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ scene, onLayout, frost, 
 				canvas.restore();
 			}
 			GLARE_PAINT.setAlphaf(1);
-			// A refused dot sits on top of the liquid reaching round it
+			// A refused dot sits on top, in the dent it presses into the liquid
 			for (let i = 0; i < end; i += SCENE_STRIDE) {
 				if (dots[i + SCENE_KIND] === SCENE_KIND_REJECTED && dots[i + SCENE_RADIUS] > 0) {
 					drawBead(i);

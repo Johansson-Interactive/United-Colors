@@ -1,5 +1,4 @@
 import { JELLY_MAX_STRETCH } from "../../application/jelly";
-import { rejectWrap } from "../../application/rejection";
 import {
 	createSceneBuilder,
 	SCENE_KIND,
@@ -13,14 +12,13 @@ import {
 	SCENE_Y,
 } from "../../application/renderScene";
 import type { DotView, RenderFrame } from "../../domain/types";
+import { LIQUID_WOBBLE } from "../../presentation/liquidShader";
 import {
-	FILM_GAP,
-	FILM_MAX_HALF_ANGLE,
-	FILM_THICKNESS,
+	DENT_GAP,
+	DENT_SOFTNESS,
 	MERGE_BLEND,
 	MERGE_MAX_BLOBS,
 	MERGE_SKSL,
-	MERGE_WOBBLE,
 	packMergeUniforms,
 } from "../../presentation/mergeShader";
 
@@ -67,16 +65,16 @@ describe("packMergeUniforms", () => {
 		expect(values[MERGE_MAX_BLOBS * 3]).toBe(2);
 		expect(values[MERGE_MAX_BLOBS * 3 + 1]).toBeCloseTo(20 * MERGE_BLEND);
 		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2, MERGE_MAX_BLOBS * 3 + 5)).toEqual([0, 0, 0]);
-		// No film: zero thickness
-		expect(values[MERGE_MAX_BLOBS * 3 + 8]).toBe(0);
-		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 13);
+		// No dent: zero radius
+		expect(values[MERGE_MAX_BLOBS * 3 + 7]).toBe(0);
+		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 9);
 	});
 
 	it("bounds cover every body, the player at full stretch and wobble, plus the bulge", () => {
 		const s = scene([PLAYER, dot({ id: "c", x: 80, y: 60, absorb: 0 })]);
 		const packed = packMergeUniforms(s);
 		const pad = (20 * MERGE_BLEND) / 4 + 1;
-		const reach = 20 * (1 + JELLY_MAX_STRETCH) * (1 + MERGE_WOBBLE);
+		const reach = 20 * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
 		expect(packed?.left).toBeCloseTo(50 - reach - pad);
 		expect(packed?.top).toBeCloseTo(60 - reach - pad);
 		expect(packed?.right).toBeCloseTo(90 + pad);
@@ -117,25 +115,17 @@ describe("packMergeUniforms", () => {
 		expect(MERGE_SKSL).toContain(`uniform float3 blobs[${MERGE_MAX_BLOBS}]`);
 	});
 
-	it("wraps a film round a refused dot, facing the player, and bounds it", () => {
-		const s = scene([PLAYER, dot({ id: "r", x: 80, y: 60, reject: 0.5, prevReject: 0.5 })]);
-		const packed = packMergeUniforms(s);
-		const film = packed?.values.slice(MERGE_MAX_BLOBS * 3 + 5) ?? [];
-		const wrap = rejectWrap(0.5);
-		const thickness = 10 * FILM_THICKNESS;
-		expect(film[0]).toBe(80);
-		expect(film[1]).toBe(60);
-		expect(film[2]).toBeCloseTo(10 * (1 + FILM_GAP) + thickness / 2);
-		expect(film[3]).toBeCloseTo(thickness);
-		// Axis from the dot back toward the player
-		expect(film[4]).toBeCloseTo(-1);
-		expect(film[5]).toBeCloseTo(0);
-		expect(film[6]).toBeCloseTo(wrap * FILM_MAX_HALF_ANGLE);
-		expect(packed?.right).toBeGreaterThan(80 + film[2] + thickness / 2);
-		expect(MERGE_SKSL).toContain("uniform float4 film;");
+	it("cuts a soft dent the shape of a refused dot, a little wider", () => {
+		const s = scene([PLAYER, dot({ id: "r", x: 75, y: 60, reject: 0.3, prevReject: 0.3 })]);
+		const values = packMergeUniforms(s)?.values ?? [];
+		const dent = values.slice(MERGE_MAX_BLOBS * 3 + 5);
+		expect(dent).toHaveLength(4);
+		expect(dent[2]).toBeCloseTo(10 * (1 + DENT_GAP));
+		expect(dent[3]).toBeCloseTo(10 * DENT_SOFTNESS);
+		expect(MERGE_SKSL).toContain("uniform float4 dent;");
 	});
 
-	it("drops the film once it has drawn back", () => {
+	it("leaves a hard edge once the dot is pushed clear, so no dent lingers", () => {
 		const s = scene([PLAYER, dot({ id: "r", x: 80, y: 60, reject: 1, prevReject: 1 })]);
 		expect(packMergeUniforms(s)?.values[MERGE_MAX_BLOBS * 3 + 8]).toBe(0);
 	});

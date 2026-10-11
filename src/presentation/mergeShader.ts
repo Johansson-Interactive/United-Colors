@@ -1,5 +1,6 @@
-import { JELLY_MAX_STRETCH, JELLY_WOBBLE_PERIOD_S } from "../application/jelly";
+import { JELLY_MAX_STRETCH } from "../application/jelly";
 import {
+	SCENE_DENT,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
@@ -9,24 +10,19 @@ import {
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
 	SCENE_WOBBLE,
-	SCENE_WRAP,
 	SCENE_X,
 	SCENE_Y,
 } from "../application/renderScene";
+import { LIQUID_SKSL, LIQUID_WOBBLE } from "./liquidShader";
 
 /** Most bodies (the player plus dots merging into it) the shader draws as one liquid */
 export const MERGE_MAX_BLOBS = 8;
 /** Smooth-min radius as a multiple of the player radius: how early two bodies start to neck */
 export const MERGE_BLEND = 0.9;
-/** Peak edge wobble of the player, as a fraction of its radius */
-export const MERGE_WOBBLE = 0.03;
-/** Half the arc the refusing film covers round a dot at full spread: two thirds of it */
-export const FILM_MAX_HALF_ANGLE = (2 * Math.PI) / 3;
-/** Film thickness, and the gap it keeps from the refused dot, as fractions of that dot's radius */
-export const FILM_THICKNESS = 0.24;
-export const FILM_GAP = 0.14;
-/** Smooth-min radius joining the film to the player, as a fraction of the refused dot's radius */
-const FILM_BLEND = 0.6;
+/** The dent a refused dot presses is this much wider than the dot, as a fraction of its radius */
+export const DENT_GAP = 0.06;
+/** How softly the dent's rim curves into the player, as a fraction of the refused dot's radius */
+export const DENT_SOFTNESS = 0.7;
 
 /**
  * Metaball shader: the player and the dots merging into it as one liquid body. Each body is
@@ -34,27 +30,24 @@ const FILM_BLEND = 0.6;
  * neck as they near and flow into one as they meet, like water droplets. Anti-aliased over
  * one point around the zero contour; output is premultiplied.
  *
- * The player (the first body) is liquid: stretched into an area-preserving ellipse along
- * its jelly stretch vector, with a few slow ripples travelling round its edge. Its distance
- * is only approximate, which the one-point anti-aliasing never shows at these strains.
+ * The player (the first body) is a liquid drop (see liquidShader.ts): stretched along its
+ * jelly stretch vector, with slow ripples round its edge.
  *
- * While the player refuses a wrong-colour dot, a film grows out of it: an arc of a ring
- * hugging that dot a little way off, centred on the side facing the player and spreading
- * round it (see rejection.ts). The dot itself is drawn on top, untouched by the liquid.
+ * While the player refuses a wrong-colour dot, the dot presses a dent into it, like a ball
+ * into a water balloon: the dot's circle (a little wider) is cut out of the liquid with a
+ * smooth max, so the surface curves softly in round it (see rejection.ts).
  *
  * Uniforms, in order: `blobs` (x, y, radius per body), `count` (bodies in use), `blend`
  * (smooth-min radius in points), `jelly` (the player's stretch x, y and wobble clock in
- * seconds), `film` (ring centre x, y, radius and thickness; no film at thickness 0),
- * `filmArc` (unit axis from the ring centre toward the player, half the arc's angle and
- * the smooth-min radius joining it to the player) and `color` (unpremultiplied RGBA).
+ * seconds), `dent` (centre x, y, radius and rim softness in points; no dent at radius 0)
+ * and `color` (unpremultiplied RGBA).
  */
 export const MERGE_SKSL = `
 uniform float3 blobs[${MERGE_MAX_BLOBS}];
 uniform float count;
 uniform float blend;
 uniform float3 jelly;
-uniform float4 film;
-uniform float4 filmArc;
+uniform float4 dent;
 uniform float4 color;
 
 float smin(float a, float b, float k) {
@@ -62,35 +55,17 @@ float smin(float a, float b, float k) {
 	return min(a, b) - h * h * k * 0.25;
 }
 
-float liquid(float2 q, float r) {
-	float e = length(jelly.xy);
-	float2 u = e > 0.0001 ? jelly.xy / e : float2(1.0, 0.0);
-	float k = 1.0 + e;
-	float2 l = float2(dot(q, u) / k, dot(q, float2(-u.y, u.x)) * k);
-	// Ripples in screen space, so they keep turning while the stretch changes direction
-	float a = atan(q.y, q.x);
-	float t = jelly.z * ${(2 * Math.PI) / JELLY_WOBBLE_PERIOD_S};
-	float w = 0.5 * sin(3.0 * a + 9.0 * t) + 0.3 * sin(4.0 * a - 13.0 * t)
-		+ 0.2 * sin(5.0 * a + 17.0 * t);
-	return (length(l) - r * (1.0 + ${MERGE_WOBBLE} * w)) / k;
-}
-
-// Distance to an arc of the ring (radius r, thickness w) spanning +-phi about axis u
-float arc(float2 q, float2 u, float r, float w, float phi) {
-	float2 l = float2(dot(q, u), abs(u.x * q.y - u.y * q.x));
-	if (atan(l.y, l.x) <= phi) return abs(length(l) - r) - w * 0.5;
-	return length(l - r * float2(cos(phi), sin(phi))) - w * 0.5;
-}
-
+${LIQUID_SKSL}
 half4 main(float2 p) {
-	float d = liquid(p - blobs[0].xy, blobs[0].z);
+	float d = liquid(p - blobs[0].xy, blobs[0].z, jelly);
 	for (int i = 1; i < ${MERGE_MAX_BLOBS}; i++) {
 		if (float(i) >= count) break;
 		float3 b = blobs[i];
 		d = smin(d, length(p - b.xy) - b.z, blend);
 	}
-	if (film.w > 0.0) {
-		d = smin(d, arc(p - film.xy, filmArc.xy, film.z, film.w, filmArc.z), filmArc.w);
+	if (dent.z > 0.0) {
+		float hole = dent.z - length(p - dent.xy);
+		d = dent.w > 0.01 ? -smin(-d, -hole, dent.w) : max(d, hole);
 	}
 	float a = 1.0 - smoothstep(-0.5, 0.5, d);
 	return half4(color.rgb * a, a);
@@ -108,8 +83,8 @@ export interface MergeUniforms {
 }
 
 /**
- * Pack the player, every merging dot and the film round a refused dot from the drawable
- * scene into shader uniforms. Returns null when the scene has no player. The player is
+ * Pack the player, every merging dot and the dent of a refused dot from the drawable scene
+ * into shader uniforms. Returns null when the scene has no player. The player is
  * always the first body.
  */
 export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
@@ -122,8 +97,6 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	let bottom = Number.NEGATIVE_INFINITY;
 
 	let jelly = [0, 0, 0];
-	let playerX = 0;
-	let playerY = 0;
 
 	/** `reach` is how far the body can extend from its centre, if past its radius */
 	const add = (x: number, y: number, radius: number, reach = radius) => {
@@ -137,11 +110,9 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
 		if (scene[i + SCENE_KIND] !== SCENE_KIND_PLAYER) continue;
 		playerRadius = scene[i + SCENE_RADIUS];
-		const reach = playerRadius * (1 + JELLY_MAX_STRETCH) * (1 + MERGE_WOBBLE);
+		const reach = playerRadius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
 		add(scene[i + SCENE_X], scene[i + SCENE_Y], playerRadius, reach);
 		jelly = [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y], scene[i + SCENE_WOBBLE]];
-		playerX = scene[i + SCENE_X];
-		playerY = scene[i + SCENE_Y];
 		break;
 	}
 	if (blobs.length === 0) return null;
@@ -156,39 +127,20 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	const blend = playerRadius * MERGE_BLEND;
 	blobs.push(count, blend, ...jelly);
 
-	let film = [0, 0, 0, 0, 1, 0, 0, 1];
+	// A smooth max only ever cuts the liquid away, so the dent needs no extra bounds
+	let dent = [0, 0, 0, 0];
 	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
 		if (scene[i + SCENE_KIND] !== SCENE_KIND_REJECTED) continue;
-		const wrap = scene[i + SCENE_WRAP];
-		if (wrap <= 0) break;
-		const x = scene[i + SCENE_X];
-		const y = scene[i + SCENE_Y];
 		const radius = scene[i + SCENE_RADIUS];
-		// Thin as it first buds and as it draws back, so it never ends as a stray bead
-		const thickness = radius * FILM_THICKNESS * Math.min(1, wrap * 4);
-		const ring = radius * (1 + FILM_GAP) + thickness / 2;
-		const ax = playerX - x;
-		const ay = playerY - y;
-		const axis = Math.hypot(ax, ay);
-		const filmBlend = radius * FILM_BLEND;
-		film = [
-			x,
-			y,
-			ring,
-			thickness,
-			axis > 1e-6 ? ax / axis : 1,
-			axis > 1e-6 ? ay / axis : 0,
-			Math.min(Math.PI, wrap * FILM_MAX_HALF_ANGLE),
-			filmBlend,
+		dent = [
+			scene[i + SCENE_X],
+			scene[i + SCENE_Y],
+			radius * (1 + DENT_GAP),
+			radius * DENT_SOFTNESS * scene[i + SCENE_DENT],
 		];
-		const reach = ring + thickness / 2 + filmBlend / 4;
-		left = Math.min(left, x - reach);
-		top = Math.min(top, y - reach);
-		right = Math.max(right, x + reach);
-		bottom = Math.max(bottom, y + reach);
 		break;
 	}
-	blobs.push(...film);
+	blobs.push(...dent);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
 	const pad = blend / 4 + 1;
 	return {

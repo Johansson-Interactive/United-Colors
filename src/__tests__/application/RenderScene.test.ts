@@ -1,10 +1,19 @@
-import { REJECT_SPIT_GAP, rejectWrap } from "../../application/rejection";
+import { JELLY_MAX_STRETCH } from "../../application/jelly";
 import {
+	REJECT_PRESS_DEPTH,
+	REJECT_PRESS_END,
+	REJECT_SPIT_GAP,
+	REJECT_SQUASH,
+	rejectPenetration,
+} from "../../application/rejection";
+import {
+	addStretches,
 	createSceneBuilder,
 	MERGE_SWELL_MAX,
 	mergeSlide,
 	mergeSwell,
 	SCENE_COLOR,
+	SCENE_DENT,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
@@ -17,7 +26,6 @@ import {
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
 	SCENE_WOBBLE,
-	SCENE_WRAP,
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
@@ -43,7 +51,7 @@ function decode(scene: Float32Array) {
 			color: GAME_COLORS[scene[i + SCENE_COLOR]],
 			kind: KIND_NAMES[scene[i + SCENE_KIND]],
 			merge: scene[i + SCENE_MERGE],
-			wrap: scene[i + SCENE_WRAP],
+			dent: scene[i + SCENE_DENT],
 		});
 	}
 	return dots;
@@ -111,7 +119,7 @@ describe("buildScene", () => {
 			color: "#2196F3",
 			kind: "player",
 			merge: 0,
-			wrap: 0,
+			dent: 0,
 		});
 	});
 
@@ -262,42 +270,71 @@ describe("buildScene", () => {
 
 	describe("a refused dot", () => {
 		const player = dot({ id: "p", kind: "player", radius: 20 });
-		// Touching the player at (50, 60), 25 px to its right
+		// Touching the player at (50, 60), 1 px into it from the right
 		const refused = (reject: number, prevReject = reject) =>
-			dot({ id: "r", x: 75, y: 60, radius: 10, prevRadius: 10, reject, prevReject });
+			dot({ id: "r", x: 79, y: 60, radius: 10, prevRadius: 10, reject, prevReject });
 		const at = (reject: number, phase: GamePhase = "REJECTING") => {
-			const scene = buildScene(frame([player, refused(reject)], phase), 0, PLAYER_POS);
+			const scene = createSceneBuilder()(frame([player, refused(reject)], phase), 0, PLAYER_POS);
+			const p = scene.length - SCENE_STRIDE;
 			return {
-				dot: scene.find((d) => d.kind === "rejected"),
-				player: scene.find((d) => d.kind === "player"),
+				dot: decode(scene).find((d) => d.kind === "rejected"),
+				player: decode(scene).find((d) => d.kind === "player"),
+				stretch: [scene[p + SCENE_STRETCH_X], scene[p + SCENE_STRETCH_Y]],
 			};
 		};
 
-		it("stays where it touched while the film spreads round it", () => {
-			const { dot: d, player: p } = at(0.3);
-			expect(d).toMatchObject({ x: 75, y: 60, radius: 10 });
-			expect(d?.wrap).toBeCloseTo(rejectWrap(0.3));
-			expect(p).toMatchObject({ x: 50, y: 60, wrap: 0 });
+		it("sinks into the player along the hit, denting it, as the player squashes", () => {
+			const touch = at(0);
+			expect(touch.dot).toMatchObject({ x: 79, y: 60, dent: 1 });
+			const pressed = at(REJECT_PRESS_END);
+			// Half its radius into the player
+			expect(pressed.dot?.x).toBeCloseTo(50 + 20 + 10 - 10 * REJECT_PRESS_DEPTH);
+			expect(pressed.dot?.y).toBeCloseTo(60);
+			expect(pressed.dot?.dent).toBe(1);
+			// Squashed along the hit, so long across it
+			expect(pressed.stretch[0]).toBeCloseTo(0);
+			expect(Math.abs(pressed.stretch[1])).toBeCloseTo(REJECT_SQUASH);
+			expect(pressed.player).toMatchObject({ x: 50, y: 60, dent: 0 });
 		});
 
-		it("is spat clear along the line from the player while the player recoils", () => {
-			const spitting = at(0.75);
-			expect(spitting.dot?.x).toBeGreaterThan(75);
-			expect(spitting.dot?.y).toBeCloseTo(60);
-			expect(spitting.player?.x).toBeLessThan(50);
+		it("is pushed back out and clear while the player recoils, leaving no dent", () => {
+			const pushing = at(0.7);
+			expect(pushing.dot?.x).toBeGreaterThan(75);
+			expect(pushing.player?.x).toBeLessThan(50);
+			expect(pushing.dot?.dent).toBeLessThan(1);
 			const done = at(1);
 			expect(done.dot?.x).toBeCloseTo(50 + 20 + 10 * (1 + REJECT_SPIT_GAP));
-			expect(done.dot?.wrap).toBe(0);
+			expect(done.dot?.dent).toBe(0);
 			expect(done.player?.x).toBeCloseTo(50);
+			expect(done.stretch).toEqual([0, 0]);
 		});
 
-		it("is drawn exactly spat out on the game over screen", () => {
+		it("is drawn exactly pushed out on the game over screen", () => {
 			expect(at(1, "GAME_OVER")).toEqual(at(1));
 		});
 
 		it("interpolates the refusal between ticks", () => {
 			const scene = buildScene(frame([player, refused(0.2, 0.1)]), 0.5, PLAYER_POS);
-			expect(scene.find((d) => d.kind === "rejected")?.wrap).toBeCloseTo(rejectWrap(0.15));
+			const depth = rejectPenetration(0.15, 1, 10);
+			expect(scene.find((d) => d.kind === "rejected")?.x).toBeCloseTo(80 - depth);
 		});
+	});
+});
+
+describe("addStretches", () => {
+	it("adds stretches along one axis, whichever way they point", () => {
+		const [x, y] = addStretches(0.05, 0, -0.03, 0);
+		expect(Math.abs(x)).toBeCloseTo(0.08);
+		expect(y).toBeCloseTo(0);
+	});
+
+	it("cancels stretches at right angles instead of turning the axis", () => {
+		const [x, y] = addStretches(0.05, 0, 0, 0.05);
+		expect(Math.hypot(x, y)).toBeCloseTo(0);
+	});
+
+	it("caps the result at the most the shader allows for", () => {
+		const [x, y] = addStretches(JELLY_MAX_STRETCH, 0, JELLY_MAX_STRETCH, 0);
+		expect(Math.hypot(x, y)).toBeCloseTo(JELLY_MAX_STRETCH);
 	});
 });
