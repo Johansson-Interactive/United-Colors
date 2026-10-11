@@ -1,4 +1,11 @@
-import { createJelly, JELLY_MAX_STRETCH, JELLY_WOBBLE_PERIOD_S } from "../../application/jelly";
+import {
+	createJelly,
+	JELLY_AT_REST,
+	JELLY_MAX_STRETCH,
+	JELLY_WOBBLE_PERIOD_S,
+	jellyShape,
+	stepJelly,
+} from "../../application/jelly";
 
 const FRAME_MS = 1000 / 60;
 const RADIUS = 25;
@@ -65,5 +72,17 @@ describe("jelly", () => {
 		step(0, 0, RADIUS, 0);
 		expect(step(0, 0, RADIUS, 500).wobble).toBeCloseTo(0.5);
 		expect(step(0, 0, RADIUS, JELLY_WOBBLE_PERIOD_S * 1000).wobble).toBeCloseTo(0.5);
+	});
+
+	it("steps as a pure function too, for a drop driven from the UI thread", () => {
+		const step = createJelly();
+		let body = JELLY_AT_REST;
+		for (let i = 0; i <= 20; i++) {
+			const before = { ...body };
+			const next = stepJelly(body, 100 + 12 * i, 100, RADIUS, FRAME_MS);
+			expect(body).toEqual(before);
+			body = next;
+			expect(jellyShape(body, RADIUS)).toEqual(step(100 + 12 * i, 100, RADIUS, FRAME_MS));
+		}
 	});
 });

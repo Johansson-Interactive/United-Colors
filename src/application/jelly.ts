@@ -4,8 +4,9 @@
  * before it settles. Free dots are rigid glass; only the player behaves like this, which is
  * what marks it as the player's own dot.
  *
- * Pure and stepped once per rendered frame by the scene builder; the shader turns the output
- * into an area-preserving ellipse plus a slow edge wobble.
+ * Pure and stepped once per rendered frame: by the scene builder for the player, and on the
+ * UI thread for the play button, which is a drop of the same liquid. The shader turns the
+ * output into an area-preserving ellipse plus a slow edge wobble (see liquidShader.ts).
  */
 
 /** Spring frequency (Hz) of the slosh */
@@ -31,64 +32,97 @@ export interface JellyState {
 	wobble: number;
 }
 
-export function createJelly() {
+/** The spring's own state between frames */
+export interface JellyBody {
+	/** Lag of the body's mass behind the drop (px) and its rate of change (px/s) */
+	lagX: number;
+	lagY: number;
+	lagVX: number;
+	lagVY: number;
+	/** Wobble clock in seconds */
+	wobble: number;
+	/** Where the drop was last frame; null before the first */
+	lastX: number | null;
+	lastY: number | null;
+}
+
+export const JELLY_AT_REST: JellyBody = {
+	lagX: 0,
+	lagY: 0,
+	lagVX: 0,
+	lagVY: 0,
+	wobble: 0,
+	lastX: null,
+	lastY: null,
+};
+
+/**
+ * Advance `body` by `dtMs` with the drop at (x, y) and radius `radius`; returns the new body.
+ * `dtMs` of 0 (paused, a redraw) leaves the body exactly as it was. A worklet, so a drop in
+ * the interface can run it on the UI thread.
+ */
+export function stepJelly(
+	body: JellyBody,
+	x: number,
+	y: number,
+	radius: number,
+	dtMs: number,
+): JellyBody {
+	"worklet";
 	const omega = 2 * Math.PI * JELLY_HZ;
 	const damping = 2 * JELLY_DAMPING * omega;
-	// Lag of the body's mass behind the player (px) and its rate of change (px/s)
-	let lagX = 0;
-	let lagY = 0;
-	let lagVX = 0;
-	let lagVY = 0;
-	let wobble = 0;
-	let last: { x: number; y: number } | null = null;
-	const state: JellyState = { stretchX: 0, stretchY: 0, wobble: 0 };
-
-	const reset = () => {
+	let { lagX, lagY, lagVX, lagVY, wobble } = body;
+	if (body.lastX === null || body.lastY === null || radius <= 0) {
 		lagX = 0;
 		lagY = 0;
 		lagVX = 0;
 		lagVY = 0;
-	};
-
-	/**
-	 * Advance by `dtMs` with the player at (x, y) and radius `radius`; returns the shape to
-	 * draw. `dtMs` of 0 (paused, a redraw) leaves the body exactly as it was.
-	 */
-	return function step(x: number, y: number, radius: number, dtMs: number): JellyState {
-		if (last === null || radius <= 0) {
-			reset();
-		} else if (dtMs > 0) {
-			const dx = x - last.x;
-			const dy = y - last.y;
-			if (Math.hypot(dx, dy) > JELLY_TELEPORT_RADII * radius) {
-				reset();
-			} else {
-				// The mass stays put as the player moves out from under it, and the spring pulls
-				// it back after. Spread the move evenly over the substeps.
-				const steps = Math.ceil(dtMs / JELLY_SUBSTEP_MS);
-				const h = dtMs / steps / 1000;
-				for (let i = 0; i < steps; i++) {
-					lagX -= dx / steps;
-					lagY -= dy / steps;
-					lagVX += (-omega * omega * lagX - damping * lagVX) * h;
-					lagVY += (-omega * omega * lagY - damping * lagVY) * h;
-					lagX += lagVX * h;
-					lagY += lagVY * h;
-				}
-				wobble = (wobble + dtMs / 1000) % JELLY_WOBBLE_PERIOD_S;
+	} else if (dtMs > 0) {
+		const dx = x - body.lastX;
+		const dy = y - body.lastY;
+		if (Math.hypot(dx, dy) > JELLY_TELEPORT_RADII * radius) {
+			lagX = 0;
+			lagY = 0;
+			lagVX = 0;
+			lagVY = 0;
+		} else {
+			// The mass stays put as the drop moves out from under it, and the spring pulls it
+			// back after. Spread the move evenly over the substeps.
+			const steps = Math.ceil(dtMs / JELLY_SUBSTEP_MS);
+			const h = dtMs / steps / 1000;
+			for (let i = 0; i < steps; i++) {
+				lagX -= dx / steps;
+				lagY -= dy / steps;
+				lagVX += (-omega * omega * lagX - damping * lagVX) * h;
+				lagVY += (-omega * omega * lagY - damping * lagVY) * h;
+				lagX += lagVX * h;
+				lagY += lagVY * h;
 			}
+			wobble = (wobble + dtMs / 1000) % JELLY_WOBBLE_PERIOD_S;
 		}
-		last = { x, y };
+	}
+	return { lagX, lagY, lagVX, lagVY, wobble, lastX: x, lastY: y };
+}
 
-		const lag = Math.hypot(lagX, lagY);
-		// The mass trails the motion, so the drop is long along the lag either way
-		const stretch =
-			lag > 1e-6 && radius > 0
-				? JELLY_MAX_STRETCH * Math.tanh((JELLY_STRETCH_GAIN * lag) / radius)
-				: 0;
-		state.stretchX = lag > 1e-6 ? (lagX / lag) * stretch : 0;
-		state.stretchY = lag > 1e-6 ? (lagY / lag) * stretch : 0;
-		state.wobble = wobble;
-		return state;
+/** The shape to draw for `body` on a drop of radius `radius` */
+export function jellyShape(body: JellyBody, radius: number): JellyState {
+	"worklet";
+	const lag = Math.hypot(body.lagX, body.lagY);
+	if (lag <= 1e-6 || radius <= 0) return { stretchX: 0, stretchY: 0, wobble: body.wobble };
+	// The mass trails the motion, so the drop is long along the lag either way
+	const stretch = JELLY_MAX_STRETCH * Math.tanh((JELLY_STRETCH_GAIN * lag) / radius);
+	return {
+		stretchX: (body.lagX / lag) * stretch,
+		stretchY: (body.lagY / lag) * stretch,
+		wobble: body.wobble,
+	};
+}
+
+/** A jelly that keeps its own body: step it once per frame with the drop's position */
+export function createJelly() {
+	let body = JELLY_AT_REST;
+	return function step(x: number, y: number, radius: number, dtMs: number): JellyState {
+		body = stepJelly(body, x, y, radius, dtMs);
+		return jellyShape(body, radius);
 	};
 }
