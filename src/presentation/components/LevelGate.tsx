@@ -77,12 +77,12 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	const bubbleColor = useDerivedValue(() => (level.get() ? color : WHITE));
 	const targetColor = useDerivedValue(() => (level.get() ? color : "rgba(255,255,255,0.25)"));
 	const arc = useDerivedValue(() => {
-		const path = Skia.Path.Make();
+		const builder = Skia.PathBuilder.Make();
 		const sweep = 360 * progress.get();
 		if (sweep > 0) {
-			path.addArc(Skia.XYWHRect(centre - rim, centre - rim, rim * 2, rim * 2), -90, sweep);
+			builder.addArc(Skia.XYWHRect(centre - rim, centre - rim, rim * 2, rim * 2), -90, sweep);
 		}
-		return path;
+		return builder.detach();
 	});
 
 	const handlePress = useCallback(() => onTap(), [onTap]);

@@ -53,12 +53,12 @@ const Pause: React.FC<GlyphProps> = ({ c, r, color }) => (
 
 const SoundOn: React.FC<GlyphProps> = ({ c, r, color }) => {
 	const waves = useMemo(() => {
-		const path = Skia.Path.Make();
 		const r1 = r * 0.34;
 		const r2 = r * 0.55;
-		path.addArc(Skia.XYWHRect(c - r1 - r * 0.1, c - r1, r1 * 2, r1 * 2), -40, 80);
-		path.addArc(Skia.XYWHRect(c - r2 - r * 0.1, c - r2, r2 * 2, r2 * 2), -40, 80);
-		return path;
+		return Skia.PathBuilder.Make()
+			.addArc(Skia.XYWHRect(c - r1 - r * 0.1, c - r1, r1 * 2, r1 * 2), -40, 80)
+			.addArc(Skia.XYWHRect(c - r2 - r * 0.1, c - r2, r2 * 2, r2 * 2), -40, 80)
+			.detach();
 	}, [c, r]);
 	return (
 		<>
@@ -84,12 +84,12 @@ const SoundOff: React.FC<GlyphProps> = ({ c, r, color }) => (
 /** A quaver: dot head, stem and a curled flag */
 const Music: React.FC<GlyphProps> = ({ c, r, color }) => {
 	const stem = useMemo(() => {
-		const path = Skia.Path.Make();
 		const x = c + r * 0.06;
-		path.moveTo(x, c + r * 0.2);
-		path.lineTo(x, c - r * 0.34);
-		path.quadTo(x + r * 0.06, c - r * 0.12, x + r * 0.26, c - r * 0.06);
-		return path;
+		return Skia.PathBuilder.Make()
+			.moveTo(x, c + r * 0.2)
+			.lineTo(x, c - r * 0.34)
+			.quadTo(x + r * 0.06, c - r * 0.12, x + r * 0.26, c - r * 0.06)
+			.detach();
 	}, [c, r]);
 	return (
 		<>
