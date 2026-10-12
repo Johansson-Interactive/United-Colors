@@ -19,6 +19,7 @@
 		"android": {
 			"adaptiveIcon": {
 				"foregroundImage": "./assets/adaptive-icon.png",
+				"monochromeImage": "./assets/adaptive-icon-mono.png",
 				"backgroundColor": "#0B0E14"
 			},
 			"package": "com.johanssoninteractive.unitedcolors",
