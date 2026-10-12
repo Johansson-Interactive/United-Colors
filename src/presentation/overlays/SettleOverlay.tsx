@@ -4,8 +4,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
 	FadeIn,
 	FadeOut,
+	useAnimatedStyle,
+	useDerivedValue,
 	useFrameCallback,
 	useSharedValue,
+	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { TiltZero } from "../../domain/types";
@@ -14,17 +17,17 @@ import { DotButton } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettleBowl } from "../components/SettleBowl";
 import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
-import { type SettlePhase, startSettle, stepSettle } from "../tilt/settle";
+import { INITIAL_SETTLE, type SettlePhase, stepSettle, WAITING_SETTLE } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
 interface SettleOverlayProps {
 	/** Colour of the dot that settles, and of the flood it swells into */
 	color: string;
-	/** The pose is set; `point` is where the dot rests on screen, for the flood to grow from */
-	/** The level pose already set, if any; it must be left before a new hold starts */
-	zero: TiltZero | null;
-	/** `facingDown`: the side the screen faced, which the pose is for */
+	/**
+	 * The pose is set; `facingDown`: the side the screen faced, which the pose is for;
+	 * `point`: where the dot rests on screen, for the flood to grow from
+	 */
 	onSettled: (zero: TiltZero, facingDown: boolean, point: PressPoint) => void;
 	onBack: () => void;
 	/** The moment the dot comes to rest (a sound belongs here) */
@@ -35,32 +38,39 @@ const CAPTION_LINE_HEIGHT = 20;
 /** Time for the ring to snap and pulse before the dot swells into the next screen */
 const SNAP_MS = 300;
 
+/** How far the bowl dims while it waits to be started */
+const WAITING_DIM = 0.7;
+const START_FADE_MS = 250;
+
 /** One caption for the whole hold, so it doesn't flicker as a hold starts and breaks */
-const HOLD_CAPTION = "hold it the way you like to play\nkeep still, or tap to set now";
+const HOLD_CAPTION = "keep still\nor tap to set now";
 
 const CAPTIONS: Record<SettlePhase, string> = {
+	waiting: "hold it the way you like to play\nthen tap start and keep still",
 	moving: HOLD_CAPTION,
 	settling: HOLD_CAPTION,
 	settled: "that’s level",
 };
 
 /**
- * Setting the level pose. No button and no timer: hold the phone comfortably and the bowl
- * levels itself to your hand; the rest is done the moment the dot comes to rest. Tapping
- * anywhere sets it from the pose just before the finger landed, for the impatient and for
- * devices without a tilt sensor.
+ * Setting the level pose. The bowl opens dimmed under START, its dot already rolling with the
+ * hand, so there is time to read what to do. Once started there is no timer: hold the phone
+ * comfortably and the bowl levels itself to your hand; the rest is done the moment the dot
+ * comes to rest. Tapping anywhere then sets it from the pose just before the finger landed,
+ * for the impatient. Without a tilt sensor, START sets a flat pose straight away.
  */
 export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	color,
-	zero,
 	onSettled,
 	onBack,
 	onSnap,
 }) => {
 	const tilt = useTilt();
 	const tiltAvailable = useTiltAvailable();
-	const [phase, setPhase] = useState<SettlePhase>("moving");
-	const state = useSharedValue(startSettle(zero));
+	const [phase, setPhase] = useState<SettlePhase>("waiting");
+	const state = useSharedValue(WAITING_SETTLE);
+	// 1 while waiting to be started: the bowl is dimmed and START shows over it
+	const waiting = useSharedValue(1);
 	const bowlRef = useRef<View>(null);
 	const doneRef = useRef(false);
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -110,12 +120,28 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const handleSetNow = useCallback(() => {
 		if (doneRef.current) return;
 		const current = state.get();
+		if (current.phase === "waiting" && tiltAvailable) return;
 		const measured = tiltAvailable && current.elapsedMs > 0;
 		state.set({ ...current, phase: "settled", progress: 1 });
 		finish(measured ? { x: current.meanX, y: current.meanY } : { x: 0, y: 0 });
 	}, [state, tiltAvailable, finish]);
 
-	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap to continue";
+	const handleStart = useCallback(() => {
+		if (state.get().phase !== "waiting") return;
+		if (!tiltAvailable) {
+			handleSetNow();
+			return;
+		}
+		state.set(INITIAL_SETTLE);
+		setPhase("moving");
+		waiting.set(withTiming(0, { duration: START_FADE_MS }));
+	}, [state, tiltAvailable, handleSetNow, waiting]);
+
+	const startStyle = useAnimatedStyle(() => ({ opacity: waiting.get() }));
+	const dim = useDerivedValue(() => waiting.get() * WAITING_DIM);
+
+	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap start to continue";
+	const isWaiting = phase === "waiting";
 
 	return (
 		<Animated.View
@@ -126,19 +152,33 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 			<Pressable
 				style={StyleSheet.absoluteFill}
 				onPressIn={handleSetNow}
+				disabled={isWaiting}
 				accessibilityRole="button"
-				accessibilityLabel="Set level now"
+				accessibilityLabel="Calibrate now"
 			/>
 
 			<View style={styles.top} pointerEvents="none">
-				<DotMatrixText text="LEVEL" pitch={8} color={WHITE} glow />
+				<DotMatrixText text="CALIBRATE" pitch={6} color={WHITE} glow />
 			</View>
 
-			<View style={styles.centre} pointerEvents="none">
-				<View ref={bowlRef} collapsable={false}>
-					<SettleBowl size={BOWL_SIZE} color={color} state={state} />
-				</View>
-				<Text style={styles.caption}>{caption}</Text>
+			<View style={styles.centre} pointerEvents="box-none">
+				<Pressable
+					ref={bowlRef}
+					collapsable={false}
+					onPress={handleStart}
+					pointerEvents={isWaiting ? "auto" : "none"}
+					accessibilityRole="button"
+					accessibilityLabel="Start calibrating"
+					accessibilityElementsHidden={!isWaiting}
+				>
+					<SettleBowl size={BOWL_SIZE} color={color} state={state} dim={dim} />
+					<Animated.View style={[styles.start, startStyle]} pointerEvents="none">
+						<DotMatrixText text="START" pitch={6} color={WHITE} glow />
+					</Animated.View>
+				</Pressable>
+				<Text style={styles.caption} pointerEvents="none">
+					{caption}
+				</Text>
 			</View>
 
 			<View style={styles.footer}>
@@ -169,6 +209,11 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		justifyContent: "center",
 		gap: 28,
+	},
+	start: {
+		...StyleSheet.absoluteFill,
+		alignItems: "center",
+		justifyContent: "center",
 	},
 	caption: {
 		...CAPTION,

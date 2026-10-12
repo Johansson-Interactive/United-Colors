@@ -19,7 +19,6 @@ import { loadSettings } from "../application/useCases/LoadSettings";
 import { pauseGame } from "../application/useCases/PauseGame";
 import { resumeGame } from "../application/useCases/ResumeGame";
 import { startGame } from "../application/useCases/StartGame";
-import { updateSettings } from "../application/useCases/UpdateSettings";
 import type { ScreenSize, SensorPort, SensorSample, StoragePort, TiltZero } from "../domain/types";
 import { watchAppActive } from "../infrastructure/watchAppActive";
 import { AmbientBackground } from "./components/AmbientBackground";
@@ -31,23 +30,25 @@ import { FrostDim } from "./effects/FrostDim";
 import { GameCanvas } from "./GameCanvas";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useGameLoop } from "./hooks/useGameLoop";
+import { useQuietKiosk } from "./hooks/useQuietKiosk";
+import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
+import type { SettleFrom } from "./overlays/settleFrom";
 import { INK, INK_LIFT, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
 
 /**
- * The settle bowl is open: where play continues afterwards, the colour of the dot that settles,
- * and the level pose it replaces
+ * The settle bowl is open: where play continues afterwards, and the colour of the dot that
+ * settles
  */
 interface SettleRequest {
-	from: "start" | "pause" | "menu";
+	from: SettleFrom;
 	color: string;
-	zero: TiltZero | null;
 }
 
 interface GameScreenProps {
@@ -194,6 +195,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		startClock();
 	}, [getEngine, startClock, store]);
 
+	// Levelling from the title stops and hides the kiosk
+	const stageFadeStyle = useQuietKiosk(settle?.from ?? null, store, stopClock, startClock);
+
 	const handleBack = useCallback(() => {
 		const engine = getEngine();
 		engine.startKiosk();
@@ -203,30 +207,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// Transitions: a dot grows from under the finger, the scene changes, and it lifts.
 	// A first game starts by setting the level pose; the settled dot then floods into play.
-	// The level pose for the side the screen faces now, which a new settle replaces
-	const currentZero = useCallback(() => {
-		const { settings } = store.getState();
-		return tilt.raw.facingDown.get() ? settings.tiltZeroDown : settings.tiltZero;
-	}, [tilt, store]);
 	const handleStartPress = useCallback(
 		(point: PressPoint, color: string) => {
 			if (store.getState().settings.tiltZero) {
 				flood.run(color, point.x, point.y, () => handleStart(color));
 			} else {
-				setSettle({ from: "start", color, zero: null });
+				setSettle({ from: "start", color });
 			}
 		},
 		[flood, handleStart, store],
 	);
 	const handleCalibratePress = useCallback(() => {
-		setSettle({ from: "pause", color: playerColor, zero: currentZero() });
-	}, [playerColor, currentZero]);
-	const handleMenuCalibratePress = useCallback(
-		(color: string) => {
-			setSettle({ from: "menu", color, zero: currentZero() });
-		},
-		[currentZero],
-	);
+		setSettle({ from: "pause", color: playerColor });
+	}, [playerColor]);
+	const handleMenuCalibratePress = useCallback((color: string) => {
+		setSettle({ from: "menu", color });
+	}, []);
 	const handleSettled = useCallback(
 		(zero: TiltZero, facingDown: boolean, point: PressPoint) => {
 			if (!settle) return;
@@ -259,14 +255,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[flood, handleBack],
 	);
 
-	const handleToggleSound = useCallback(() => {
-		const settings = store.getState().settings;
-		void updateSettings({ ...settings, soundEnabled: !settings.soundEnabled }, store, storage);
-	}, [store, storage]);
-	const handleToggleMusic = useCallback(() => {
-		const settings = store.getState().settings;
-		void updateSettings({ ...settings, musicEnabled: !settings.musicEnabled }, store, storage);
-	}, [store, storage]);
+	const { handleToggleSound, handleToggleMusic } = useSoundToggles(store, storage);
 
 	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
 	// runs under the home indicator, as before; the interface layer also respects the bottom
@@ -281,7 +270,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		<View style={styles.container}>
 			<AmbientBackground accent={accent} frost={frost} />
 
-			<View style={[styles.inset, stageInsets]}>
+			<Animated.View style={[styles.inset, stageInsets, stageFadeStyle]}>
 				<Animated.View style={[styles.stage, shakeStyle]}>
 					<GameCanvas
 						scene={scene}
@@ -298,7 +287,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					/>
 					<Bursts bursts={bursts} />
 				</Animated.View>
-			</View>
+			</Animated.View>
 
 			<FrostDim frost={frost} />
 
@@ -336,7 +325,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					{settle && (
 						<SettleOverlay
 							color={settle.color}
-							zero={settle.zero}
 							onSettled={handleSettled}
 							onBack={handleSettleBack}
 							onSnap={handleSettleSnap}

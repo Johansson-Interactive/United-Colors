@@ -15,7 +15,7 @@ export interface LevelGateState {
 }
 
 /** Tilt (radians, either axis) that still counts as level */
-export const LEVEL_RAD = 0.11;
+const LEVEL_RAD = 0.11;
 /** How long the device must stay level */
 export const HOLD_MS = 900;
 

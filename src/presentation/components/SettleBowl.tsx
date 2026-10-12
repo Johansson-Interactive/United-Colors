@@ -19,6 +19,8 @@ interface SettleBowlProps {
 	/** The dot's colour (the colour the player is about to play) */
 	color: string;
 	state: SharedValue<SettleState>;
+	/** 0..1: how far the bowl is faded back while it can't be used yet; the dot never is */
+	dim: SharedValue<number>;
 }
 
 /** Pixels the dot rolls per radian of raw tilt */
@@ -33,7 +35,7 @@ const PULSE_MS = 520;
  * glides to the centre and a ring closes on it. Move and it rolls back out. When it comes to
  * rest the ring snaps and pulses, and that resting pose is level from now on.
  */
-export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state }) => {
+export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim }) => {
 	const tilt = useTilt();
 	const centre = size / 2;
 	const rim = centre - 1;
@@ -86,45 +88,48 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state }) =>
 	const pulseOpacity = useDerivedValue(() =>
 		pulse.get() > 0 && pulse.get() < 1 ? 0.9 * (1 - pulse.get()) : 0,
 	);
+	const bowlOpacity = useDerivedValue(() => 1 - dim.get());
 
 	return (
 		<View style={{ width: size, height: size }} pointerEvents="none">
 			<Canvas style={StyleSheet.absoluteFill}>
-				<Circle cx={centre} cy={centre} r={rim}>
-					<RadialGradient
-						c={vec(centre, centre)}
+				<Group opacity={bowlOpacity}>
+					<Circle cx={centre} cy={centre} r={rim}>
+						<RadialGradient
+							c={vec(centre, centre)}
+							r={rim}
+							colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0.09)"]}
+							positions={[0.3, 0.8, 1]}
+						/>
+					</Circle>
+					<Circle
+						cx={centre}
+						cy={centre}
 						r={rim}
-						colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0.09)"]}
-						positions={[0.3, 0.8, 1]}
+						color="rgba(255,255,255,0.14)"
+						style="stroke"
+						strokeWidth={1.5}
 					/>
-				</Circle>
-				<Circle
-					cx={centre}
-					cy={centre}
-					r={rim}
-					color="rgba(255,255,255,0.14)"
-					style="stroke"
-					strokeWidth={1.5}
-				/>
-				<Circle cx={centre} cy={centre} r={rim * 0.03} color="rgba(255,255,255,0.35)" />
-				<Circle
-					cx={centre}
-					cy={centre}
-					r={ringRadius}
-					color={color}
-					opacity={ringOpacity}
-					style="stroke"
-					strokeWidth={2.5}
-				/>
-				<Circle
-					cx={centre}
-					cy={centre}
-					r={pulseRadius}
-					color={color}
-					opacity={pulseOpacity}
-					style="stroke"
-					strokeWidth={3}
-				/>
+					<Circle cx={centre} cy={centre} r={rim * 0.03} color="rgba(255,255,255,0.35)" />
+					<Circle
+						cx={centre}
+						cy={centre}
+						r={ringRadius}
+						color={color}
+						opacity={ringOpacity}
+						style="stroke"
+						strokeWidth={2.5}
+					/>
+					<Circle
+						cx={centre}
+						cy={centre}
+						r={pulseRadius}
+						color={color}
+						opacity={pulseOpacity}
+						style="stroke"
+						strokeWidth={3}
+					/>
+				</Group>
 				<Group opacity={glowOpacity}>
 					<Circle c={position} r={glowRadius} color={color}>
 						<BlurMask blur={dot * 0.6} style="normal" />
