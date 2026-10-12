@@ -1,25 +1,20 @@
 import { useEffect } from "react";
 import { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import type { GameSession } from "../../application/GameSession";
 import type { GameStore } from "../../application/GameStore";
-import { quietsKiosk, type SettleFrom } from "../overlays/settleFrom";
 
 /**
- * While the settle bowl is open over the title (`settleFrom`), the kiosk stops and its stage fades out, so only the settle bowl moves; back
- * on the title it fades in and runs on from where it stopped. A game started from the bowl
- * starts its own clock under the flood and shows at once. Returns the stage's fade style.
+ * While `quiet`, the kiosk stops and its stage fades out, so only the settle bowl over it
+ * moves; back on the title it fades in and runs on from where it stopped. A game started from
+ * the bowl starts its own clock under the flood and shows at once. Returns the stage's fade
+ * style.
  */
-export function useQuietKiosk(
-	settleFrom: SettleFrom | null,
-	store: GameStore,
-	stopClock: () => void,
-	startClock: () => void,
-) {
+export function useQuietKiosk(quiet: boolean, store: GameStore, session: GameSession) {
 	const opacity = useSharedValue(1);
-	const quiet = settleFrom !== null && quietsKiosk(settleFrom);
 
 	useEffect(() => {
 		if (!quiet) return;
-		stopClock();
+		session.halt();
 		opacity.set(withTiming(0, { duration: 300 }));
 		return () => {
 			if (store.getState().frame.phase !== "KIOSK") {
@@ -27,9 +22,9 @@ export function useQuietKiosk(
 				return;
 			}
 			opacity.set(withTiming(1, { duration: 400 }));
-			startClock();
+			session.run();
 		};
-	}, [quiet, store, stopClock, startClock, opacity]);
+	}, [quiet, store, session, opacity]);
 
 	return useAnimatedStyle(() => ({ opacity: opacity.get() }));
 }

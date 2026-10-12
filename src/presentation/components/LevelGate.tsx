@@ -18,8 +18,11 @@ interface LevelGateProps {
 	onTap: () => void;
 	/** Fired when the gate moves between "tip out" and "bring back" (for captions) */
 	onPhaseChange?: (phase: LevelGatePhase) => void;
+	/** The bubble moves this many times its usual distance per tilt, like the player dot */
+	sensitivity?: number;
 }
 
+/** Pixels the bubble moves per radian of tilt at the default sensitivity */
 const BUBBLE_GAIN = 150;
 
 /**
@@ -33,8 +36,10 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	onLevelHeld,
 	onTap,
 	onPhaseChange,
+	sensitivity = 1,
 }) => {
 	const tilt = useTilt();
+	const gain = BUBBLE_GAIN * sensitivity;
 	const centre = size / 2;
 	// Inset by half the progress arc's stroke so it isn't clipped
 	const rim = centre - 2;
@@ -43,7 +48,7 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	const travel = rim - bubble - 2;
 
 	// Bubble centre crossing the inner circle counts as leaving it
-	const leaveRad = target / BUBBLE_GAIN;
+	const leaveRad = target / gain;
 
 	const gate = useSharedValue(INITIAL_LEVEL_GATE);
 	const progress = useDerivedValue(() => gate.get().progress);
@@ -65,8 +70,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	});
 
 	const bubblePos = useDerivedValue(() => {
-		let x = tilt.x.get() * BUBBLE_GAIN;
-		let y = tilt.y.get() * BUBBLE_GAIN;
+		let x = tilt.x.get() * gain;
+		let y = tilt.y.get() * gain;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;

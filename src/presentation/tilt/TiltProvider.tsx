@@ -1,7 +1,8 @@
 import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import type { SensorPort, TiltZero } from "../../domain/types";
+import type { SensorPort } from "../../application/ports";
+import type { TiltZero } from "../../domain/types";
 import { smoothTowards } from "./smoothTilt";
 import { NO_ZERO } from "./tiltZero";
 

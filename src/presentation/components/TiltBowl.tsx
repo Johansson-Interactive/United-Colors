@@ -14,6 +14,8 @@ interface TiltBowlProps {
 	size: number;
 	/** Diameter of the dot that rolls inside (the child) */
 	dotSize: number;
+	/** The dot rolls this many times its usual distance per tilt, like the player dot */
+	sensitivity?: number;
 	children: React.ReactNode;
 }
 
@@ -29,21 +31,22 @@ export function useBowlOffset(): SharedValue<BowlOffset> | null {
 	return use(BowlOffsetContext);
 }
 
-/** Pixels the dot rolls per radian of tilt */
+/** Pixels the dot rolls per radian of tilt at the default sensitivity */
 const ROLL_GAIN = 150;
 
 /**
  * A shallow bowl: whatever sits inside rolls with the device tilt, the same way the player
  * dot moves in the game, so the title screen quietly teaches the controls before play.
  */
-export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, children }) => {
+export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, sensitivity = 1, children }) => {
 	const tilt = useTilt();
+	const gain = ROLL_GAIN * sensitivity;
 	const rim = size / 2;
 	const travel = rim - dotSize / 2 - 6;
 
 	const offset = useDerivedValue((): BowlOffset => {
-		let x = tilt.x.get() * ROLL_GAIN;
-		let y = tilt.y.get() * ROLL_GAIN;
+		let x = tilt.x.get() * gain;
+		let y = tilt.y.get() * gain;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;

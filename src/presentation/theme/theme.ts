@@ -13,7 +13,14 @@ export const TRIO = GAME_COLORS;
 /** Diameter of the big ring shared by the title, level and pause screens */
 export const BOWL_SIZE = 236;
 
+/** Diameter of the setting dots in the screen corners, and how far they sit from the edge */
+export const CORNER_DOT_SIZE = 44;
+export const CORNER_INSET = 20;
+
 const MUTED = "rgba(244,246,251,0.55)";
+
+/** Glyph colour of a setting that is off or not chosen */
+export const DIM = "rgba(244,246,251,0.45)";
 
 /** Small caption style shared by overlays (system font, spaced caps) */
 export const CAPTION = {

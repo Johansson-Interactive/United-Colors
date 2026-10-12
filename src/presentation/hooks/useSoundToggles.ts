@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { GameStore } from "../../application/GameStore";
+import type { StoragePort } from "../../application/ports";
 import { updateSettings } from "../../application/useCases/UpdateSettings";
-import type { StoragePort } from "../../domain/types";
 
 /** Flip the sound effects or the music, and persist the choice */
 export function useSoundToggles(store: GameStore, storage: StoragePort) {

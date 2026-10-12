@@ -1,10 +1,27 @@
-import { Circle, Line, Path, RoundedRect, Skia, vec } from "@shopify/react-native-skia";
+import {
+	Circle,
+	Line,
+	LinearGradient,
+	Path,
+	RoundedRect,
+	Skia,
+	vec,
+} from "@shopify/react-native-skia";
 import type React from "react";
 import { useMemo } from "react";
 import { WHITE } from "../theme/theme";
 import { DotButton, GLOW_PAD, type PressPoint } from "./DotButton";
 
-type Icon = "pause" | "sound-on" | "sound-off" | "level" | "music" | "effects";
+export type Icon =
+	| "pause"
+	| "sound-on"
+	| "sound-off"
+	| "level"
+	| "music"
+	| "effects"
+	| "speed-slow"
+	| "speed-normal"
+	| "speed-fast";
 
 interface IconDotProps {
 	size: number;
@@ -108,6 +125,31 @@ const Effects: React.FC<GlyphProps> = ({ c, r, color }) => (
 	</>
 );
 
+/** `color` with its alpha taken away, for a trail that fades into the background */
+function faded(color: string): Float32Array {
+	const rgba = Skia.Color(color);
+	return Float32Array.from([rgba[0], rgba[1], rgba[2], 0]);
+}
+
+/** A comet: a dot and the trail it leaves, `tail` radii long; a longer trail is a faster dot */
+const Comet: React.FC<GlyphProps & { tail: number }> = ({ c, r, color, tail }) => {
+	const head = vec(c + r * 0.24, c);
+	const end = vec(head.x - r * tail, c);
+	const colors = useMemo(() => [color, faded(color)], [color]);
+	return (
+		<>
+			<Line p1={head} p2={end} strokeWidth={r * 0.13} strokeCap="round">
+				<LinearGradient start={head} end={end} colors={colors} />
+			</Line>
+			<Circle cx={head.x} cy={head.y} r={r * 0.17} color={color} />
+		</>
+	);
+};
+
+const SpeedSlow: React.FC<GlyphProps> = (props) => <Comet {...props} tail={0.3} />;
+const SpeedNormal: React.FC<GlyphProps> = (props) => <Comet {...props} tail={0.55} />;
+const SpeedFast: React.FC<GlyphProps> = (props) => <Comet {...props} tail={0.82} />;
+
 const GLYPHS: Record<Icon, React.FC<GlyphProps>> = {
 	pause: Pause,
 	"sound-on": SoundOn,
@@ -115,6 +157,9 @@ const GLYPHS: Record<Icon, React.FC<GlyphProps>> = {
 	level: Level,
 	music: Music,
 	effects: Effects,
+	"speed-slow": SpeedSlow,
+	"speed-normal": SpeedNormal,
+	"speed-fast": SpeedFast,
 };
 
 /** Secondary controls: a ghost dot carrying a small glyph drawn in Skia */

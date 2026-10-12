@@ -30,6 +30,8 @@ interface KioskOverlayProps {
 	onCalibrate: (color: string) => void;
 	onToggleSound: () => void;
 	onToggleMusic: () => void;
+	/** Tilt sensitivity, so the play dot rolls as fast as the player dot will */
+	sensitivity: number;
 }
 
 const TITLE_COLS = 35; // "UNITED" / "COLORS": 6 glyphs x 5 + 5 gaps
@@ -54,6 +56,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	onCalibrate,
 	onToggleSound,
 	onToggleMusic,
+	sensitivity,
 }) => {
 	const { width } = useWindowDimensions();
 	const tiltAvailable = useTiltAvailable();
@@ -92,7 +95,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 			</View>
 
 			<View style={styles.centre} pointerEvents="box-none">
-				<TiltBowl size={BOWL_SIZE} dotSize={PLAY_SIZE}>
+				<TiltBowl size={BOWL_SIZE} dotSize={PLAY_SIZE} sensitivity={sensitivity}>
 					<DotButton
 						size={PLAY_SIZE}
 						color={playColor}

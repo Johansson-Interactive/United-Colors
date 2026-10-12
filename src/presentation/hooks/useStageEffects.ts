@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	useAnimatedStyle,
 	useSharedValue,
@@ -6,8 +6,8 @@ import {
 	withSequence,
 	withTiming,
 } from "react-native-reanimated";
-import type { GameStore, GameStoreState } from "../../application/GameStore";
-import type { GameEngine } from "../../domain/engine/GameEngine";
+import type { GameStore } from "../../application/GameStore";
+import { onGameEvents } from "../../application/gameEvents";
 import type { GamePhase } from "../../domain/types";
 import { BURST_LIFETIME_MS, type Burst, type BurstInput } from "../effects/Bursts";
 import { INK_LIFT, WHITE } from "../theme/theme";
@@ -18,14 +18,9 @@ const MAX_BURSTS = 8;
 /**
  * Presentation-only reactions to what the game does: the edge wash takes the player's
  * colour, the scene frosts when still, the final hit shakes the stage, and score changes
- * burst where the player is. Reads the store and engine; never writes to them.
+ * burst where the player is. Reads the store; never writes to it.
  */
-export function useStageEffects(
-	store: GameStore,
-	getEngine: () => GameEngine,
-	phase: GamePhase,
-	playerColor: string,
-) {
+export function useStageEffects(store: GameStore, phase: GamePhase, playerColor: string) {
 	const accent = useSharedValue<string>(INK_LIFT);
 	const frost = useSharedValue(0);
 	const shake = useSharedValue(0);
@@ -63,35 +58,38 @@ export function useStageEffects(
 		[burstTimers],
 	);
 
-	// Score pops and rings where things happen; shake on the final hit
-	const handleStoreChange = useEffectEvent((state: GameStoreState, previous: GameStoreState) => {
-		const delta = state.frame.score - previous.frame.score;
-		const player = state.frame.dots.find((d) => d.kind === "player");
-		if (delta > 0 && state.frame.phase === "RUNNING" && player) {
-			const pos = getEngine().getPlayerPosition();
-			addBurst({ kind: "pop", x: pos.x, y: pos.y, text: `+${delta}`, color: player.color });
-			if (delta >= 5) {
-				addBurst({ kind: "ring", x: pos.x, y: pos.y, color: player.color, size: 80 });
-			}
-		}
-		if (state.frame.phase === "GAME_OVER" && previous.frame.phase !== "GAME_OVER") {
-			const pos = getEngine().getPlayerPosition();
-			addBurst({ kind: "ring", x: pos.x, y: pos.y, color: WHITE, size: 90 });
-			shake.set(
-				withSequence(
-					withTiming(-10, { duration: 40 }),
-					withTiming(9, { duration: 50 }),
-					withTiming(-6, { duration: 50 }),
-					withTiming(3, { duration: 50 }),
-					withTiming(0, { duration: 60 }),
-				),
-			);
-		}
-	});
-	// Reads the latest engine getter without resubscribing when it changes
+	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
+	// is at its live position: the frame was published by the very move that scored.
 	useEffect(
-		() => store.subscribe((state, previous) => handleStoreChange(state, previous)),
-		[store],
+		() =>
+			onGameEvents(store, (event, frame) => {
+				const player = frame.dots.find((d) => d.kind === "player");
+				if (!player) return;
+				const { x, y, color } = player;
+				switch (event.type) {
+					case "collect":
+					case "collectPoint":
+						addBurst({ kind: "pop", x, y, text: `+${event.value}`, color });
+						if (event.type === "collectPoint") addBurst({ kind: "ring", x, y, color, size: 80 });
+						return;
+					case "gameOver":
+						addBurst({ kind: "ring", x, y, color: WHITE, size: 90 });
+						shake.set(
+							withSequence(
+								withTiming(-10, { duration: 40 }),
+								withTiming(9, { duration: 50 }),
+								withTiming(-6, { duration: 50 }),
+								withTiming(3, { duration: 50 }),
+								withTiming(0, { duration: 60 }),
+							),
+						);
+						return;
+					case "pointSpawn":
+					case "spit":
+						return;
+				}
+			}),
+		[store, addBurst, shake],
 	);
 
 	const shakeStyle = useAnimatedStyle(() => ({

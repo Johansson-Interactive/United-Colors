@@ -38,7 +38,7 @@ function dot(partial: Partial<DotView>): DotView {
 }
 
 function scene(dots: DotView[], player = { x: 50, y: 60 }): Float32Array {
-	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots };
+	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots, events: [] };
 	return createSceneBuilder()(frame, 0, player);
 }
 
