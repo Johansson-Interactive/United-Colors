@@ -156,7 +156,10 @@ export class GameSession {
 	private draw(alpha: number, dtMs: number): void {
 		const engine = this.getEngine();
 		const frame = this.options.store.getState().frame;
-		const scene = this.buildScene(frame, alpha, engine.getPlayerPosition(), dtMs);
+		const { x, y } = engine.getPlayerPosition();
+		const push = engine.getPlayerPush();
+		const pose = { x, y, pushX: push.x, pushY: push.y };
+		const scene = this.buildScene(frame, alpha, pose, dtMs, this.screen);
 		for (const presenter of this.presenters) presenter(scene);
 	}
 }

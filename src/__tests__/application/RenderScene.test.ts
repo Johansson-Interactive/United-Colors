@@ -25,18 +25,36 @@ import {
 	SCENE_KIND_REJECTED,
 	SCENE_KIND_SMALL,
 	SCENE_MERGE,
+	SCENE_NECK,
 	SCENE_RADIUS,
 	SCENE_STRETCH_X,
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WALL_C,
+	SCENE_WALL_X,
+	SCENE_WALL_Y,
+	SCENE_WALL2_C,
+	SCENE_WALL2_X,
+	SCENE_WALL2_Y,
 	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
 	YOLK_PULL,
 	YOLK_RADIUS,
 } from "../../application/renderScene";
+import {
+	DRIP_NECK,
+	DRIP_STRETCH,
+	launchStretch,
+	PLAYER_NECK,
+	PLAYER_PRESS,
+	PLAYER_PUSH_SPEED,
+	pressDepth,
+	pressedRadius,
+} from "../../application/wall";
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../../domain/constants";
-import type { DotView, GamePhase, RenderFrame } from "../../domain/types";
+import { dripHang, dripOffset, dripRadius } from "../../domain/engine/Drip";
+import type { DotView, GamePhase, RenderFrame, WallContact } from "../../domain/types";
 
 const KIND_NAMES = {
 	[SCENE_KIND_SMALL]: "small",
@@ -61,10 +79,20 @@ function decode(scene: Float32Array) {
 			core: scene[i + SCENE_CORE] < 0 ? undefined : GAME_COLORS[scene[i + SCENE_CORE]],
 			stretch: [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y]],
 			yolk: [scene[i + SCENE_CORE_X], scene[i + SCENE_CORE_Y]],
+			walls: [
+				[scene[i + SCENE_WALL_X], scene[i + SCENE_WALL_Y], scene[i + SCENE_WALL_C]],
+				[scene[i + SCENE_WALL2_X], scene[i + SCENE_WALL2_Y], scene[i + SCENE_WALL2_C]],
+			],
+			neck: scene[i + SCENE_NECK],
 		});
 	}
 	return dots;
 }
+
+const NO_WALLS = [
+	[0, 0, 0],
+	[0, 0, 0],
+];
 
 function buildScene(f: RenderFrame, alpha: number, player: { x: number; y: number }) {
 	return decode(createSceneBuilder()(f, alpha, player));
@@ -131,6 +159,8 @@ describe("buildScene", () => {
 			dent: 0,
 			stretch: [0, 0],
 			yolk: [0, 0],
+			walls: NO_WALLS,
+			neck: 0,
 		});
 	});
 
@@ -405,6 +435,203 @@ describe("buildScene", () => {
 			const scene = buildScene(frame([player, refused(0.2, 0.1)]), 0.5, PLAYER_POS);
 			const depth = rejectPenetration(0.15, 1, 10);
 			expect(scene.find((d) => d.kind === "rejected")?.x).toBeCloseTo(80 - depth);
+		});
+	});
+});
+
+describe("at the walls", () => {
+	const LEFT: WallContact = { nx: 1, ny: 0, x: 0, y: 100 };
+	const BOTTOM: WallContact = { nx: 0, ny: -1, x: 100, y: 800 };
+
+	describe("a drip", () => {
+		/** A drip heading straight out of its wall unless given a heading */
+		const forming = (
+			progress: number,
+			prev = progress,
+			wall = LEFT,
+			heading = { vx: wall.nx, vy: wall.ny },
+		) =>
+			dot({
+				x: 1,
+				y: 100,
+				radius: 1,
+				prevRadius: 1,
+				drip: { wall, progress, prev, radius: 10, heading },
+			});
+
+		it("is drawn where it hangs from its wall at its interpolated size, with a fillet to the wall", () => {
+			const [d] = buildScene(frame([forming(0.4)], "KIOSK"), 0, PLAYER_POS);
+			const grown = 10 * dripRadius(0.4);
+			expect(d.radius).toBeCloseTo(grown);
+			expect(d.x).toBeCloseTo(grown * dripHang(0.4));
+			expect(d.y).toBe(100);
+			expect(d.kind).toBe("small");
+			expect(d.walls).toEqual([
+				[1, 0, 0],
+				[0, 0, 0],
+			]);
+			expect(d.neck).toBeCloseTo(10 * DRIP_NECK);
+			const [below] = buildScene(frame([forming(0.4, 0.4, BOTTOM)], "KIOSK"), 0, PLAYER_POS);
+			expect(below.x).toBe(100);
+			expect(below.y).toBeCloseTo(800 - grown * dripHang(0.4));
+			expect(below.walls[0]).toEqual([0, -1, -800]);
+		});
+
+		it("swells forward and is drawn out along the heading it will shoot off on", () => {
+			const heading = { vx: 0.6, vy: 0.8 };
+			const [d] = buildScene(frame([forming(0.7, 0.7, LEFT, heading)], "KIOSK"), 0, PLAYER_POS);
+			const grown = 10 * dripRadius(0.7);
+			const at = dripOffset(0.7, 1, 0, 0.6, 0.8);
+			expect(d.x).toBeCloseTo(at.x * grown);
+			expect(d.y).toBeCloseTo(100 + at.y * grown);
+			expect(d.y).toBeGreaterThan(100);
+			expect(d.stretch[0]).toBeCloseTo(0.6 * DRIP_STRETCH);
+			expect(d.stretch[1]).toBeCloseTo(0.8 * DRIP_STRETCH);
+			expect(d.walls[0]).toEqual([1, 0, 0]);
+		});
+
+		it("grows between ticks, and holds still when frozen", () => {
+			const [half] = buildScene(frame([forming(0.5, 0.3)], "KIOSK"), 0.5, PLAYER_POS);
+			expect(half.radius).toBeCloseTo(10 * dripRadius(0.4));
+			const [paused] = buildScene(frame([forming(0.5, 0.3)], "PAUSED"), 0.5, PLAYER_POS);
+			expect(paused.radius).toBeCloseTo(10 * dripRadius(0.5));
+		});
+
+		it("is nothing at first", () => {
+			const [d] = buildScene(frame([forming(0)], "KIOSK"), 0, PLAYER_POS);
+			expect(d.radius).toBe(0);
+		});
+	});
+
+	describe("a launched drip", () => {
+		const launched = (progress: number, prev = progress) =>
+			dot({ x: 30, y: 100, vx: 6, vy: 8, launch: { wall: LEFT, progress, prev } });
+
+		it("is drawn out along its heading, still joined to the wall by the fillet", () => {
+			const [d] = buildScene(frame([launched(0.5)], "KIOSK"), 0, PLAYER_POS);
+			expect(d).toMatchObject({ x: 30, y: 100, radius: 10, neck: 10 * DRIP_NECK });
+			expect(d.walls[0]).toEqual([1, 0, 0]);
+			expect(Math.hypot(d.stretch[0], d.stretch[1])).toBeCloseTo(launchStretch(0.5));
+			expect(d.stretch[0] / d.stretch[1]).toBeCloseTo(6 / 8);
+		});
+
+		it("moves on between ticks as the launch eases, and is round again by the end", () => {
+			const [moving] = buildScene(frame([launched(0.5, 0.25)], "KIOSK"), 0.5, PLAYER_POS);
+			expect(moving).toMatchObject({ x: 33, y: 104 });
+			expect(Math.hypot(moving.stretch[0], moving.stretch[1])).toBeCloseTo(launchStretch(0.375));
+			const [done] = buildScene(frame([launched(1)], "KIOSK"), 0, PLAYER_POS);
+			expect(done.stretch).toEqual([0, 0]);
+		});
+
+		it("is drawn out straight off the wall when a frozen frame reports no heading", () => {
+			const still = dot({ x: 30, y: 100, launch: { wall: LEFT, progress: 0.5, prev: 0.5 } });
+			const [d] = buildScene(frame([still], "GAME_OVER"), 0, PLAYER_POS);
+			expect(d.stretch[0]).toBeCloseTo(launchStretch(0.5));
+			expect(d.stretch[1]).toBe(0);
+		});
+	});
+
+	describe("the player pushed into a wall", () => {
+		const SCREEN = { width: 400, height: 800 };
+		const player = dot({ id: "p", kind: "player", radius: 20 });
+		const FLUSH_LEFT = { x: 20, y: 300 };
+		/** Frames of the player at `at` pushing `push` px/s, until the press has settled */
+		function settled(
+			build: ReturnType<typeof createSceneBuilder>,
+			push: { x: number; y: number },
+			at = FLUSH_LEFT,
+		) {
+			let scene: Float32Array = new Float32Array(0);
+			for (let i = 0; i < 60; i++) {
+				scene = build(frame([player]), 0, { ...at, pushX: push.x, pushY: push.y }, 16, SCREEN);
+			}
+			return decode(scene)[0];
+		}
+
+		it("presses into the wall as hard as it pushes, widening and wetting it", () => {
+			const p = settled(createSceneBuilder(), { x: -PLAYER_PUSH_SPEED, y: 0 });
+			const depth = pressDepth(PLAYER_PUSH_SPEED, 20);
+			expect(p.x).toBeCloseTo(20 - depth, 1);
+			expect(p.y).toBe(300);
+			expect(p.radius).toBeCloseTo(pressedRadius(20, depth), 1);
+			expect(p.walls).toEqual([
+				[1, 0, 0],
+				[0, 0, 0],
+			]);
+			expect(p.neck).toBeCloseTo(20 * PLAYER_NECK * (depth / (20 * PLAYER_PRESS)), 1);
+			const harder = settled(createSceneBuilder(), { x: -10 * PLAYER_PUSH_SPEED, y: 0 });
+			expect(harder.x).toBeLessThan(p.x);
+			expect(20 - harder.x).toBeLessThanOrEqual(20 * PLAYER_PRESS);
+		});
+
+		it("presses into each wall it is pushed toward, two in a corner", () => {
+			const corner = settled(createSceneBuilder(), { x: 300, y: 300 }, { x: 380, y: 780 });
+			expect(corner.walls).toEqual([
+				[-1, 0, -400],
+				[0, -1, -800],
+			]);
+			expect(corner.x).toBeGreaterThan(380);
+			expect(corner.y).toBeGreaterThan(780);
+			const top = settled(createSceneBuilder(), { x: 0, y: -300 }, { x: 200, y: 20 });
+			expect(top.walls[0]).toEqual([0, 1, 0]);
+			expect(top.y).toBeLessThan(20);
+		});
+
+		it("follows the push with a short lag rather than at once", () => {
+			const build = createSceneBuilder();
+			build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
+			const first = decode(
+				build(frame([player]), 0, { ...FLUSH_LEFT, pushX: -300 }, 16, SCREEN),
+			)[0];
+			expect(first.x).toBeLessThan(20);
+			expect(first.x).toBeGreaterThan(20 - pressDepth(300, 20));
+		});
+
+		it("eases back as the push lets up, and at once by any gap that opens as it pulls away", () => {
+			const build = createSceneBuilder();
+			settled(build, { x: -300, y: 0 });
+			const letUp = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			expect(letUp.x).toBeLessThan(20);
+			expect(letUp.walls[0]).toEqual([1, 0, 0]);
+			for (let i = 0; i < 60; i++) build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
+			const gone = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			expect(gone).toMatchObject({ x: 20, radius: 20, walls: NO_WALLS, neck: 0 });
+
+			settled(build, { x: -300, y: 0 });
+			const depth = pressDepth(300, 20);
+			const pulled = decode(
+				build(frame([player]), 0, { x: 20 + depth / 2, y: 300 }, 16, SCREEN),
+			)[0];
+			expect(20 + depth / 2 - pulled.x).toBeLessThan(depth / 2 + 1e-6);
+			const clear = decode(build(frame([player]), 0, { x: 20 + depth, y: 300 }, 16, SCREEN))[0];
+			expect(clear.x).toBeCloseTo(20 + depth);
+			expect(clear.walls).toEqual(NO_WALLS);
+		});
+
+		it("needs the screen to know where the walls are", () => {
+			const build = createSceneBuilder();
+			let scene: Float32Array = new Float32Array(0);
+			for (let i = 0; i < 60; i++) {
+				scene = build(frame([player]), 0, { ...FLUSH_LEFT, pushX: -300, pushY: 0 }, 16);
+			}
+			expect(decode(scene)[0]).toMatchObject({ x: 20, walls: NO_WALLS, neck: 0 });
+		});
+
+		it("holds the press while frozen", () => {
+			const build = createSceneBuilder();
+			const pressed = settled(build, { x: -300, y: 0 });
+			const paused = decode(build(frame([player], "PAUSED"), 0, FLUSH_LEFT, 0, SCREEN))[0];
+			expect(paused.x).toBeCloseTo(pressed.x);
+			expect(paused.walls).toEqual(pressed.walls);
+		});
+
+		it("keeps its slosh on its own path, not the press", () => {
+			// Pressed in and out again, the jelly saw no motion: the drop stays round
+			const build = createSceneBuilder();
+			settled(build, { x: -300, y: 0 });
+			for (let i = 0; i < 60; i++) build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
+			const p = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			expect(p.stretch).toEqual([0, 0]);
 		});
 	});
 });

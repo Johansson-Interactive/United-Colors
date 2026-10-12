@@ -1,7 +1,13 @@
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { ClockFactory } from "../../application/ports";
-import { SCENE_STRIDE } from "../../application/renderScene";
+import {
+	SCENE_NECK,
+	SCENE_RADIUS,
+	SCENE_STRIDE,
+	SCENE_WALL_X,
+	SCENE_X,
+} from "../../application/renderScene";
 import { GAME_COLORS } from "../../domain/constants";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -207,6 +213,19 @@ describe("GameSession", () => {
 		const p = player();
 		expect(p && p.x + p.radius).toBeLessThanOrEqual(100);
 		expect(p && p.y + p.radius).toBeLessThanOrEqual(100);
+	});
+
+	it("the player pushed into a wall is drawn pressed into it", () => {
+		const { session, clock, scenes } = setup();
+		session.startKiosk();
+		session.start(GAME_COLORS[0]);
+		session.feedTilt({ x: -1, y: 0, facingDown: false });
+		for (let i = 0; i < 120; i++) clock.frame(16, 0);
+		const scene = scenes[scenes.length - 1];
+		const player = scene.length - SCENE_STRIDE;
+		expect(scene[player + SCENE_WALL_X]).toBe(1);
+		expect(scene[player + SCENE_X]).toBeLessThan(scene[player + SCENE_RADIUS]);
+		expect(scene[player + SCENE_NECK]).toBeGreaterThan(0);
 	});
 
 	it("presenting can be undone", () => {
