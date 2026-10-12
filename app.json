@@ -47,6 +47,7 @@
 			],
 			"expo-asset",
 			"./plugins/withDevLauncherStripPhaseAlwaysRuns.js",
+			"./plugins/withDevDisplayName.js",
 			[
 				"expo-splash-screen",
 				{
