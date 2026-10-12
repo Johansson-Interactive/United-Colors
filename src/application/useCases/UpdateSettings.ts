@@ -1,5 +1,6 @@
-import type { GameSettings, StoragePort } from "../../domain/types";
+import type { GameSettings } from "../../domain/types";
 import type { GameStore } from "../GameStore";
+import type { StoragePort } from "../ports";
 
 export async function updateSettings(
 	settings: GameSettings,

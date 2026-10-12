@@ -9,9 +9,9 @@ export class PlayerDot extends Dot {
 	private tiltX = 0;
 	private tiltY = 0;
 
-	/** `speed` in px/s per radian of tilt, stored as `velocity` */
+	/** `speed` in px/s per radian of tilt, stored as `velocity`; there is one player, "player" */
 	constructor(x: number, y: number, color: string, size: number, speed: number) {
-		super(x, y, 0, 0, color, size, speed);
+		super("player", x, y, 0, 0, color, size, speed, "player");
 	}
 
 	/** Called when new sensor data arrives (gyro tilt in radians) */

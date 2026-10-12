@@ -3,11 +3,13 @@ import {
 	PLAYER_DOT_SIZE_RATIO,
 	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_VALUE,
+	REJECT_SPIT_AT,
+	TILT_SENSITIVITY_MAX,
+	TILT_SENSITIVITY_MIN,
 } from "../constants";
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
-import { PointDot } from "../entities/PointDot";
-import type { AudioPort, DotView, RenderFrame, ScreenSize, TiltZero } from "../types";
+import type { DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
 import { circlesOverlap } from "./Collision";
 import { SpawnSystem } from "./SpawnSystem";
 import { StateMachine } from "./StateMachine";
@@ -17,13 +19,12 @@ const DEG_TO_RAD = Math.PI / 180;
 export interface GameEngineOptions {
 	density: number;
 	screen: ScreenSize;
-	audio?: AudioPort;
 	random?: () => number;
 }
 
 /**
- * Core game engine. Drives the simulation each tick.
- * Pure logic -- no React/Expo imports.
+ * Core game engine. Drives the simulation each tick and reports what happened as events on
+ * the next frame. Pure logic -- no React/Expo imports.
  */
 export class GameEngine {
 	readonly stateMachine: StateMachine;
@@ -34,9 +35,10 @@ export class GameEngine {
 	private timeStep = 0;
 	private density: number;
 	private screen: ScreenSize;
-	private audio?: AudioPort;
 	private random: () => number;
-	/** Player speed in px/s per radian of tilt */
+	/** What happened since the last frame was taken */
+	private events: GameEvent[] = [];
+	/** Player speed in px/s per radian of tilt, at the current sensitivity */
 	private playerSpeed: number;
 	/** Set when a dot may have become removable since the last removal pass */
 	private hasFlaggedDots = false;
@@ -50,7 +52,6 @@ export class GameEngine {
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
 		this.screen = options.screen;
-		this.audio = options.audio;
 		this.random = options.random ?? Math.random;
 		this.playerSpeed = PLAYER_SPEED_PER_DEGREE / DEG_TO_RAD;
 		this.stateMachine = new StateMachine("KIOSK");
@@ -70,6 +71,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.rejected = null;
+		this.events = [];
 		this.spawnSystem.reset();
 		this.initPlayer(color);
 		this.dots.push(this.player);
@@ -82,6 +84,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.rejected = null;
+		this.events = [];
 		this.spawnSystem.reset();
 		this.initPlayer();
 	}
@@ -112,6 +115,16 @@ export class GameEngine {
 	/** Player speed in px/s per degree of tilt */
 	getPlayerSpeedPerDegree(): number {
 		return this.playerSpeed * DEG_TO_RAD;
+	}
+
+	/**
+	 * Move the player this many times the default speed for a given tilt, from now on and for
+	 * the games that follow; kept within TILT_SENSITIVITY_MIN..MAX
+	 */
+	setSensitivity(multiplier: number): void {
+		const clamped = Math.min(TILT_SENSITIVITY_MAX, Math.max(TILT_SENSITIVITY_MIN, multiplier));
+		this.playerSpeed = (PLAYER_SPEED_PER_DEGREE / DEG_TO_RAD) * clamped;
+		this.player.velocity = this.playerSpeed;
 	}
 
 	/**
@@ -180,7 +193,7 @@ export class GameEngine {
 			);
 			if (newPoint) {
 				this.dots.push(newPoint);
-				this.audio?.playPointSpawn();
+				this.events.push({ type: "pointSpawn" });
 			}
 		}
 
@@ -197,8 +210,7 @@ export class GameEngine {
 
 		// Bounce small dots off screen edges
 		for (const dot of this.dots) {
-			if (dot instanceof PlayerDot || dot instanceof PointDot) continue;
-			this.bounceOffEdges(dot);
+			if (dot.kind === "small") this.bounceOffEdges(dot);
 		}
 
 		// Check collisions (skip in kiosk)
@@ -209,16 +221,14 @@ export class GameEngine {
 		this.removeFlaggedDots();
 	}
 
-	/** Produce a RenderFrame for the presentation layer */
+	/** Produce a RenderFrame for the presentation layer; the events since the last one go with it */
 	getFrame(): RenderFrame {
 		// Skip dots that finished merging between ticks; they are removed at the next tick
 		const dots: DotView[] = [];
 		for (const dot of this.dots) {
 			if (dot.isFlaggedForRemoval) continue;
-			const kind =
-				dot instanceof PlayerDot ? "player" : dot instanceof PointDot ? "point" : "small";
 			const moves =
-				kind !== "player" &&
+				dot.kind !== "player" &&
 				!dot.isAbsorbing &&
 				this.stateMachine.phase !== "REJECTING" &&
 				this.stateMachine.phase !== "GAME_OVER";
@@ -229,7 +239,7 @@ export class GameEngine {
 				radius: dot.size / 2,
 				prevRadius: dot.prevSize / 2,
 				color: dot.color,
-				kind,
+				kind: dot.kind,
 				// Matches Dot.update; 0 for the player (moved per frame) and stationary point dots
 				vx: moves ? dot.vx * dot.velocity : 0,
 				vy: moves ? dot.vy * dot.velocity : 0,
@@ -240,10 +250,13 @@ export class GameEngine {
 			});
 		}
 
+		const events = this.events;
+		this.events = [];
 		return {
 			phase: this.stateMachine.phase,
 			score: this.score,
 			dots,
+			events,
 		};
 	}
 
@@ -280,7 +293,8 @@ export class GameEngine {
 	/**
 	 * One tick of the player refusing a wrong-colour dot: the scene is frozen (nothing spawns,
 	 * moves, pulses or collides), dots already merging finish flowing in, and the refused
-	 * dot's progress runs to 1, at which point the game is over
+	 * dot's progress runs to 1, at which point the game is over. The spit is reported on the
+	 * tick the progress crosses REJECT_SPIT_AT.
 	 */
 	private tickRejecting(): void {
 		this.removeFlaggedDots();
@@ -294,8 +308,12 @@ export class GameEngine {
 			dot.update(this.timeStep);
 			if (dot.isFlaggedForRemoval) this.hasFlaggedDots = true;
 		}
-		if (this.rejected === null || this.rejected.reject >= 1) {
-			this.stateMachine.transition("GAME_OVER");
+		const rejected = this.rejected;
+		if (rejected && rejected.prevReject < REJECT_SPIT_AT && rejected.reject >= REJECT_SPIT_AT) {
+			this.events.push({ type: "spit" });
+		}
+		if (rejected === null || rejected.reject >= 1) {
+			if (this.stateMachine.transition("GAME_OVER")) this.events.push({ type: "gameOver" });
 		}
 		this.removeFlaggedDots();
 	}
@@ -322,15 +340,15 @@ export class GameEngine {
 			const y = dot.y + dot.vy * dot.velocity * alpha;
 			if (!circlesOverlap(player.x, player.y, player.size, x, y, dot.size)) continue;
 
-			if (dot instanceof PointDot) {
+			if (dot.kind === "point") {
 				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
 				dot.startAbsorb();
-				this.audio?.playLargeCollect();
+				this.events.push({ type: "collectPoint", value: POINT_DOT_VALUE });
 			} else if (dot.color === this.player.color) {
 				this.score += 1;
 				dot.startAbsorb();
-				this.audio?.playCollect();
+				this.events.push({ type: "collect", value: 1 });
 			} else {
 				// Wrong colour: the player refuses the dot, then the game is over
 				dot.startReject();

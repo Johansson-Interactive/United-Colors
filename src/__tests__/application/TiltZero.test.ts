@@ -1,8 +1,9 @@
 import { createGameStore } from "../../application/GameStore";
+import type { StoragePort } from "../../application/ports";
 import { bindTiltZero } from "../../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../../application/useCases/CalibrateTilt";
 import { loadSettings } from "../../application/useCases/LoadSettings";
-import type { GameSettings, StoragePort, TiltZero } from "../../domain/types";
+import type { GameSettings, TiltZero } from "../../domain/types";
 
 function memoryStorage(initial: GameSettings): StoragePort {
 	let settings = initial;
@@ -19,6 +20,7 @@ function memoryStorage(initial: GameSettings): StoragePort {
 const UNSET: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
+	tiltSensitivity: 1,
 	tiltZero: null,
 	tiltZeroDown: null,
 };
@@ -32,6 +34,7 @@ describe("tilt zero", () => {
 		expect(store.getState().settings).toEqual({
 			soundEnabled: false,
 			musicEnabled: true,
+			tiltSensitivity: 1,
 			tiltZero: { x: 0.5, y: -0.3 },
 			tiltZeroDown: null,
 		});

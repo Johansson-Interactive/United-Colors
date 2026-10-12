@@ -1,13 +1,13 @@
 import {
 	REJECT_PRESS_DEPTH,
 	REJECT_PRESS_END,
-	REJECT_SPIT_AT,
 	REJECT_SPIT_GAP,
 	rejectPenetration,
 	rejectPress,
 	rejectPush,
 	rejectRecoil,
 } from "../../application/rejection";
+import { REJECT_SPIT_AT } from "../../domain/constants";
 
 const samples = Array.from({ length: 101 }, (_, i) => i / 100);
 

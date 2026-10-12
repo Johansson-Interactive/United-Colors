@@ -12,6 +12,17 @@ export const GAME_HERTZ = 30.0;
 export const SMALL_DOT_SPEED_RATIO = 0.02;
 export const SMALL_DOT_SIZE_RATIO = 0.0625;
 export const SMALL_DOT_CREATE_INTERVAL = 120;
+/**
+ * A small dot leaves its edge on the inward diagonal, 45 degrees from the edge, give or take
+ * this much (degrees) at the middle of the edge: never straight across the screen, which
+ * would only bounce back and forth, and never along its edge
+ */
+export const SMALL_DOT_HEADING_SPREAD = 20;
+/**
+ * Next to a corner the spread narrows to this much and the dot heads away from the corner,
+ * so none sets off into the wall beside it
+ */
+export const SMALL_DOT_HEADING_SPREAD_AT_CORNER = 8;
 
 /** Point dot rules */
 export const POINT_DOT_SIZE_RATIO = 0.125;
@@ -24,8 +35,15 @@ export const POINT_DOT_PULSE_SPEED = 12;
 /** Player dot rules */
 export const PLAYER_DOT_SIZE_RATIO = 0.125;
 
-/** Player speed in px/s per degree of tilt. Speed follows tilt linearly with no threshold. */
+/**
+ * Player speed in px/s per degree of tilt at the default sensitivity. Speed follows tilt
+ * linearly with no threshold.
+ */
 export const PLAYER_SPEED_PER_DEGREE = 40;
+
+/** The range the tilt sensitivity (a multiple of the default speed) is kept within */
+export const TILT_SENSITIVITY_MIN = 0.25;
+export const TILT_SENSITIVITY_MAX = 4;
 
 /** Difficulty ramp -- spawn interval reaches minimum at this step count */
 export const MAX_TIME_DIFFICULTY = 7200;
@@ -57,6 +75,13 @@ export const ABSORB_MERGE_FRACTION = 0.5;
  */
 export const REJECT_TICKS = 15;
 
+/**
+ * How far through the refusal (0..1) the player springs back and spits the dot out. The
+ * presentation draws the press before it and the push after it; the haptic fires as it is
+ * crossed.
+ */
+export const REJECT_SPIT_AT = 0.5;
+
 /** Point-dot pulse contracts to this fraction of full size */
 export const POINT_DOT_PULSE_SCALE = 0.85;
 
@@ -64,6 +89,7 @@ export const POINT_DOT_PULSE_SCALE = 0.85;
 export const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
+	tiltSensitivity: 1,
 	tiltZero: null,
 	tiltZeroDown: null,
 };

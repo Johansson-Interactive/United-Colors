@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DEFAULT_SETTINGS } from "../domain/constants";
-import type { GameSettings, StoragePort, TiltZero } from "../domain/types";
+import type { StoragePort } from "../application/ports";
+import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
+import type { GameSettings, TiltZero } from "../domain/types";
 
 const KEYS = {
 	highScore: "@united_colors/high_score",
@@ -13,6 +14,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+/** A sensitivity is a number within the range the game allows; anything else reads as default */
+function readSensitivity(value: unknown): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SETTINGS.tiltSensitivity;
+	if (value < TILT_SENSITIVITY_MIN || value > TILT_SENSITIVITY_MAX) {
+		return DEFAULT_SETTINGS.tiltSensitivity;
+	}
+	return value;
 }
 
 /** A pose is two finite radians; anything else (corrupt, hand-edited, old shape) reads as unset */
@@ -36,6 +46,7 @@ function sanitizeSettings(stored: unknown): GameSettings {
 	return {
 		soundEnabled,
 		musicEnabled,
+		tiltSensitivity: readSensitivity(stored.tiltSensitivity),
 		tiltZero: readTiltZero(stored.tiltZero),
 		tiltZeroDown: readTiltZero(stored.tiltZeroDown),
 	};

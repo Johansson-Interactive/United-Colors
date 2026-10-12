@@ -1,11 +1,11 @@
 import type { GamePhase } from "../../domain/types";
-import type { GameAudio, MusicCue } from "../GameAudio";
 import type { GameStore } from "../GameStore";
+import type { GameAudio, MusicCue } from "../ports";
 
 /**
  * Music per phase. The menu loop is calmer and quieter than play; pausing ducks the game
- * loop instead of stopping it; refusing a wrong dot dips it as the game ends; game over plays
- * a stinger while the menu loop fades back in.
+ * loop instead of stopping it; refusing a wrong dot dips it as the game ends; at game over
+ * the menu loop fades back in (under the stinger, see bindSoundEffects).
  */
 export const MUSIC_CUES: Record<GamePhase, MusicCue> = {
 	KIOSK: { track: "menu", volume: 0.5 },
@@ -21,7 +21,6 @@ export function bindMusic(store: GameStore, audio: GameAudio): () => void {
 	return store.subscribe((state, previous) => {
 		const phase = state.frame.phase;
 		if (phase === previous.frame.phase) return;
-		if (phase === "GAME_OVER") audio.playGameOver();
 		audio.setMusic(MUSIC_CUES[phase]);
 	});
 }

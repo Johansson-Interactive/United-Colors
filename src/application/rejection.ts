@@ -10,10 +10,10 @@
  * has filled back in and the recoil has run out.
  */
 
-/** The dot has sunk in as far as it goes by here */
+import { REJECT_SPIT_AT } from "../domain/constants";
+
+/** The dot has sunk in as far as it goes by here (the spit begins at REJECT_SPIT_AT) */
 export const REJECT_PRESS_END = 0.3;
-/** The player springs back and pushes the dot out from here; the haptic fires as it is crossed */
-export const REJECT_SPIT_AT = 0.5;
 /** How far the press swings while the player quivers, as a fraction of the full press */
 const REJECT_QUIVER = 0.08;
 /** Whole quivers during the hold */

@@ -15,6 +15,7 @@ const DEFAULT_FRAME: RenderFrame = {
 	phase: "KIOSK",
 	score: 0,
 	dots: [],
+	events: [],
 };
 
 export function createGameStore() {

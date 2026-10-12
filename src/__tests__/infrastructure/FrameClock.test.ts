@@ -156,4 +156,17 @@ describe("FrameClock", () => {
 		frames.renderAt(5000 + STEP_MS + 0.1);
 		expect(onTick).toHaveBeenCalledTimes(3);
 	});
+
+	it("a stop from inside a tick asks for no further frame", () => {
+		const onTick = vi.fn(() => clock.stop());
+		const onFrame = vi.fn();
+		const clock = new FrameClock(onTick, onFrame);
+		frames.renderAt(0);
+		clock.start();
+		frames.renderAt(STEP_MS + 0.1);
+		expect(onTick).toHaveBeenCalledTimes(1);
+		// The frame after the final tick is still drawn, then nothing more is asked for
+		expect(onFrame).toHaveBeenCalledTimes(2);
+		expect(frames.hasPending).toBe(false);
+	});
 });

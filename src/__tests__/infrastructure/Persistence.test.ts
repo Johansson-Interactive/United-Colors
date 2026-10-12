@@ -1,5 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DEFAULT_SETTINGS } from "../../domain/constants";
+import {
+	DEFAULT_SETTINGS,
+	TILT_SENSITIVITY_MAX,
+	TILT_SENSITIVITY_MIN,
+} from "../../domain/constants";
 import type { GameSettings } from "../../domain/types";
 import { AsyncStorageRepository } from "../../infrastructure/AsyncStorageRepository";
 
@@ -44,6 +48,7 @@ describe("Persistence roundtrip", () => {
 		const saved: GameSettings = {
 			soundEnabled: false,
 			musicEnabled: true,
+			tiltSensitivity: 1,
 			tiltZero: { x: 0.25, y: -0.5 },
 			tiltZeroDown: null,
 		};
@@ -68,6 +73,7 @@ describe("Persistence roundtrip", () => {
 		await repo.saveSettings({
 			soundEnabled: false,
 			musicEnabled: true,
+			tiltSensitivity: 1,
 			tiltZero: null,
 			tiltZeroDown: null,
 		});
@@ -106,8 +112,25 @@ describe("Persisted settings are validated before use", () => {
 
 	it("drops unknown keys instead of carrying them into the settings", async () => {
 		const settings = await loadStored({ ...DEFAULT_SETTINGS, gyroSensitivity: 1.5, theme: "dark" });
+		expect(settings.tiltSensitivity).toBe(DEFAULT_SETTINGS.tiltSensitivity);
 		expect(settings).toEqual(DEFAULT_SETTINGS);
 		expect(Object.keys(settings).sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort());
+	});
+
+	it("keeps a tilt sensitivity within range and defaults one that is not", async () => {
+		expect((await loadStored({ ...DEFAULT_SETTINGS, tiltSensitivity: 1.5 })).tiltSensitivity).toBe(
+			1.5,
+		);
+		expect(
+			(await loadStored({ ...DEFAULT_SETTINGS, tiltSensitivity: TILT_SENSITIVITY_MIN }))
+				.tiltSensitivity,
+		).toBe(TILT_SENSITIVITY_MIN);
+		for (const bad of [0, -1, TILT_SENSITIVITY_MAX * 2, "fast", null, Number.NaN]) {
+			expect(
+				(await loadStored({ ...DEFAULT_SETTINGS, tiltSensitivity: bad })).tiltSensitivity,
+			).toBe(1);
+		}
+		expect((await loadStored({ soundEnabled: true })).tiltSensitivity).toBe(1);
 	});
 
 	it("falls back to the default for a switch that is not a boolean", async () => {

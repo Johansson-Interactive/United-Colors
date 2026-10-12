@@ -3,21 +3,16 @@ import {
 	POINT_DOT_FADE_TIME,
 	POINT_DOT_SIZE_ANIMATION_TIME,
 } from "../../domain/constants";
-import { resetDotIdCounter } from "../../domain/entities/Dot";
 import { PointDot } from "../../domain/entities/PointDot";
 
 describe("PointDot", () => {
-	beforeEach(() => {
-		resetDotIdCounter();
-	});
-
 	it("starts with size 0 (zoom-in animation)", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		expect(pd.size).toBe(0);
 	});
 
 	it("zoom-in reaches target size after animation time", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME; t++) {
 			pd.update(t);
 		}
@@ -25,7 +20,7 @@ describe("PointDot", () => {
 	});
 
 	it("starts pulsing after zoom-in completes", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		// Complete zoom-in
 		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME + 1; t++) {
 			pd.update(t);
@@ -39,7 +34,7 @@ describe("PointDot", () => {
 	});
 
 	it("flags for removal after POINT_DOT_FADE_TIME", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		for (let t = 1; t < POINT_DOT_FADE_TIME; t++) {
 			pd.update(t);
 		}
@@ -52,7 +47,7 @@ describe("PointDot", () => {
 	});
 
 	it("becomes removable after zoom-out completes", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		// Trigger fade by advancing past POINT_DOT_FADE_TIME
 		for (let t = 1; t <= POINT_DOT_FADE_TIME; t++) {
 			pd.update(t);
@@ -70,7 +65,7 @@ describe("PointDot", () => {
 	});
 
 	it("once caught it stops pulsing and merges into the player before it is removable", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME + 3; t++) pd.update(t);
 		const sizeWhenCaught = pd.size;
 		pd.startAbsorb();
@@ -89,7 +84,7 @@ describe("PointDot", () => {
 	});
 
 	it("does not fade out on its timeout while merging", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		for (let t = 1; t <= POINT_DOT_SIZE_ANIMATION_TIME; t++) pd.update(t);
 		expect(pd.size).toBe(50);
 		pd.startAbsorb();
@@ -99,7 +94,7 @@ describe("PointDot", () => {
 	});
 
 	it("has correct value", () => {
-		const pd = new PointDot(0, 100, 200, "#E91E63", 50, 5);
+		const pd = new PointDot("p", 0, 100, 200, "#E91E63", 50, 5);
 		expect(pd.value).toBe(5);
 	});
 });

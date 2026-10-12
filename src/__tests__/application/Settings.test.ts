@@ -1,8 +1,10 @@
 import { createGameStore } from "../../application/GameStore";
+import type { StoragePort } from "../../application/ports";
+import { bindSensitivity } from "../../application/useCases/BindSensitivity";
 import { loadHighScore } from "../../application/useCases/LoadHighScore";
 import { loadSettings } from "../../application/useCases/LoadSettings";
 import { updateSettings } from "../../application/useCases/UpdateSettings";
-import type { GameSettings, StoragePort } from "../../domain/types";
+import type { GameSettings } from "../../domain/types";
 
 function memoryStorage(initial: GameSettings, highScore = 0): StoragePort {
 	let settings = initial;
@@ -24,6 +26,7 @@ describe("settings use cases", () => {
 			memoryStorage({
 				soundEnabled: false,
 				musicEnabled: true,
+				tiltSensitivity: 1,
 				tiltZero: null,
 				tiltZeroDown: null,
 			}),
@@ -35,6 +38,7 @@ describe("settings use cases", () => {
 		const storage = memoryStorage({
 			soundEnabled: true,
 			musicEnabled: true,
+			tiltSensitivity: 1,
 			tiltZero: null,
 			tiltZeroDown: null,
 		});
@@ -42,6 +46,7 @@ describe("settings use cases", () => {
 			{
 				soundEnabled: false,
 				musicEnabled: true,
+				tiltSensitivity: 1,
 				tiltZero: null,
 				tiltZeroDown: null,
 			},
@@ -53,6 +58,23 @@ describe("settings use cases", () => {
 		expect(store.getState().settings.soundEnabled).toBe(false);
 	});
 
+	it("bindSensitivity applies the current sensitivity at once and again when it changes", async () => {
+		const store = createGameStore();
+		const seen: number[] = [];
+		const unbind = bindSensitivity(store, (value) => seen.push(value));
+		expect(seen).toEqual([1]);
+		store.getState().updateSettings({ soundEnabled: false });
+		await updateSettings(
+			{ ...store.getState().settings, tiltSensitivity: 1.5 },
+			store,
+			memoryStorage(store.getState().settings),
+		);
+		expect(seen).toEqual([1, 1.5]);
+		unbind();
+		store.getState().updateSettings({ tiltSensitivity: 0.65 });
+		expect(seen).toEqual([1, 1.5]);
+	});
+
 	it("loadHighScore restores the persisted best into the store", async () => {
 		const store = createGameStore();
 		await loadHighScore(
@@ -61,6 +83,7 @@ describe("settings use cases", () => {
 				{
 					soundEnabled: true,
 					musicEnabled: true,
+					tiltSensitivity: 1,
 					tiltZero: null,
 					tiltZeroDown: null,
 				},

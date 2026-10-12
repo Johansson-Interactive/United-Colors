@@ -1,5 +1,5 @@
-import type { GameAudio } from "../GameAudio";
 import type { GameStore } from "../GameStore";
+import type { GameAudio } from "../ports";
 
 /** Keep effect and music muting in step with their settings; returns the unsubscribe */
 export function bindSoundSetting(store: GameStore, audio: GameAudio): () => void {

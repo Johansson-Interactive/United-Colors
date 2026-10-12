@@ -15,6 +15,7 @@ import { PointDot } from "../entities/PointDot";
 import type { ScreenSize } from "../types";
 import { circlesOverlap } from "./Collision";
 import { ColorPicker } from "./ColorPicker";
+import { edgeHeading } from "./Heading";
 
 /** Upper bound on random re-rolls when placing a point dot away from the player */
 const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
@@ -26,6 +27,8 @@ const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
  * Replicates legacy GameManager spawn logic.
  */
 export class SpawnSystem {
+	/** Ids run from 0 in each game, so the same seed spawns the same dots */
+	private nextId = 0;
 	private dotCreateStep = 0;
 	private pointStep = 0;
 	private pointDot: PointDot | null = null;
@@ -40,6 +43,7 @@ export class SpawnSystem {
 	}
 
 	reset(): void {
+		this.nextId = 0;
 		this.smallDotColors.reset();
 		this.pointDotColors.reset();
 		this.dotCreateStep = 0;
@@ -132,66 +136,51 @@ export class SpawnSystem {
 		return null;
 	}
 
+	/**
+	 * A small dot on a random edge, placed as the legacy did, heading inward on a diagonal
+	 * (see edgeHeading)
+	 */
 	private createRandomDot(screen: ScreenSize, density: number): Dot {
 		const size = SMALL_DOT_SIZE_RATIO * density;
 		const maxX = screen.width - size;
 		const maxY = screen.height - size;
-		const halfY = maxY / 2 + size / 2;
-		const halfX = maxX / 2 + size / 2;
+
+		// Which edge, how far along it (0..1, from the top or the left), and the heading off it
+		const side = Math.floor(this.random() * 4);
+		const along = this.random();
+		const heading = edgeHeading(along, this.random(), this.random());
 
 		let x = Math.ceil(size / 2);
 		let y = Math.ceil(size / 2);
-		let vx = 1;
-		let vy = 1;
-
-		const side = Math.floor(this.random() * 4);
-
+		let vx: number;
+		let vy: number;
 		switch (side) {
-			case 0: {
-				// Left
-				y = this.random() * maxY + size;
-				const k = y / halfY - 1;
-				vx = Math.abs(k);
-				vy = this.random() - k;
+			case 0: // Left
+				y = along * maxY + size;
+				vx = heading.normal;
+				vy = heading.tangent;
 				break;
-			}
-			case 1: {
-				// Right
+			case 1: // Right
 				x = Math.floor(maxX + size / 2);
-				y = this.random() * maxY + size;
-				const k = y / halfY - 1;
-				vx = -Math.abs(k);
-				vy = this.random() - k;
+				y = along * maxY + size;
+				vx = -heading.normal;
+				vy = heading.tangent;
 				break;
-			}
-			case 2: {
-				// Top
-				x = this.random() * maxX + size;
-				const k = x / halfX - 1;
-				vx = this.random() - k;
-				vy = Math.abs(k);
+			case 2: // Top
+				x = along * maxX + size;
+				vx = heading.tangent;
+				vy = heading.normal;
 				break;
-			}
-			case 3: {
-				// Bottom
-				x = this.random() * maxX + size;
+			default: // Bottom
+				x = along * maxX + size;
 				y = Math.floor(maxY + size / 2);
-				const k = x / halfX - 1;
-				vx = this.random() - k;
-				vy = -Math.abs(k);
+				vx = heading.tangent;
+				vy = -heading.normal;
 				break;
-			}
-		}
-
-		// Normalize direction
-		const len = Math.sqrt(vx * vx + vy * vy);
-		if (len > 0) {
-			vx /= len;
-			vy /= len;
 		}
 
 		const color = this.smallDotColors.next();
-		return new Dot(x, y, vx, vy, color, size, SMALL_DOT_SPEED_RATIO * density);
+		return new Dot(this.newId(), x, y, vx, vy, color, size, SMALL_DOT_SPEED_RATIO * density);
 	}
 
 	private createPointDot(
@@ -212,6 +201,10 @@ export class SpawnSystem {
 			if (!circlesOverlap(player.x, player.y, player.size, x, y, size * 2)) break;
 		}
 
-		return new PointDot(timeStep, x, y, color, size, POINT_DOT_VALUE);
+		return new PointDot(this.newId(), timeStep, x, y, color, size, POINT_DOT_VALUE);
+	}
+
+	private newId(): string {
+		return `dot-${this.nextId++}`;
 	}
 }

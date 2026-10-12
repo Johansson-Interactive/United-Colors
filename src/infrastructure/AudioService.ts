@@ -1,6 +1,6 @@
 import { Asset } from "expo-asset";
 import { type AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio";
-import type { GameAudio, MusicCue, MusicTrack } from "../application/GameAudio";
+import type { GameAudio, MusicCue, MusicTrack } from "../application/ports";
 import { type Loop, MusicChannel } from "./MusicChannel";
 import { SoundEffect } from "./SoundEffect";
 

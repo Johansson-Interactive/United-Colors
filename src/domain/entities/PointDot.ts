@@ -22,8 +22,16 @@ export class PointDot extends Dot {
 	private animTo: number;
 	private pulseDirection: "shrink" | "grow" = "shrink";
 
-	constructor(timeStep: number, x: number, y: number, color: string, size: number, value: number) {
-		super(x, y, 0, 0, color, 0, 0);
+	constructor(
+		id: string,
+		timeStep: number,
+		x: number,
+		y: number,
+		color: string,
+		size: number,
+		value: number,
+	) {
+		super(id, x, y, 0, 0, color, 0, 0, "point");
 		this.value = value;
 		this.createStep = timeStep;
 		this.targetSize = size;

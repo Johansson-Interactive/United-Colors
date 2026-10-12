@@ -1,6 +1,6 @@
 import { DeviceMotion } from "expo-sensors";
 import type { Subscription } from "expo-sensors/build/DeviceSensor";
-import type { SensorPort, SensorSample } from "../domain/types";
+import type { SensorPort, SensorSample } from "../application/ports";
 import { tiltFromRotation } from "./tiltFromRotation";
 
 /**

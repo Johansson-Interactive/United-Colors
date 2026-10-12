@@ -18,19 +18,19 @@ export interface GameSettings {
 	/** Sound effects (catches, spawns, game over) */
 	soundEnabled: boolean;
 	musicEnabled: boolean;
+	/**
+	 * How fast the dot moves for a given tilt, as a multiple of the default speed (1); see
+	 * TILT_SENSITIVITY_MIN / MAX
+	 */
+	tiltSensitivity: number;
 	/** Null until the player has set a level pose */
 	tiltZero: TiltZero | null;
 	/** Level pose with the screen facing down (lying back, phone overhead); null reads flat */
 	tiltZeroDown: TiltZero | null;
 }
 
-/** Raw sensor reading from the device gyroscope */
-export interface SensorSample {
-	x: number;
-	y: number;
-	/** The screen faces the ground; tilt is then measured from flat screen down */
-	facingDown: boolean;
-}
+/** The player's own dot, a small drifting dot, or a point dot to collect */
+export type DotKind = "player" | "small" | "point";
 
 /** Visual representation of a dot for the rendering layer */
 export interface DotView {
@@ -41,7 +41,7 @@ export interface DotView {
 	/** Radius at the previous tick, for render-side interpolation of size animations */
 	prevRadius: number;
 	color: string;
-	kind: "player" | "small" | "point";
+	kind: DotKind;
 	/** Displacement per simulation tick (px), for render-side extrapolation between ticks */
 	vx: number;
 	vy: number;
@@ -60,43 +60,31 @@ export interface DotView {
 	prevReject?: number;
 }
 
+/**
+ * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
+ * once, with the next frame.
+ */
+export type GameEvent =
+	/** A small dot of the player's colour was caught */
+	| { type: "collect"; value: number }
+	/** A point dot was caught and recoloured the player */
+	| { type: "collectPoint"; value: number }
+	| { type: "pointSpawn" }
+	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
+	| { type: "spit" }
+	| { type: "gameOver" };
+
 /** Complete frame data emitted by the engine for the presentation layer */
 export interface RenderFrame {
 	phase: GamePhase;
 	score: number;
 	dots: DotView[];
+	/** What happened since the frame before */
+	events: GameEvent[];
 }
 
 /** Screen dimensions fed back from the presentation layer */
 export interface ScreenSize {
 	width: number;
 	height: number;
-}
-
-/**
- * Port for sensor input -- implemented by infrastructure. One source can feed several listeners;
- * whoever owns it starts and stops it, the others only subscribe.
- */
-export interface SensorPort {
-	start(): void;
-	stop(): void;
-	/** Returns a function that removes this listener */
-	onSample(listener: (sample: SensorSample) => void): () => void;
-}
-
-/** Port for audio playback -- implemented by infrastructure */
-export interface AudioPort {
-	/** A small dot of the player's colour was caught */
-	playCollect(): void;
-	/** A point dot was caught and recoloured the player */
-	playLargeCollect(): void;
-	playPointSpawn(): void;
-}
-
-/** Port for persistent storage -- implemented by infrastructure */
-export interface StoragePort {
-	loadHighScore(): Promise<number>;
-	saveHighScore(score: number): Promise<void>;
-	loadSettings(): Promise<GameSettings>;
-	saveSettings(settings: GameSettings): Promise<void>;
 }

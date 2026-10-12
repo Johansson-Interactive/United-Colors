@@ -6,14 +6,15 @@ import {
 	POINT_DOT_SIZE_ANIMATION_TIME,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
+	REJECT_SPIT_AT,
 	REJECT_TICKS,
+	TILT_SENSITIVITY_MAX,
+	TILT_SENSITIVITY_MIN,
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
-import { resetDotIdCounter } from "../../domain/entities/Dot";
-import type { AudioPort } from "../../domain/types";
+import type { GameEvent } from "../../domain/types";
 
-function createEngine(seed = 0.5, audio?: AudioPort) {
-	resetDotIdCounter();
+function createEngine(seed = 0.5) {
 	let callCount = 0;
 	const seededRandom = () => {
 		// Deterministic pseudo-random using seed
@@ -25,7 +26,16 @@ function createEngine(seed = 0.5, audio?: AudioPort) {
 		density: 100,
 		screen: { width: 400, height: 800 },
 		random: seededRandom,
-		audio,
+	});
+}
+
+/** A large screen, so small dots rarely reach the stationary player */
+function largeScreenEngine() {
+	let n = 0;
+	return new GameEngine({
+		density: 100,
+		screen: { width: 4000, height: 8000 },
+		random: () => ((++n * 9301 + 49297) % 233280) / 233280,
 	});
 }
 
@@ -166,11 +176,10 @@ describe("GameEngine", () => {
 
 	describe("edge bounce", () => {
 		it("a dot spawned overlapping an edge heads back in instead of juddering along it", () => {
-			resetDotIdCounter();
 			const screen = { width: 400, height: 800 };
 			// Player colour (constructor, startKiosk), then a left-edge spawn low enough to
-			// overlap the bottom edge, heading almost straight along it (tiny upward component)
-			const script = [0.5, 0.5, 0, 0.999, 0.99];
+			// overlap the bottom edge, rolled to head toward that corner on the plain diagonal
+			const script = [0.5, 0.5, 0, 0.999, 0.9995, 0.5];
 			const engine = new GameEngine({
 				density: 100,
 				screen,
@@ -218,6 +227,31 @@ describe("GameEngine", () => {
 
 			// Can't assert exact numbers with bouncing/removing, but engine should not crash
 			expect(dots2).toBeGreaterThanOrEqual(0);
+		});
+	});
+
+	describe("events", () => {
+		it("reports a point dot spawning with the frame it first shows in", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			for (let i = 0; i < 1000; i++) {
+				engine.tick();
+				const frame = engine.getFrame();
+				if (frame.dots.some((d) => d.kind === "point")) {
+					expect(frame.events).toEqual([{ type: "pointSpawn" }]);
+					return;
+				}
+				expect(frame.events).toEqual([]);
+			}
+			throw new Error("no point dot spawned");
+		});
+
+		it("a new game or kiosk starts with nothing to report", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			for (let i = 0; i < 1000 && !engine.getFrame().events.length; i++) engine.tick();
+			engine.startKiosk();
+			expect(engine.getFrame().events).toEqual([]);
 		});
 	});
 
@@ -314,6 +348,36 @@ describe("GameEngine", () => {
 			engine.advancePlayer(1000);
 			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE);
 		});
+
+		it("sensitivity multiplies the speed, for the current player and the games after it", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.setSensitivity(1.5);
+			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
+			const degree = Math.PI / 180;
+			let start = engine.getPlayerPosition();
+			engine.onSensorInput(degree, 0);
+			engine.advancePlayer(1000);
+			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
+
+			engine.startGame();
+			start = engine.getPlayerPosition();
+			engine.onSensorInput(-degree, 0);
+			engine.advancePlayer(1000);
+			expect(start.x - engine.getPlayerPosition().x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
+		});
+
+		it("sensitivity is kept within its range", () => {
+			const engine = createEngine();
+			engine.setSensitivity(100);
+			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(
+				PLAYER_SPEED_PER_DEGREE * TILT_SENSITIVITY_MAX,
+			);
+			engine.setSensitivity(0);
+			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(
+				PLAYER_SPEED_PER_DEGREE * TILT_SENSITIVITY_MIN,
+			);
+		});
 	});
 
 	describe("render frame", () => {
@@ -388,8 +452,8 @@ describe("GameEngine", () => {
 	});
 
 	describe("per-frame collisions", () => {
-		function startWithSmallDot(audio?: AudioPort) {
-			const engine = createEngine(0.5, audio);
+		function startWithSmallDot() {
+			const engine = createEngine();
 			engine.startGame();
 			for (let i = 0; i < 2000; i++) {
 				const small = engine.getFrame().dots.find((d) => d.kind === "small");
@@ -443,14 +507,8 @@ describe("GameEngine", () => {
 			expect(engine.getFrame().dots.find((d) => d.id === small.id)).toBeUndefined();
 		});
 
-		it("catching a small dot plays the small collect sound, not the large one", () => {
-			const calls: string[] = [];
-			const audio: AudioPort = {
-				playCollect: () => calls.push("collect"),
-				playLargeCollect: () => calls.push("large"),
-				playPointSpawn: () => {},
-			};
-			const { engine, small } = startWithSmallDot(audio);
+		it("catching a small dot reports a collect worth one, handed over with the next frame only", () => {
+			const { engine, small } = startWithSmallDot();
 			const alpha = 0.5;
 			const player = engine.getPlayerPosition();
 			engine.onMovementDelta(
@@ -459,8 +517,31 @@ describe("GameEngine", () => {
 			);
 			engine.advancePlayer(0, alpha);
 
-			// A wrong-colour small dot is refused instead, which plays no catch sound
-			expect(calls).toEqual(engine.getFrame().phase === "RUNNING" ? ["collect"] : []);
+			const frame = engine.getFrame();
+			// A wrong-colour small dot is refused instead, which reports nothing yet
+			expect(frame.events).toEqual(
+				frame.phase === "RUNNING" ? [{ type: "collect", value: 1 }] : [],
+			);
+			expect(engine.getFrame().events).toEqual([]);
+		});
+
+		it("catching a point dot reports a collect worth POINT_DOT_VALUE", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			const point = () => engine.getFrame().dots.find((d) => d.kind === "point");
+			for (let i = 0; i < 1000 && !point(); i++) engine.tick();
+			// Let it zoom in before catching it
+			for (let i = 0; i < POINT_DOT_SIZE_ANIMATION_TIME; i++) engine.tick();
+			const target = point();
+			expect(target).toBeDefined();
+			if (!target) return;
+			const player = engine.getPlayerPosition();
+			engine.onMovementDelta(target.x - player.x, target.y - player.y);
+			expect(engine.advancePlayer(0, 0)).toBe(true);
+			const frame = engine.getFrame();
+			expect(frame.score).toBe(POINT_DOT_VALUE);
+			expect(frame.events).toEqual([{ type: "collectPoint", value: POINT_DOT_VALUE }]);
+			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(target.color);
 		});
 
 		it("reports no change when nothing is hit", () => {
@@ -508,6 +589,24 @@ describe("GameEngine", () => {
 			expect(frame.phase).toBe("GAME_OVER");
 			// The refused dot stays, fully spat out, for the game over screen
 			expect(frame.dots.find((d) => d.id === wrong.id)?.reject).toBe(1);
+		});
+
+		it("reports the spit as the refusal crosses REJECT_SPIT_AT, and the game over at the end", () => {
+			const { engine } = hitWrongDot();
+			const reported: Array<{ event: GameEvent; reject: number }> = [];
+			for (let t = 1; t <= REJECT_TICKS; t++) {
+				engine.tick();
+				const frame = engine.getFrame();
+				const reject = frame.dots.find((d) => d.reject !== undefined)?.reject ?? -1;
+				for (const event of frame.events) reported.push({ event, reject });
+			}
+			const spits = reported.filter((r) => r.event.type === "spit");
+			expect(spits).toHaveLength(1);
+			expect(spits[0].reject).toBeGreaterThanOrEqual(REJECT_SPIT_AT);
+			expect(spits[0].reject - 1 / REJECT_TICKS).toBeLessThan(REJECT_SPIT_AT);
+			expect(reported.at(-1)?.event).toEqual({ type: "gameOver" });
+			expect(reported.filter((r) => r.event.type === "gameOver")).toHaveLength(1);
+			expect(engine.getFrame().events).toEqual([]);
 		});
 
 		it("freezes the scene and ignores the player while refusing", () => {

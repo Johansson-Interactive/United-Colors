@@ -1,7 +1,5 @@
 import type { GameStore } from "../GameStore";
-
-/** Report whether the app is in the foreground; returns the unsubscribe */
-export type WatchAppActive = (listener: (active: boolean) => void) => () => void;
+import type { WatchAppActive } from "../ports";
 
 /**
  * Pause a running game when the player leaves the app (home, app switcher, an incoming call),

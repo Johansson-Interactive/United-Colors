@@ -1,10 +1,10 @@
 import { ABSORB_TICKS, REJECT_TICKS } from "../constants";
-
-let nextId = 0;
+import type { DotKind } from "../types";
 
 /** A moving dot in the game world */
 export class Dot {
 	readonly id: string;
+	readonly kind: DotKind;
 	x: number;
 	y: number;
 	vx: number;
@@ -30,6 +30,7 @@ export class Dot {
 	private _flaggedForRemoval = false;
 
 	constructor(
+		id: string,
 		x: number,
 		y: number,
 		vx: number,
@@ -37,8 +38,10 @@ export class Dot {
 		color: string,
 		size: number,
 		velocity: number,
+		kind: DotKind = "small",
 	) {
-		this.id = `dot-${nextId++}`;
+		this.id = id;
+		this.kind = kind;
 		this.x = x;
 		this.y = y;
 		this.vx = vx;
@@ -117,9 +120,4 @@ export class Dot {
 	get isFlaggedForRemoval(): boolean {
 		return this._flaggedForRemoval;
 	}
-}
-
-/** Reset ID counter (for testing) */
-export function resetDotIdCounter(): void {
-	nextId = 0;
 }

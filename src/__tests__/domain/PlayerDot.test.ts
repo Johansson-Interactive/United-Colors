@@ -1,14 +1,9 @@
-import { resetDotIdCounter } from "../../domain/entities/Dot";
 import { PlayerDot } from "../../domain/entities/PlayerDot";
 
 const STEP_MS = 100;
 const SCREEN = { width: 800, height: 600 };
 
 describe("PlayerDot", () => {
-	beforeEach(() => {
-		resetDotIdCounter();
-	});
-
 	it("starts at given position", () => {
 		const player = new PlayerDot(200, 400, "#E91E63", 50, 10);
 		expect(player.x).toBe(200);

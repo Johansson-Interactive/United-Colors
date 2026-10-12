@@ -1,5 +1,6 @@
-import type { StoragePort, TiltZero } from "../../domain/types";
+import type { TiltZero } from "../../domain/types";
 import type { GameStore } from "../GameStore";
+import type { StoragePort } from "../ports";
 import { updateSettings } from "./UpdateSettings";
 
 /**

@@ -4,16 +4,15 @@ import {
 	MAX_TIME_DIFFICULTY,
 	POINT_DOT_TIME_BETWEEN,
 	SMALL_DOT_CREATE_INTERVAL,
+	SMALL_DOT_HEADING_SPREAD,
 } from "../../domain/constants";
 import { SpawnSystem } from "../../domain/engine/SpawnSystem";
-import { resetDotIdCounter } from "../../domain/entities/Dot";
 import { PlayerDot } from "../../domain/entities/PlayerDot";
 
 describe("SpawnSystem", () => {
 	let spawn: SpawnSystem;
 
 	beforeEach(() => {
-		resetDotIdCounter();
 		spawn = new SpawnSystem(() => 0.5);
 		spawn.reset();
 	});
@@ -162,6 +161,81 @@ describe("SpawnSystem", () => {
 
 			expect(spawn.trySpawnPointDot(step + wait, player, screen, 100)).toBeNull();
 			expect(spawn.trySpawnPointDot(step + wait + 1, player, screen, 100)).not.toBeNull();
+		});
+	});
+
+	describe("identity", () => {
+		const screen = { width: 400, height: 800 };
+		const player = new PlayerDot(10, 10, "#E91E63", 12.5, 0);
+
+		it("gives each dot its own id and kind, counting from the start of each game", () => {
+			const small = spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			const point = spawn.trySpawnPointDot(POINT_DOT_TIME_BETWEEN + 1, player, screen, 100);
+			expect(small).toMatchObject({ id: "dot-0", kind: "small" });
+			expect(point).toMatchObject({ id: "dot-1", kind: "point" });
+			expect(player).toMatchObject({ id: "player", kind: "player" });
+
+			spawn.reset();
+			const again = spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			expect(again?.id).toBe("dot-0");
+		});
+	});
+
+	describe("small dot heading", () => {
+		const screen = { width: 400, height: 800 };
+		/** The least a heading moves across the screen, or along its edge, per unit of travel */
+		const LEAST = Math.sin(((45 - SMALL_DOT_HEADING_SPREAD) * Math.PI) / 180);
+
+		/** One spawn from scripted rolls: edge, how far along it, which way, how steep */
+		function spawnFrom(side: number, along = 0.5, sideRoll = 0.5, spreadRoll = 0.5) {
+			const rolls = [side / 4, along, sideRoll, spreadRoll];
+			const system = new SpawnSystem(() => rolls.shift() ?? 0.5);
+			const dot = system.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			if (!dot) throw new Error("no spawn");
+			return dot;
+		}
+
+		it("leaves each edge heading inward on a diagonal at unit speed", () => {
+			const left = spawnFrom(0);
+			const right = spawnFrom(1);
+			const top = spawnFrom(2);
+			const bottom = spawnFrom(3);
+			expect(left.vx).toBeGreaterThan(LEAST);
+			expect(right.vx).toBeLessThan(-LEAST);
+			expect(top.vy).toBeGreaterThan(LEAST);
+			expect(bottom.vy).toBeLessThan(-LEAST);
+			for (const dot of [left, right, top, bottom]) {
+				expect(Math.hypot(dot.vx, dot.vy)).toBeCloseTo(1);
+				expect(Math.abs(dot.vx)).toBeGreaterThanOrEqual(LEAST - 1e-9);
+				expect(Math.abs(dot.vy)).toBeGreaterThanOrEqual(LEAST - 1e-9);
+			}
+		});
+
+		it("never sets a dot off straight across the screen or along its edge", () => {
+			let n = 0;
+			const system = new SpawnSystem(() => ((++n * 9301 + 49297) % 233280) / 233280);
+			for (let i = 1; i <= 500; i++) {
+				const dot = system.trySpawnSmallDot(
+					SMALL_DOT_CREATE_INTERVAL * 2 * i,
+					0,
+					screen,
+					100,
+					false,
+				);
+				expect(dot).not.toBeNull();
+				if (!dot) continue;
+				expect(Math.abs(dot.vx)).toBeGreaterThanOrEqual(LEAST - 1e-9);
+				expect(Math.abs(dot.vy)).toBeGreaterThanOrEqual(LEAST - 1e-9);
+			}
+		});
+
+		it("a dot spawning by a corner heads away from it", () => {
+			// Top-left corner: down from the left edge, right from the top edge
+			expect(spawnFrom(0, 0, 0.99).vy).toBeGreaterThan(LEAST);
+			expect(spawnFrom(2, 0, 0.99).vx).toBeGreaterThan(LEAST);
+			// Bottom-right corner: up from the right edge, left from the bottom edge
+			expect(spawnFrom(1, 1, 0.99).vy).toBeLessThan(-LEAST);
+			expect(spawnFrom(3, 1, 0.99).vx).toBeLessThan(-LEAST);
 		});
 	});
 });

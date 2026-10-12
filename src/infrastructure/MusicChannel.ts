@@ -1,5 +1,5 @@
 import type { AudioPlayer } from "expo-audio";
-import type { MusicCue, MusicTrack } from "../application/GameAudio";
+import type { MusicCue, MusicTrack } from "../application/ports";
 
 /** The slice of an expo-audio player a music loop drives */
 export type Loop = Pick<AudioPlayer, "loop" | "volume" | "play" | "pause" | "seekTo" | "remove">;

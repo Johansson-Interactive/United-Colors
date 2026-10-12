@@ -1,5 +1,5 @@
-import type { GameAudio, MusicCue } from "../../application/GameAudio";
 import { createGameStore, type GameStore } from "../../application/GameStore";
+import type { GameAudio, MusicCue } from "../../application/ports";
 import { bindMusic, MUSIC_CUES } from "../../application/useCases/BindMusic";
 import type { GamePhase } from "../../domain/types";
 
@@ -31,7 +31,7 @@ describe("bindMusic", () => {
 		expect(calls).toEqual([MUSIC_CUES.KIOSK]);
 	});
 
-	it("follows a run: game loop, ducked on pause, dipped while refusing, then the stinger", () => {
+	it("follows a run: game loop, ducked on pause, dipped while refusing, menu after the end", () => {
 		const store = createGameStore();
 		const { audio, calls } = fakeAudio();
 		bindMusic(store, audio);
@@ -47,7 +47,6 @@ describe("bindMusic", () => {
 			MUSIC_CUES.PAUSED,
 			MUSIC_CUES.RUNNING,
 			MUSIC_CUES.REJECTING,
-			"gameOver",
 			MUSIC_CUES.GAME_OVER,
 			MUSIC_CUES.KIOSK,
 		]);

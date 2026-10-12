@@ -1,5 +1,5 @@
-import type { GameAudio } from "../../application/GameAudio";
 import { createGameStore } from "../../application/GameStore";
+import type { GameAudio } from "../../application/ports";
 import { bindSoundSetting } from "../../application/useCases/BindSoundSetting";
 
 function fakeAudio() {

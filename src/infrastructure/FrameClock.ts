@@ -63,6 +63,7 @@ export class FrameClock {
 			Math.min(this.accumulator / this.stepMs, 1),
 		);
 
-		this.rafId = requestAnimationFrame(this.loop);
+		// A callback may have stopped the clock; then this frame was the last
+		if (this.running) this.rafId = requestAnimationFrame(this.loop);
 	};
 }

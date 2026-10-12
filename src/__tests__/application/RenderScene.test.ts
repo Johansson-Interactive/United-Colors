@@ -86,7 +86,7 @@ function dot(partial: Partial<DotView>): DotView {
 }
 
 function frame(dots: DotView[], phase: GamePhase = "RUNNING"): RenderFrame {
-	return { phase, score: 0, dots };
+	return { phase, score: 0, dots, events: [] };
 }
 
 const PLAYER_POS = { x: 50, y: 60 };
