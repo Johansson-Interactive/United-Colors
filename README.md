@@ -19,7 +19,10 @@ game.
   player's current colour and the screen edges are washed in it, so a colour switch is
   felt immediately. Collecting pops a `+1` / `+5` at the dot.
 - **Pause**: the scene frosts over and a spirit level appears. Hold the phone level to
-  resume (so play restarts from rest), or tap the ring.
+  resume (so play restarts from rest), or tap the ring. The corners hold the settings: the
+  level pose, the tilt speed and the sounds. The speed button is a comet whose tail shows
+  the current speed; it opens a view where the player's dot rolls in a bowl at the chosen
+  speed, with slow, normal and fast beneath it, so a tilt shows the difference at once.
 - **Game over**: the last hit sends a shockwave and a shake, the result zooms in, and a new
   best gets a shower of dots.
 - Transitions are a dot growing from under the finger until it covers the screen.
@@ -68,15 +71,17 @@ Biome is the only linter and formatter. Do not add ESLint or Prettier.
 
 ```
 src/
-  domain/          Pure TypeScript: entities, engine, collision, spawning, state machine
-  application/     Game flow use cases, store wiring, scene rendering
-  infrastructure/  Device motion, frame clock, audio, AsyncStorage persistence
-  presentation/    Screens, Skia canvas, HUD, overlays, dot-matrix type, tilt-driven UI, effects
-  app/             Composition root (currently empty; bootstrap lives in index.ts and App.tsx)
-  __tests__/       Unit tests mirroring the layers above
+  domain/          Pure TypeScript: entities, engine (which reports what happened as events), collision, spawning, state machine
+  application/     GameSession (engine + clock + store + scene), ports, use cases, event bindings
+  infrastructure/  Device motion, frame clock, audio, haptics, AsyncStorage persistence
+  presentation/    Screens and the screen flow, Skia canvas, HUD, overlays, dot-matrix type, tilt-driven UI, effects
+  __tests__/       Unit tests mirroring the layers above, plus the layer rule itself
 ```
 
-`domain` must not import React, Expo, or any platform API. `presentation` depends on `application`, not on `domain` internals.
+The composition root is `App.tsx`. `domain` must not import React, Expo, or any platform API.
+`presentation` drives the game through `application` (the `GameSession`, the use cases, the
+ports) and never reaches into `domain/engine`, `domain/entities` or `infrastructure`.
+`src/__tests__/architecture/Layers.test.ts` reads every import and fails on a breach.
 
 `ios/` and `android/` are generated and git-ignored. Run `pnpm prebuild` to recreate them.
 
