@@ -21,12 +21,15 @@ import {
 	SCENE_STRETCH_X,
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WALL_X,
+	SCENE_WALL_Y,
 	SCENE_X,
 	SCENE_Y,
 	YOLK_RADIUS,
 } from "../application/renderScene";
 import { GAME_COLORS } from "../domain/constants";
 import { MERGE_SKSL, packMergeUniforms } from "./mergeShader";
+import { packWallDropUniforms, WALL_DROP_SKSL } from "./wallDropShader";
 
 /** Glare centre offset and radius relative to a unit-radius dot, when the device is level */
 const GLARE_OFFSET = -0.28;
@@ -63,18 +66,24 @@ GLARE_PAINT.setShader(
 	),
 );
 
+function compileEffect(name: string, sksl: string): SkRuntimeEffect {
+	const effect = Skia.RuntimeEffect.Make(sksl);
+	if (!effect) throw new Error(`${name} shader failed to compile`);
+	return effect;
+}
+
 /**
  * The player and the dots merging into it, drawn as one liquid body by the metaball shader
  * (see mergeShader.ts). Compiled once; the uniforms are rebuilt every frame.
  */
-function compileMergeEffect(): SkRuntimeEffect {
-	const effect = Skia.RuntimeEffect.Make(MERGE_SKSL);
-	if (!effect) throw new Error("merge shader failed to compile");
-	return effect;
-}
-const MERGE_EFFECT = compileMergeEffect();
+const MERGE_EFFECT = compileEffect("merge", MERGE_SKSL);
 const MERGE_PAINT = Skia.Paint();
 MERGE_PAINT.setAntiAlias(true);
+
+/** A small dot at a wall (see wallDropShader.ts), the same way */
+const WALL_DROP_EFFECT = compileEffect("wall drop", WALL_DROP_SKSL);
+const WALL_DROP_PAINT = Skia.Paint();
+WALL_DROP_PAINT.setAntiAlias(true);
 
 /** Unit-space soft glow per game colour, indexed like FILL_COLORS */
 const HALO_PAINTS = FILL_COLORS.map((color) => {
@@ -126,6 +135,11 @@ function glareOffset(light: number): number {
  * it reads as safe to catch, and its core shows the colour it turns the player into. The yolk
  * is drawn to the player wherever they are, and as they come near the whole dot leans out
  * toward them, as if reaching.
+ * The walls are wet. A small dot begins as a drip swelling out of a wall, leaning the way it
+ * will go and joined to it by a fillet that tears as the drip shoots off; and the player
+ * pushed into a wall presses into it. Both
+ * of these are cut off at the wall and wet it, by the wall shaders (see wallDropShader.ts
+ * and mergeShader.ts); every other dot is a plain circle.
  */
 export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, lightY: number) {
 	"worklet";
@@ -183,11 +197,35 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
 		canvas.restore();
 	};
+	// A small dot at a wall: its body by the wall shader, then its glare
+	const drawWallDrop = (i: number) => {
+		const drop = packWallDropUniforms(dots, i);
+		const color = FILL_COLORS[dots[i + SCENE_COLOR]];
+		drop.values.push(color[0], color[1], color[2], color[3]);
+		WALL_DROP_PAINT.setShader(WALL_DROP_EFFECT.makeShader(drop.values));
+		canvas.drawRect(
+			Skia.XYWHRect(drop.left, drop.top, drop.right - drop.left, drop.bottom - drop.top),
+			WALL_DROP_PAINT,
+		);
+		const radius = dots[i + SCENE_RADIUS];
+		canvas.save();
+		canvas.translate(dots[i + SCENE_X] + gx * radius, dots[i + SCENE_Y] + gy * radius);
+		canvas.scale(radius, radius);
+		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+		canvas.restore();
+	};
 	// Free dots
 	for (let i = 0; i < end; i += SCENE_STRIDE) {
 		const kind = dots[i + SCENE_KIND];
 		if (dots[i + SCENE_RADIUS] <= 0) continue;
-		if (kind === SCENE_KIND_SMALL || kind === SCENE_KIND_POINT) drawBead(i);
+		if (
+			kind === SCENE_KIND_SMALL &&
+			(dots[i + SCENE_WALL_X] !== 0 || dots[i + SCENE_WALL_Y] !== 0)
+		) {
+			drawWallDrop(i);
+		} else if (kind === SCENE_KIND_SMALL || kind === SCENE_KIND_POINT) {
+			drawBead(i);
+		}
 	}
 	// The player and whatever is merging into it, as one liquid body
 	const merge = packMergeUniforms(dots);

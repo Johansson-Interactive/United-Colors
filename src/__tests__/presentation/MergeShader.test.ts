@@ -3,10 +3,15 @@ import {
 	createSceneBuilder,
 	SCENE_KIND,
 	SCENE_KIND_MERGING,
+	SCENE_NECK,
 	SCENE_RADIUS,
 	SCENE_STRETCH_X,
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WALL_C,
+	SCENE_WALL_X,
+	SCENE_WALL2_C,
+	SCENE_WALL2_Y,
 	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
@@ -67,7 +72,9 @@ describe("packMergeUniforms", () => {
 		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2, MERGE_MAX_BLOBS * 3 + 5)).toEqual([0, 0, 0]);
 		// No dent: zero radius
 		expect(values[MERGE_MAX_BLOBS * 3 + 7]).toBe(0);
-		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 9);
+		// No walls, no neck
+		expect(values.slice(MERGE_MAX_BLOBS * 3 + 9)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+		expect(values).toHaveLength(MERGE_MAX_BLOBS * 3 + 16);
 	});
 
 	it("bounds cover every body, the player at full stretch and wobble, plus the bulge", () => {
@@ -118,8 +125,7 @@ describe("packMergeUniforms", () => {
 	it("cuts a soft dent the shape of a refused dot, a little wider", () => {
 		const s = scene([PLAYER, dot({ id: "r", x: 75, y: 60, reject: 0.3, prevReject: 0.3 })]);
 		const values = packMergeUniforms(s)?.values ?? [];
-		const dent = values.slice(MERGE_MAX_BLOBS * 3 + 5);
-		expect(dent).toHaveLength(4);
+		const dent = values.slice(MERGE_MAX_BLOBS * 3 + 5, MERGE_MAX_BLOBS * 3 + 9);
 		expect(dent[2]).toBeCloseTo(10 * (1 + DENT_GAP));
 		expect(dent[3]).toBeCloseTo(10 * DENT_SOFTNESS);
 		expect(MERGE_SKSL).toContain("uniform float4 dent;");
@@ -128,5 +134,19 @@ describe("packMergeUniforms", () => {
 	it("leaves a hard edge once the dot is pushed clear, so no dent lingers", () => {
 		const s = scene([PLAYER, dot({ id: "r", x: 80, y: 60, reject: 1, prevReject: 1 })]);
 		expect(packMergeUniforms(s)?.values[MERGE_MAX_BLOBS * 3 + 8]).toBe(0);
+	});
+
+	it("passes the walls the player is pressed into, with the neck, and pads the bounds by it", () => {
+		const s = scene([PLAYER]);
+		s[SCENE_WALL_X] = 1;
+		s[SCENE_WALL_C] = 0;
+		s[SCENE_WALL2_Y] = -1;
+		s[SCENE_WALL2_C] = -800;
+		s[SCENE_NECK] = 5;
+		const packed = packMergeUniforms(s);
+		expect(packed?.values.slice(MERGE_MAX_BLOBS * 3 + 9)).toEqual([1, 0, 0, 0, -1, -800, 5]);
+		const pad = (20 * MERGE_BLEND) / 4 + 5 + 1;
+		const reach = 20 * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
+		expect(packed?.left).toBeCloseTo(50 - reach - pad);
 	});
 });

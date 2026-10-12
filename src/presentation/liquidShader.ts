@@ -4,6 +4,32 @@ import { JELLY_WOBBLE_PERIOD_S } from "../application/jelly";
 export const LIQUID_WOBBLE = 0.03;
 
 /**
+ * SkSL for a polynomial smooth-min of two signed distances: their union, with a fillet of
+ * radius `k` where the two surfaces meet, so bodies grow a neck as they near. Bulges out by
+ * at most k / 4 beyond either, and by up to k along a surface from where they meet.
+ */
+export const SMIN_SKSL = `
+float smin(float a, float b, float k) {
+	float h = max(k - abs(a - b), 0.0) / k;
+	return min(a, b) - h * h * k * 0.25;
+}
+`;
+
+/**
+ * SkSL that meets a body of signed distance `d` with the wall whose inward unit normal and
+ * offset are `wall` (see renderScene.ts, SCENE_WALL_X): joined to it by a wet fillet `neck`
+ * wide when the neck is set, and cut off at it either way. A zero normal is no wall.
+ */
+export const WALL_SKSL = `
+float atWall(float d, float2 p, float3 wall, float neck) {
+	if (abs(wall.x) + abs(wall.y) < 0.5) return d;
+	float w = dot(p, wall.xy) - wall.z;
+	if (neck > 0.0) d = smin(d, w, neck);
+	return max(d, -w);
+}
+`;
+
+/**
  * SkSL for the signed distance to a liquid drop (the player, the play button): a circle of
  * radius `r` at the origin, stretched into an area-preserving ellipse along its jelly stretch
  * vector (`shape.xy`, see jelly.ts), with a few slow ripples travelling round its edge on

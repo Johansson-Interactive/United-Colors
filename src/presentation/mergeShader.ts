@@ -5,15 +5,18 @@ import {
 	SCENE_KIND_MERGING,
 	SCENE_KIND_PLAYER,
 	SCENE_KIND_REJECTED,
+	SCENE_NECK,
 	SCENE_RADIUS,
 	SCENE_STRETCH_X,
 	SCENE_STRETCH_Y,
 	SCENE_STRIDE,
+	SCENE_WALL_X,
+	SCENE_WALL2_C,
 	SCENE_WOBBLE,
 	SCENE_X,
 	SCENE_Y,
 } from "../application/renderScene";
-import { LIQUID_SKSL, LIQUID_WOBBLE } from "./liquidShader";
+import { LIQUID_SKSL, LIQUID_WOBBLE, SMIN_SKSL, WALL_SKSL } from "./liquidShader";
 
 /** Most bodies (the player plus dots merging into it) the shader draws as one liquid */
 export const MERGE_MAX_BLOBS = 8;
@@ -37,10 +40,14 @@ export const DENT_SOFTNESS = 0.7;
  * into a water balloon: the dot's circle (a little wider) is cut out of the liquid with a
  * smooth max, so the surface curves softly in round it (see rejection.ts).
  *
+ * Pushed into a wall (or two, in a corner), the liquid is cut off flat at it and wets it
+ * with a fillet `neck` wide (see wall.ts).
+ *
  * Uniforms, in order: `blobs` (x, y, radius per body), `count` (bodies in use), `blend`
  * (smooth-min radius in points), `jelly` (the player's stretch x, y and wobble clock in
- * seconds), `dent` (centre x, y, radius and rim softness in points; no dent at radius 0)
- * and `color` (unpremultiplied RGBA).
+ * seconds), `dent` (centre x, y, radius and rim softness in points; no dent at radius 0),
+ * `walls` (inward normal x, y and offset for each of two walls; a zero normal is none),
+ * `neck` (fillet width in points) and `color` (unpremultiplied RGBA).
  */
 export const MERGE_SKSL = `
 uniform float3 blobs[${MERGE_MAX_BLOBS}];
@@ -48,13 +55,11 @@ uniform float count;
 uniform float blend;
 uniform float3 jelly;
 uniform float4 dent;
+uniform float3 walls[2];
+uniform float neck;
 uniform float4 color;
-
-float smin(float a, float b, float k) {
-	float h = max(k - abs(a - b), 0.0) / k;
-	return min(a, b) - h * h * k * 0.25;
-}
-
+${SMIN_SKSL}
+${WALL_SKSL}
 ${LIQUID_SKSL}
 half4 main(float2 p) {
 	float d = liquid(p - blobs[0].xy, blobs[0].z, jelly);
@@ -67,6 +72,8 @@ half4 main(float2 p) {
 		float hole = dent.z - length(p - dent.xy);
 		d = dent.w > 0.01 ? -smin(-d, -hole, dent.w) : max(d, hole);
 	}
+	d = atWall(d, p, walls[0], neck);
+	d = atWall(d, p, walls[1], neck);
 	float a = 1.0 - smoothstep(-0.5, 0.5, d);
 	return half4(color.rgb * a, a);
 }
@@ -83,14 +90,15 @@ export interface MergeUniforms {
 }
 
 /**
- * Pack the player, every merging dot and the dent of a refused dot from the drawable scene
- * into shader uniforms. Returns null when the scene has no player. The player is
- * always the first body.
+ * Pack the player, every merging dot, the dent of a refused dot and the walls the player is
+ * pressed into from the drawable scene into shader uniforms. Returns null when the scene
+ * has no player. The player is always the first body.
  */
 export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	"worklet";
 	const blobs: number[] = [];
 	let playerRadius = 0;
+	let playerOffset = 0;
 	let left = Number.POSITIVE_INFINITY;
 	let top = Number.POSITIVE_INFINITY;
 	let right = Number.NEGATIVE_INFINITY;
@@ -109,6 +117,7 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 
 	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
 		if (scene[i + SCENE_KIND] !== SCENE_KIND_PLAYER) continue;
+		playerOffset = i;
 		playerRadius = scene[i + SCENE_RADIUS];
 		const reach = playerRadius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
 		add(scene[i + SCENE_X], scene[i + SCENE_Y], playerRadius, reach);
@@ -141,8 +150,13 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 		break;
 	}
 	blobs.push(...dent);
+	// The walls cut the liquid off and wet it with a fillet: the fillet reaches along the
+	// wall by up to the neck
+	for (let i = SCENE_WALL_X; i <= SCENE_WALL2_C; i++) blobs.push(scene[playerOffset + i]);
+	const neck = scene[playerOffset + SCENE_NECK];
+	blobs.push(neck);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
-	const pad = blend / 4 + 1;
+	const pad = blend / 4 + neck + 1;
 	return {
 		values: blobs,
 		left: left - pad,
