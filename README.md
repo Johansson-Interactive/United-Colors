@@ -112,7 +112,7 @@ The legacy source lives on `master`. The last working version is tagged:
 git checkout legacy-android-last-working
 ```
 
-The new app uses new identifiers (`com.unitedcolors.app`) with no release continuity.
+The new app uses new identifiers (`com.johanssoninteractive.unitedcolors`) with no release continuity.
 
 Related projects:
 

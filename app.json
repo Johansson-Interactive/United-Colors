@@ -8,7 +8,7 @@
 		"userInterfaceStyle": "dark",
 		"ios": {
 			"supportsTablet": false,
-			"bundleIdentifier": "com.unitedcolors.app",
+			"bundleIdentifier": "com.johanssoninteractive.unitedcolors",
 			"appleTeamId": "LVDUVZJ2U7",
 			"infoPlist": {
 				"ITSAppUsesNonExemptEncryption": false,
@@ -21,15 +21,22 @@
 				"foregroundImage": "./assets/adaptive-icon.png",
 				"backgroundColor": "#0B0E14"
 			},
-			"package": "com.unitedcolors.app",
+			"package": "com.johanssoninteractive.unitedcolors",
 			"predictiveBackGestureEnabled": false,
-			"permissions": ["android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"]
+			"blockedPermissions": ["android.permission.RECORD_AUDIO"]
 		},
 		"web": {
 			"favicon": "./assets/favicon.png"
 		},
 		"plugins": [
-			"expo-audio",
+			[
+				"expo-audio",
+				{
+					"microphonePermission": false,
+					"recordAudioAndroid": false,
+					"enableBackgroundPlayback": false
+				}
+			],
 			[
 				"expo-build-properties",
 				{
