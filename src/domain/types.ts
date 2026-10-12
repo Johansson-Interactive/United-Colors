@@ -32,6 +32,24 @@ export interface GameSettings {
 /** The player's own dot, a small drifting dot, or a point dot to collect */
 export type DotKind = "player" | "small" | "point";
 
+/**
+ * A wall a dot is in contact with: the unit normal from the wall into the screen, and the
+ * foot of the dot on the wall (the point on it nearest the dot's centre)
+ */
+export interface WallContact {
+	nx: number;
+	ny: number;
+	x: number;
+	y: number;
+}
+
+/** Progress (0..1) of something a dot does at a wall, at this tick and at the previous one */
+interface WallProgress {
+	wall: WallContact;
+	progress: number;
+	prev: number;
+}
+
 /** Visual representation of a dot for the rendering layer */
 export interface DotView {
 	id: string;
@@ -58,6 +76,18 @@ export interface DotView {
 	 */
 	reject?: number;
 	prevReject?: number;
+	/**
+	 * Set while a small dot is a drip forming on a wall: nothing, then a drop swelling out of
+	 * the wall until it shoots off. `radius` is the full radius it grows to; the dot's own
+	 * `radius` is how big it is now. See SmallDot.
+	 */
+	drip?: WallProgress & {
+		radius: number;
+		/** The unit heading it will shoot off on, which it leans toward as it ripens */
+		heading: { vx: number; vy: number };
+	};
+	/** Set for DRIP_LAUNCH_TICKS after a drip shoots off its wall, while it tears from it */
+	launch?: WallProgress;
 }
 
 /**

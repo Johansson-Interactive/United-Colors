@@ -1,13 +1,23 @@
 import {
+	DOT_LIMIT,
 	GAME_COLORS,
 	KIOSK_DOT_LIMIT,
 	MAX_TIME_DIFFICULTY,
 	POINT_DOT_TIME_BETWEEN,
 	SMALL_DOT_CREATE_INTERVAL,
 	SMALL_DOT_HEADING_SPREAD,
+	SMALL_DOT_MIN_GROW_TICKS,
+	SMALL_DOT_SIZE_RATIO,
 } from "../../domain/constants";
 import { SpawnSystem } from "../../domain/engine/SpawnSystem";
 import { PlayerDot } from "../../domain/entities/PlayerDot";
+import type { SmallDot } from "../../domain/entities/SmallDot";
+
+/** Run a drip until it has shot off its wall */
+function launched(dot: SmallDot): SmallDot {
+	for (let t = 1; !dot.isDrifting && t < 10000; t++) dot.update(t);
+	return dot;
+}
 
 describe("SpawnSystem", () => {
 	let spawn: SpawnSystem;
@@ -40,32 +50,108 @@ describe("SpawnSystem", () => {
 		});
 	});
 
-	describe("small dot spawning", () => {
-		it("does not spawn before wait time", () => {
-			const dot = spawn.trySpawnSmallDot(1, 0, { width: 400, height: 800 }, 100, false);
-			expect(dot).toBeNull();
+	describe("drips", () => {
+		const screen = { width: 400, height: 800 };
+
+		it("a drip starts forming at once and takes the spawn wait to shoot off", () => {
+			const drip = spawn.trySpawnSmallDot(1, 0, screen, 100, false);
+			expect(drip).not.toBeNull();
+			if (!drip) return;
+			expect(drip.isForming).toBe(true);
+			expect(drip.size).toBe(0);
+			const grow = spawn.getDripGrowTicks(1, false);
+			expect(grow).toBeGreaterThanOrEqual(SMALL_DOT_CREATE_INTERVAL);
+			for (let t = 1; t < grow; t++) {
+				drip.update(t);
+				expect(drip.isForming).toBe(true);
+			}
+			drip.update(grow);
+			expect(drip.isForming).toBe(false);
+			expect(drip.size).toBe(SMALL_DOT_SIZE_RATIO * 100);
 		});
 
-		it("spawns after wait time elapses", () => {
-			const dot = spawn.trySpawnSmallDot(
-				SMALL_DOT_CREATE_INTERVAL + 1,
-				0,
-				{ width: 400, height: 800 },
-				100,
-				false,
-			);
-			expect(dot).not.toBeNull();
+		it("only one drip forms at a time, and the next starts once it has left the wall", () => {
+			const drip = spawn.trySpawnSmallDot(1, 0, screen, 100, false);
+			expect(spawn.trySpawnSmallDot(2, 1, screen, 100, false)).toBeNull();
+			expect(spawn.trySpawnSmallDot(50, 1, screen, 100, false)).toBeNull();
+			if (drip) launched(drip);
+			const next = spawn.trySpawnSmallDot(51, 1, screen, 100, false);
+			expect(next).not.toBeNull();
+			expect(next).not.toBe(drip);
 		});
 
-		it("does not exceed kiosk dot limit", () => {
-			const dot = spawn.trySpawnSmallDot(
-				SMALL_DOT_CREATE_INTERVAL + 1,
-				KIOSK_DOT_LIMIT,
-				{ width: 400, height: 800 },
-				100,
-				true,
+		it("a drip the player plucks off the wall is replaced too", () => {
+			const drip = spawn.trySpawnSmallDot(1, 0, screen, 100, false);
+			drip?.startAbsorb();
+			expect(spawn.trySpawnSmallDot(2, 1, screen, 100, false)).not.toBeNull();
+		});
+
+		it("forms faster as the difficulty rises, never faster than the floor", () => {
+			expect(spawn.getDripGrowTicks(0, false)).toBe(SMALL_DOT_CREATE_INTERVAL + 1);
+			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY / 2, false)).toBe(
+				SMALL_DOT_CREATE_INTERVAL / 2 + 1,
 			);
-			expect(dot).toBeNull();
+			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
+			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY, true)).toBe(SMALL_DOT_CREATE_INTERVAL + 1);
+			const drip = spawn.trySpawnSmallDot(MAX_TIME_DIFFICULTY, 0, screen, 100, false);
+			let ticks = 0;
+			while (drip?.isForming && ticks < 1000) drip.update(++ticks);
+			expect(ticks).toBe(SMALL_DOT_MIN_GROW_TICKS);
+		});
+
+		it("past the floor the walls drip from more places at once, keeping the legacy rate", () => {
+			expect(spawn.getDripCount(0, false)).toBe(1);
+			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY / 2, false)).toBe(1);
+			// The legacy let one dot through per tick at the end; the floor alone would let
+			// through one per SMALL_DOT_MIN_GROW_TICKS
+			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
+			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY, true)).toBe(1);
+			for (let step = 0; step <= MAX_TIME_DIFFICULTY; step += 10) {
+				const legacyPeriod = Math.floor(spawn.getSpawnWaitTime(step, false)) + 1;
+				const rate = spawn.getDripCount(step, false) / spawn.getDripGrowTicks(step, false);
+				expect(rate).toBeGreaterThanOrEqual(1 / legacyPeriod / 1.4);
+				expect(rate).toBeLessThanOrEqual((1 / legacyPeriod) * 1.4);
+			}
+			const system = new SpawnSystem(() => 0.5);
+			let started = 0;
+			for (let tick = 0; tick < SMALL_DOT_MIN_GROW_TICKS; tick++) {
+				if (system.trySpawnSmallDot(MAX_TIME_DIFFICULTY, started, screen, 100, false)) started++;
+			}
+			expect(started).toBe(SMALL_DOT_MIN_GROW_TICKS);
+			expect(system.trySpawnSmallDot(MAX_TIME_DIFFICULTY, started, screen, 100, false)).toBeNull();
+		});
+
+		it("does not exceed the kiosk or the overall dot limit", () => {
+			expect(spawn.trySpawnSmallDot(1, KIOSK_DOT_LIMIT, screen, 100, true)).toBeNull();
+			expect(spawn.trySpawnSmallDot(1, DOT_LIMIT, screen, 100, false)).toBeNull();
+			expect(spawn.trySpawnSmallDot(1, KIOSK_DOT_LIMIT, screen, 100, false)).not.toBeNull();
+		});
+
+		it("forms on a wall, far enough along it to fit on it fully grown", () => {
+			const size = SMALL_DOT_SIZE_RATIO * 100;
+			for (const [side, along] of [
+				[0, 0],
+				[0, 1],
+				[1, 0.5],
+				[2, 0],
+				[2, 1],
+				[3, 0.5],
+			]) {
+				const rolls = [side / 4, along, 0.5, 0.5];
+				const system = new SpawnSystem(() => rolls.shift() ?? 0.5);
+				const drip = system.trySpawnSmallDot(1, 0, screen, 100, false);
+				const wall = drip?.contact().drip?.wall;
+				expect(wall).toBeDefined();
+				if (!wall) continue;
+				if (side === 0) expect(wall).toMatchObject({ nx: 1, ny: 0, x: 0 });
+				if (side === 1) expect(wall).toMatchObject({ nx: -1, ny: 0, x: screen.width });
+				if (side === 2) expect(wall).toMatchObject({ nx: 0, ny: 1, y: 0 });
+				if (side === 3) expect(wall).toMatchObject({ nx: 0, ny: -1, y: screen.height });
+				const alongAxis = wall.nx !== 0 ? wall.y : wall.x;
+				const span = wall.nx !== 0 ? screen.height : screen.width;
+				expect(alongAxis).toBeGreaterThanOrEqual(size / 2);
+				expect(alongAxis).toBeLessThanOrEqual(span - size / 2);
+			}
 		});
 	});
 
@@ -111,7 +197,9 @@ describe("SpawnSystem", () => {
 		it("is not affected by small dot colors", () => {
 			// Spawn many small dots, then check the point dot still uses fresh 1/3 weights
 			for (let i = 1; i <= 10; i++) {
-				spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL * 2 * i, 0, screen, 100, false);
+				const drip = spawn.trySpawnSmallDot(i, 0, screen, 100, false);
+				expect(drip).not.toBeNull();
+				if (drip) launched(drip);
 			}
 			// random() = 0.5 with player [0] excluded -> [1] and [2] equal -> 0.5 picks [2]
 			const dot = spawn.trySpawnPointDot(MAX_TIME_DIFFICULTY, player, screen, 100);
@@ -169,14 +257,14 @@ describe("SpawnSystem", () => {
 		const player = new PlayerDot(10, 10, "#E91E63", 12.5, 0);
 
 		it("gives each dot its own id and kind, counting from the start of each game", () => {
-			const small = spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			const small = spawn.trySpawnSmallDot(1, 0, screen, 100, false);
 			const point = spawn.trySpawnPointDot(POINT_DOT_TIME_BETWEEN + 1, player, screen, 100);
 			expect(small).toMatchObject({ id: "dot-0", kind: "small" });
 			expect(point).toMatchObject({ id: "dot-1", kind: "point" });
 			expect(player).toMatchObject({ id: "player", kind: "player" });
 
 			spawn.reset();
-			const again = spawn.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			const again = spawn.trySpawnSmallDot(1, 0, screen, 100, false);
 			expect(again?.id).toBe("dot-0");
 		});
 	});
@@ -186,13 +274,13 @@ describe("SpawnSystem", () => {
 		/** The least a heading moves across the screen, or along its edge, per unit of travel */
 		const LEAST = Math.sin(((45 - SMALL_DOT_HEADING_SPREAD) * Math.PI) / 180);
 
-		/** One spawn from scripted rolls: edge, how far along it, which way, how steep */
+		/** One drip from scripted rolls (edge, how far along it, which way, how steep), shot off */
 		function spawnFrom(side: number, along = 0.5, sideRoll = 0.5, spreadRoll = 0.5) {
 			const rolls = [side / 4, along, sideRoll, spreadRoll];
 			const system = new SpawnSystem(() => rolls.shift() ?? 0.5);
-			const dot = system.trySpawnSmallDot(SMALL_DOT_CREATE_INTERVAL + 1, 0, screen, 100, false);
+			const dot = system.trySpawnSmallDot(1, 0, screen, 100, false);
 			if (!dot) throw new Error("no spawn");
-			return dot;
+			return launched(dot);
 		}
 
 		it("leaves each edge heading inward on a diagonal at unit speed", () => {
@@ -215,15 +303,10 @@ describe("SpawnSystem", () => {
 			let n = 0;
 			const system = new SpawnSystem(() => ((++n * 9301 + 49297) % 233280) / 233280);
 			for (let i = 1; i <= 500; i++) {
-				const dot = system.trySpawnSmallDot(
-					SMALL_DOT_CREATE_INTERVAL * 2 * i,
-					0,
-					screen,
-					100,
-					false,
-				);
+				const dot = system.trySpawnSmallDot(1, 0, screen, 100, false);
 				expect(dot).not.toBeNull();
 				if (!dot) continue;
+				launched(dot);
 				expect(Math.abs(dot.vx)).toBeGreaterThanOrEqual(LEAST - 1e-9);
 				expect(Math.abs(dot.vy)).toBeGreaterThanOrEqual(LEAST - 1e-9);
 			}

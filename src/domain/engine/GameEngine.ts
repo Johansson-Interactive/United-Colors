@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
+import { SmallDot } from "../entities/SmallDot";
 import type { DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
 import { circlesOverlap } from "./Collision";
 import { SpawnSystem } from "./SpawnSystem";
@@ -136,7 +137,10 @@ export class GameEngine {
 	 * No-op when not RUNNING. Returns true when score or phase changed.
 	 */
 	advancePlayer(dtMs: number, alpha = 0): boolean {
-		if (this.stateMachine.phase !== "RUNNING") return false;
+		if (this.stateMachine.phase !== "RUNNING") {
+			this.player.clearPush();
+			return false;
+		}
 		this.player.advance(dtMs, this.screen);
 		const score = this.score;
 		this.checkCollisions(alpha);
@@ -146,6 +150,15 @@ export class GameEngine {
 	/** Current player position (for per-frame rendering outside the RenderFrame) */
 	getPlayerPosition(): { x: number; y: number } {
 		return { x: this.player.x, y: this.player.y };
+	}
+
+	/**
+	 * How hard the player is pushing into the walls as of the last frame: the speed (px/s)
+	 * the walls are holding back on each axis, signed toward the wall (negative x is the
+	 * left wall, positive y the bottom). Zero on both while free, or not RUNNING.
+	 */
+	getPlayerPush(): { x: number; y: number } {
+		return this.player.push;
 	}
 
 	/** Move player by pixel delta (e.g. touch drag). No-op when not RUNNING. */
@@ -167,13 +180,10 @@ export class GameEngine {
 		this.timeStep++;
 		// Dots that finished merging between ticks leave before spawn limits apply
 		this.removeFlaggedDots();
-		for (const dot of this.dots) {
-			dot.prevSize = dot.size;
-			dot.prevAbsorb = dot.absorb;
-		}
+		for (const dot of this.dots) dot.beginTick();
 		const spawnedFrom = this.dots.length;
 
-		// Spawn small dots
+		// Start the next small dot forming on a wall
 		const newDot = this.spawnSystem.trySpawnSmallDot(
 			this.timeStep,
 			this.dots.length,
@@ -208,9 +218,9 @@ export class GameEngine {
 			dot.prevSize = dot.size;
 		}
 
-		// Bounce small dots off screen edges
+		// Small dots that reached a wall press against it, then head back in
 		for (const dot of this.dots) {
-			if (dot.kind === "small") this.bounceOffEdges(dot);
+			if (dot instanceof SmallDot) this.holdAtEdges(dot);
 		}
 
 		// Check collisions (skip in kiosk)
@@ -247,6 +257,7 @@ export class GameEngine {
 				prevAbsorb: dot.isAbsorbing ? dot.prevAbsorb : undefined,
 				reject: dot.isRejecting ? dot.reject : undefined,
 				prevReject: dot.isRejecting ? dot.prevReject : undefined,
+				...(dot instanceof SmallDot && !dot.isAbsorbing && !dot.isRejecting ? dot.contact() : {}),
 			});
 		}
 
@@ -278,16 +289,18 @@ export class GameEngine {
 	}
 
 	/**
-	 * Point a dot past an edge back inward. Setting the sign (not flipping it) keeps a dot
-	 * that is still past the edge next tick -- e.g. spawned overlapping it -- from
-	 * reversing every tick and juddering along the edge.
+	 * A drifting dot that has reached an edge is set flush against it and bounces straight
+	 * back in (see SmallDot.bounce); in a corner, off both walls. A drip still forming on its
+	 * wall is left alone.
 	 */
-	private bounceOffEdges(dot: Dot): void {
-		const halfSize = dot.size / 2;
-		if (dot.x - halfSize < 0) dot.vx = Math.abs(dot.vx);
-		else if (dot.x + halfSize > this.screen.width) dot.vx = -Math.abs(dot.vx);
-		if (dot.y - halfSize < 0) dot.vy = Math.abs(dot.vy);
-		else if (dot.y + halfSize > this.screen.height) dot.vy = -Math.abs(dot.vy);
+	private holdAtEdges(dot: SmallDot): void {
+		if (!dot.isDrifting) return;
+		const radius = dot.size / 2;
+		const { width, height } = this.screen;
+		if (dot.x - radius < 0) dot.bounce(1, 0, { x: 0, y: dot.y });
+		else if (dot.x + radius > width) dot.bounce(-1, 0, { x: width, y: dot.y });
+		if (dot.y - radius < 0) dot.bounce(0, 1, { x: dot.x, y: 0 });
+		else if (dot.y + radius > height) dot.bounce(0, -1, { x: dot.x, y: height });
 	}
 
 	/**
@@ -298,11 +311,7 @@ export class GameEngine {
 	 */
 	private tickRejecting(): void {
 		this.removeFlaggedDots();
-		for (const dot of this.dots) {
-			dot.prevSize = dot.size;
-			dot.prevAbsorb = dot.absorb;
-			dot.prevReject = dot.reject;
-		}
+		for (const dot of this.dots) dot.beginTick();
 		for (const dot of this.dots) {
 			if (!dot.isAbsorbing && !dot.isRejecting) continue;
 			dot.update(this.timeStep);
@@ -346,9 +355,12 @@ export class GameEngine {
 				dot.startAbsorb();
 				this.events.push({ type: "collectPoint", value: POINT_DOT_VALUE });
 			} else if (dot.color === this.player.color) {
+				// A drip of the player's colour can be plucked off its wall like any other dot
 				this.score += 1;
 				dot.startAbsorb();
 				this.events.push({ type: "collect", value: 1 });
+			} else if (dot.isForming) {
+				// A drip of another colour is part of the wall until it leaves: harmless
 			} else {
 				// Wrong colour: the player refuses the dot, then the game is over
 				dot.startReject();

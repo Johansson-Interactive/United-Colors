@@ -6,12 +6,13 @@ import {
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
 	SMALL_DOT_CREATE_INTERVAL,
+	SMALL_DOT_MIN_GROW_TICKS,
 	SMALL_DOT_SIZE_RATIO,
 	SMALL_DOT_SPEED_RATIO,
 } from "../constants";
-import { Dot } from "../entities/Dot";
 import type { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
+import { SmallDot } from "../entities/SmallDot";
 import type { ScreenSize } from "../types";
 import { circlesOverlap } from "./Collision";
 import { ColorPicker } from "./ColorPicker";
@@ -22,14 +23,22 @@ const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
 
 /**
  * Handles spawning of small dots and point dots.
+ *
+ * A small dot is a drip: it forms on a wall over the spawn wait and then shoots off, and the
+ * moment it has left (or been plucked off by the player) the next drip starts forming. So
+ * the legacy's spawn interval is now how long a drip takes to form, which shortens as the
+ * difficulty rises. A drip never forms faster than SMALL_DOT_MIN_GROW_TICKS, though: past
+ * the point where the legacy interval would be shorter, enough drips form at once to keep
+ * the dots arriving at the legacy's rate.
+ *
  * Small and point dots pick colors from separate weighted pickers; point dots never
- * spawn in the player's current color.
- * Replicates legacy GameManager spawn logic.
+ * spawn in the player's current color. Replicates legacy GameManager spawn logic.
  */
 export class SpawnSystem {
 	/** Ids run from 0 in each game, so the same seed spawns the same dots */
 	private nextId = 0;
-	private dotCreateStep = 0;
+	/** The drips forming on the walls now */
+	private drips: SmallDot[] = [];
 	private pointStep = 0;
 	private pointDot: PointDot | null = null;
 	private random: () => number;
@@ -46,7 +55,7 @@ export class SpawnSystem {
 		this.nextId = 0;
 		this.smallDotColors.reset();
 		this.pointDotColors.reset();
-		this.dotCreateStep = 0;
+		this.drips = [];
 		this.pointStep = 0;
 		this.pointDot = null;
 	}
@@ -63,8 +72,27 @@ export class SpawnSystem {
 	}
 
 	/**
-	 * Try to spawn a small dot from a random screen edge.
-	 * Returns new dot or null if conditions aren't met.
+	 * Ticks a drip started now takes to form: the legacy spawn interval (over which the
+	 * legacy let one dot through), floored at SMALL_DOT_MIN_GROW_TICKS
+	 */
+	getDripGrowTicks(timeStep: number, isKiosk: boolean): number {
+		const period = Math.floor(this.getSpawnWaitTime(timeStep, isKiosk)) + 1;
+		return Math.max(SMALL_DOT_MIN_GROW_TICKS, period);
+	}
+
+	/**
+	 * How many drips form at once: one, until the floor on the forming time would let fewer
+	 * dots through than the legacy interval did; then as many as keep that rate
+	 */
+	getDripCount(timeStep: number, isKiosk: boolean): number {
+		const period = Math.floor(this.getSpawnWaitTime(timeStep, isKiosk)) + 1;
+		return Math.max(1, Math.round(this.getDripGrowTicks(timeStep, isKiosk) / period));
+	}
+
+	/**
+	 * Start the next drip forming on a random screen edge, if fewer are forming than the
+	 * difficulty calls for and the dot limit allows. Returns the new drip or null. At most
+	 * one starts per tick.
 	 */
 	trySpawnSmallDot(
 		timeStep: number,
@@ -72,15 +100,21 @@ export class SpawnSystem {
 		screen: ScreenSize,
 		density: number,
 		isKiosk: boolean,
-	): Dot | null {
-		const waitTime = this.getSpawnWaitTime(timeStep, isKiosk);
+	): SmallDot | null {
+		// Drips that have shot off, been plucked or gone make room for the next
+		let kept = 0;
+		for (const drip of this.drips) {
+			if (drip.isForming && !drip.isFlaggedForRemoval) this.drips[kept++] = drip;
+		}
+		this.drips.length = kept;
 
-		if (timeStep - this.dotCreateStep <= waitTime) return null;
+		if (this.drips.length >= this.getDripCount(timeStep, isKiosk)) return null;
 		if (isKiosk && dotCount >= KIOSK_DOT_LIMIT) return null;
 		if (dotCount >= DOT_LIMIT) return null;
 
-		this.dotCreateStep = timeStep;
-		return this.createRandomDot(screen, density);
+		const drip = this.createDrip(screen, density, this.getDripGrowTicks(timeStep, isKiosk));
+		this.drips.push(drip);
+		return drip;
 	}
 
 	/**
@@ -137,50 +171,63 @@ export class SpawnSystem {
 	}
 
 	/**
-	 * A small dot on a random edge, placed as the legacy did, heading inward on a diagonal
-	 * (see edgeHeading)
+	 * A drip on a random edge, far enough from the corners to fit on it fully grown, that
+	 * will head inward on a diagonal (see edgeHeading)
 	 */
-	private createRandomDot(screen: ScreenSize, density: number): Dot {
+	private createDrip(screen: ScreenSize, density: number, growTicks: number): SmallDot {
 		const size = SMALL_DOT_SIZE_RATIO * density;
-		const maxX = screen.width - size;
-		const maxY = screen.height - size;
+		const spanX = screen.width - size;
+		const spanY = screen.height - size;
 
 		// Which edge, how far along it (0..1, from the top or the left), and the heading off it
 		const side = Math.floor(this.random() * 4);
 		const along = this.random();
 		const heading = edgeHeading(along, this.random(), this.random());
 
-		let x = Math.ceil(size / 2);
-		let y = Math.ceil(size / 2);
+		let nx = 0;
+		let ny = 0;
+		let foot: { x: number; y: number };
 		let vx: number;
 		let vy: number;
 		switch (side) {
 			case 0: // Left
-				y = along * maxY + size;
+				nx = 1;
+				foot = { x: 0, y: size / 2 + along * spanY };
 				vx = heading.normal;
 				vy = heading.tangent;
 				break;
 			case 1: // Right
-				x = Math.floor(maxX + size / 2);
-				y = along * maxY + size;
+				nx = -1;
+				foot = { x: screen.width, y: size / 2 + along * spanY };
 				vx = -heading.normal;
 				vy = heading.tangent;
 				break;
 			case 2: // Top
-				x = along * maxX + size;
+				ny = 1;
+				foot = { x: size / 2 + along * spanX, y: 0 };
 				vx = heading.tangent;
 				vy = heading.normal;
 				break;
 			default: // Bottom
-				x = along * maxX + size;
-				y = Math.floor(maxY + size / 2);
+				ny = -1;
+				foot = { x: size / 2 + along * spanX, y: screen.height };
 				vx = heading.tangent;
 				vy = -heading.normal;
 				break;
 		}
 
 		const color = this.smallDotColors.next();
-		return new Dot(this.newId(), x, y, vx, vy, color, size, SMALL_DOT_SPEED_RATIO * density);
+		return new SmallDot(
+			this.newId(),
+			nx,
+			ny,
+			foot,
+			{ vx, vy },
+			color,
+			size,
+			SMALL_DOT_SPEED_RATIO * density,
+			growTicks,
+		);
 	}
 
 	private createPointDot(

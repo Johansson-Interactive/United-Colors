@@ -13,6 +13,27 @@ export const SMALL_DOT_SPEED_RATIO = 0.02;
 export const SMALL_DOT_SIZE_RATIO = 0.0625;
 export const SMALL_DOT_CREATE_INTERVAL = 120;
 /**
+ * A small dot begins as a drip forming on a wall over the spawn wait, then shoots off it. A
+ * drip never forms faster than this many ticks, so it still reads as a drop swelling; past
+ * that point the walls drip from several places at once instead (see SpawnSystem)
+ */
+export const SMALL_DOT_MIN_GROW_TICKS = 6;
+/** Ticks a launched drip is still tearing from its wall and drawn stretched along its heading */
+export const DRIP_LAUNCH_TICKS = 4;
+/**
+ * How far a drip's centre hangs from its wall, as a fraction of its radius: a bulge on the
+ * wall at first, sagging past flush just before it tears off
+ */
+export const DRIP_HANG_MIN = 0.3;
+export const DRIP_HANG_MAX = 1.1;
+/**
+ * How far a drip's centre sits along its wall from where it formed, toward the heading it
+ * will shoot off on, as a fraction of its radius and of the heading's slant along the wall.
+ * From the first bead on it swells forward, its back edge held near where it formed, so it
+ * grows the way it is about to go
+ */
+export const DRIP_LEAN = 0.7;
+/**
  * A small dot leaves its edge on the inward diagonal, 45 degrees from the edge, give or take
  * this much (degrees) at the middle of the edge: never straight across the screen, which
  * would only bounce back and forth, and never along its edge

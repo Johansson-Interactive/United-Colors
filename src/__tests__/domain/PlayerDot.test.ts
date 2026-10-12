@@ -81,6 +81,34 @@ describe("PlayerDot", () => {
 		expect(player.y).toBeCloseTo(310);
 	});
 
+	it("reports the speed a wall holds it back by, signed toward the wall", () => {
+		const player = new PlayerDot(30, 300, "#E91E63", 50, 100);
+		player.updateOrientation(-1, 0);
+		player.advance(STEP_MS, SCREEN);
+		// Wanted 10 px left in 100 ms; got 5
+		expect(player.push).toEqual({ x: -50, y: 0 });
+		player.advance(STEP_MS, SCREEN);
+		expect(player.push).toEqual({ x: -100, y: 0 });
+		player.updateOrientation(0, 1);
+		player.advance(STEP_MS, SCREEN);
+		expect(player.push).toEqual({ x: 0, y: 0 });
+		player.updateOrientation(0, 1000);
+		player.advance(STEP_MS, SCREEN);
+		expect(player.push.x).toBe(0);
+		expect(player.push.y).toBeGreaterThan(0);
+	});
+
+	it("pushes nothing once told to let go, or with no time elapsed", () => {
+		const player = new PlayerDot(25, 300, "#E91E63", 50, 100);
+		player.updateOrientation(-1, 0);
+		player.advance(STEP_MS, SCREEN);
+		expect(player.push.x).toBeLessThan(0);
+		player.clearPush();
+		expect(player.push).toEqual({ x: 0, y: 0 });
+		player.advance(0, SCREEN);
+		expect(player.push).toEqual({ x: 0, y: 0 });
+	});
+
 	it("applyMovementDelta moves by pixel delta and clamps to bounds", () => {
 		const player = new PlayerDot(400, 300, "#E91E63", 50, 10);
 		player.applyMovementDelta(20, -10, SCREEN);

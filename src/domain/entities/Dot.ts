@@ -60,6 +60,18 @@ export class Dot {
 		this._size = size;
 	}
 
+	/** Remember this tick's starting values, for interpolating between this tick and the next */
+	beginTick(): void {
+		this.prevSize = this._size;
+		this.prevAbsorb = this.absorb;
+		this.prevReject = this.reject;
+	}
+
+	/** A drip still forming on its wall: not yet in play, see SmallDot */
+	get isForming(): boolean {
+		return false;
+	}
+
 	update(_timeStep: number): void {
 		if (this._absorbing) {
 			this.absorbTicks = Math.min(ABSORB_TICKS, this.absorbTicks + 1);

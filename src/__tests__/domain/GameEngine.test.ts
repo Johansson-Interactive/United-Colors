@@ -1,6 +1,8 @@
 import {
 	ABSORB_TICKS,
+	DRIP_LAUNCH_TICKS,
 	GAME_COLORS,
+	PLAYER_DOT_SIZE_RATIO,
 	PLAYER_SPEED_PER_DEGREE,
 	POINT_DOT_PULSE_SPEED,
 	POINT_DOT_SIZE_ANIMATION_TIME,
@@ -8,11 +10,15 @@ import {
 	POINT_DOT_VALUE,
 	REJECT_SPIT_AT,
 	REJECT_TICKS,
+	SMALL_DOT_CREATE_INTERVAL,
+	SMALL_DOT_SIZE_RATIO,
 	TILT_SENSITIVITY_MAX,
 	TILT_SENSITIVITY_MIN,
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import type { GameEvent } from "../../domain/types";
+
+const DEGREE = Math.PI / 180;
 
 function createEngine(seed = 0.5) {
 	let callCount = 0;
@@ -174,31 +180,172 @@ describe("GameEngine", () => {
 		});
 	});
 
-	describe("edge bounce", () => {
-		it("a dot spawned overlapping an edge heads back in instead of juddering along it", () => {
-			const screen = { width: 400, height: 800 };
-			// Player colour (constructor, startKiosk), then a left-edge spawn low enough to
-			// overlap the bottom edge, rolled to head toward that corner on the plain diagonal
-			const script = [0.5, 0.5, 0, 0.999, 0.9995, 0.5];
+	describe("at the edges", () => {
+		const screen = { width: 400, height: 800 };
+		/** A kiosk whose first drip forms on the left wall, low down, heading down and in */
+		function engineWithOneDot() {
+			// Player colour (constructor, startKiosk), then a left-edge spawn near the bottom
+			// corner, rolled to head toward that corner on the plain diagonal
+			const script = [0.5, 0.5, 0, 0.98, 0.9995, 0.5];
 			const engine = new GameEngine({
 				density: 100,
 				screen,
 				random: () => script.shift() ?? 0.5,
 			});
 			engine.startKiosk();
-
 			const small = () => engine.getFrame().dots.find((d) => d.kind === "small");
-			while (!small()) engine.tick();
-			const spawned = small();
-			expect(spawned && spawned.y + spawned.radius).toBeGreaterThan(screen.height);
+			while (!small()?.launch) engine.tick();
+			return { engine, small };
+		}
 
+		it("a dot that reaches a wall is set flush against it and heads back in on the same tick", () => {
+			const { engine, small } = engineWithOneDot();
+			let ticks = 0;
+			while ((small()?.vy ?? 0) >= 0 && ticks++ < 1000) engine.tick();
+			const leaving = small();
+			expect(leaving && leaving.y + leaving.radius).toBeCloseTo(screen.height);
+			expect(leaving?.vy).toBeLessThan(0);
+			expect(leaving?.vx).not.toBe(0);
 			for (let i = 0; i < 300; i++) {
 				engine.tick();
 				const dot = small();
-				if (dot && dot.y + dot.radius > screen.height) expect(dot.vy).toBeLessThan(0);
+				expect(dot && dot.y + dot.radius).toBeLessThanOrEqual(screen.height + 1e-6);
+				expect(dot && dot.y - dot.radius).toBeGreaterThanOrEqual(-1e-6);
+				expect(dot && dot.x - dot.radius).toBeGreaterThanOrEqual(-1e-6);
+				expect(dot && dot.x + dot.radius).toBeLessThanOrEqual(screen.width + 1e-6);
 			}
-			const dot = small();
-			expect(dot && dot.y + dot.radius).toBeLessThanOrEqual(screen.height);
+		});
+
+		it("every drifting dot stays on the screen through many bounces", () => {
+			const engine = largeScreenEngine();
+			engine.startKiosk();
+			engine.setScreen(screen);
+			for (let i = 0; i < 3000; i++) {
+				engine.tick();
+				for (const dot of engine.getFrame().dots) {
+					if (dot.drip) continue;
+					expect(dot.x - dot.radius).toBeGreaterThanOrEqual(-1e-6);
+					expect(dot.x + dot.radius).toBeLessThanOrEqual(screen.width + 1e-6);
+					expect(dot.y - dot.radius).toBeGreaterThanOrEqual(-1e-6);
+					expect(dot.y + dot.radius).toBeLessThanOrEqual(screen.height + 1e-6);
+				}
+			}
+		});
+	});
+
+	describe("drips", () => {
+		it("a small dot forms on a wall over the spawn wait, then shoots off and tears free", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			const small = () => engine.getFrame().dots.find((d) => d.kind === "small");
+			engine.tick();
+			const first = small();
+			// At tick 1 the legacy wait has just dipped under the full interval
+			expect(first?.drip).toMatchObject({ progress: 1 / SMALL_DOT_CREATE_INTERVAL });
+			expect(first?.drip?.radius).toBe((SMALL_DOT_SIZE_RATIO * 100) / 2);
+			expect(first).toMatchObject({ vx: 0, vy: 0 });
+			let ticks = 1;
+			while (small()?.drip && ticks < 1000) {
+				engine.tick();
+				ticks++;
+			}
+			expect(ticks).toBe(SMALL_DOT_CREATE_INTERVAL);
+			const launched = small();
+			expect(launched?.launch).toMatchObject({ progress: 0, prev: 0 });
+			expect(launched?.radius).toBe(first?.drip?.radius);
+			expect(Math.hypot(launched?.vx ?? 0, launched?.vy ?? 0)).toBeGreaterThan(0);
+			for (let t = 1; t < DRIP_LAUNCH_TICKS; t++) {
+				engine.tick();
+				expect(
+					engine.getFrame().dots.find((d) => d.id === first?.id)?.launch?.progress,
+				).toBeCloseTo(t / DRIP_LAUNCH_TICKS);
+			}
+			// Torn free: round and clear of the wall, so the view drops the launch
+			engine.tick();
+			expect(engine.getFrame().dots.find((d) => d.id === first?.id)?.launch).toBeUndefined();
+		});
+
+		it("the next drip starts forming the tick after one shoots off", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			const drips = () => engine.getFrame().dots.filter((d) => d.drip);
+			for (let i = 1; i < SMALL_DOT_CREATE_INTERVAL; i++) {
+				engine.tick();
+				expect(drips().map((d) => d.id)).toEqual(["dot-0"]);
+			}
+			engine.tick();
+			expect(engine.getFrame().dots.find((d) => d.id === "dot-0")?.launch).toBeDefined();
+			expect(drips()).toHaveLength(0);
+			engine.tick();
+			expect(drips()).toHaveLength(1);
+			expect(drips()[0].id).not.toBe("dot-0");
+		});
+
+		/** Run until a drip of the player's colour (or not) is forming, and move the player onto it */
+		function playerOntoDrip(engine: GameEngine, ownColour: boolean) {
+			for (let i = 0; i < 5000; i++) {
+				const frame = engine.getFrame();
+				const player = frame.dots.find((d) => d.kind === "player");
+				const drip = frame.dots.find(
+					(d) => d.drip && (d.color === player?.color) === ownColour && d.drip.progress > 0.2,
+				);
+				if (drip && player && frame.phase === "RUNNING") {
+					engine.onMovementDelta(drip.x - player.x, drip.y - player.y);
+					return { frame: engine.getFrame(), drip, changed: engine.advancePlayer(0, 0) };
+				}
+				engine.tick();
+			}
+			throw new Error("no drip");
+		}
+
+		it("a drip of the player's colour can be plucked off its wall for a point", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			const { drip, changed } = playerOntoDrip(engine, true);
+			expect(changed).toBe(true);
+			const frame = engine.getFrame();
+			expect(frame.score).toBe(1);
+			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			const plucked = frame.dots.find((d) => d.id === drip.id);
+			expect(plucked?.absorb).toBe(0);
+			expect(plucked?.drip).toBeUndefined();
+			// The wall starts the next drip right away
+			engine.tick();
+			expect(engine.getFrame().dots.some((d) => d.drip && d.id !== drip.id)).toBe(true);
+		});
+
+		it("a drip of another colour is harmless until it has left the wall", () => {
+			const engine = largeScreenEngine();
+			engine.startGame();
+			const { changed } = playerOntoDrip(engine, false);
+			expect(changed).toBe(false);
+			expect(engine.getFrame().phase).toBe("RUNNING");
+		});
+	});
+
+	describe("pushing into the walls", () => {
+		it("reports how hard the walls hold the player back, per frame, and nothing while free", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.onSensorInput(-1, 0);
+			engine.advancePlayer(16);
+			expect(engine.getPlayerPush()).toEqual({ x: 0, y: 0 });
+			for (let i = 0; i < 200; i++) engine.advancePlayer(16);
+			const push = engine.getPlayerPush();
+			expect(engine.getPlayerPosition().x).toBe((PLAYER_DOT_SIZE_RATIO * 100) / 2);
+			expect(push.x).toBeCloseTo(-engine.getPlayerSpeedPerDegree() / DEGREE);
+			expect(push.y).toBe(0);
+		});
+
+		it("lets go when the game is not running", () => {
+			const engine = createEngine();
+			engine.startGame();
+			engine.onSensorInput(0, 1);
+			for (let i = 0; i < 200; i++) engine.advancePlayer(16);
+			expect(engine.getPlayerPush().y).toBeGreaterThan(0);
+			engine.pause();
+			engine.advancePlayer(16);
+			expect(engine.getPlayerPush()).toEqual({ x: 0, y: 0 });
 		});
 	});
 
@@ -384,10 +531,11 @@ describe("GameEngine", () => {
 		it("small dot views carry per-tick displacement that matches the next tick", () => {
 			const engine = createEngine();
 			engine.startKiosk();
-			let small = engine.getFrame().dots.find((d) => d.kind === "small");
+			// A dot that has just shot off its wall, heading in: nothing stops it next tick
+			let small = engine.getFrame().dots.find((d) => d.kind === "small" && d.launch);
 			for (let i = 0; i < 500 && !small; i++) {
 				engine.tick();
-				small = engine.getFrame().dots.find((d) => d.kind === "small");
+				small = engine.getFrame().dots.find((d) => d.kind === "small" && d.launch);
 			}
 			expect(small).toBeDefined();
 			if (!small) return;
@@ -396,6 +544,24 @@ describe("GameEngine", () => {
 			const after = engine.getFrame().dots.find((d) => d.id === before.id);
 			expect(after?.x).toBeCloseTo(before.x + before.vx);
 			expect(after?.y).toBeCloseTo(before.y + before.vy);
+		});
+
+		it("a drip's view says which wall it is on and how far it has formed", () => {
+			const engine = createEngine();
+			engine.startKiosk();
+			engine.tick();
+			const drip = engine.getFrame().dots.find((d) => d.kind === "small");
+			expect(drip?.drip?.wall).toBeDefined();
+			const wall = drip?.drip?.wall;
+			if (!wall || !drip) return;
+			expect(Math.hypot(wall.nx, wall.ny)).toBeCloseTo(1);
+			// The foot is on the wall, under the dot, and the dot hangs from it inward
+			expect(wall.x * wall.nx + wall.y * wall.ny).toBeCloseTo(
+				wall.nx !== 0 ? (wall.nx > 0 ? 0 : -400) : wall.ny > 0 ? 0 : -800,
+			);
+			expect((drip.x - wall.x) * wall.nx + (drip.y - wall.y) * wall.ny).toBeGreaterThan(0);
+			expect(drip.radius).toBeGreaterThan(0);
+			expect(drip.radius).toBeLessThan(drip.drip?.radius ?? 0);
 		});
 
 		it("player view has no velocity (moved per frame instead)", () => {
@@ -452,11 +618,12 @@ describe("GameEngine", () => {
 	});
 
 	describe("per-frame collisions", () => {
+		/** A game with a small dot that has left its wall and drifts */
 		function startWithSmallDot() {
 			const engine = createEngine();
 			engine.startGame();
 			for (let i = 0; i < 2000; i++) {
-				const small = engine.getFrame().dots.find((d) => d.kind === "small");
+				const small = engine.getFrame().dots.find((d) => d.kind === "small" && !d.drip);
 				if (small) return { engine, small };
 				engine.tick();
 			}
@@ -558,7 +725,9 @@ describe("GameEngine", () => {
 			for (let i = 0; i < 5000; i++) {
 				const frame = engine.getFrame();
 				const player = frame.dots.find((d) => d.kind === "player");
-				const wrong = frame.dots.find((d) => d.kind === "small" && d.color !== player?.color);
+				const wrong = frame.dots.find(
+					(d) => d.kind === "small" && !d.drip && d.color !== player?.color,
+				);
 				if (wrong && frame.phase === "RUNNING") {
 					const pos = engine.getPlayerPosition();
 					engine.onMovementDelta(wrong.x - pos.x, wrong.y - pos.y);
