@@ -1,4 +1,5 @@
 import { JELLY_WOBBLE_PERIOD_S } from "../application/jelly";
+import { HAS_WALL_SKSL } from "../application/sceneRecord";
 
 /** Peak edge wobble of a liquid drop, as a fraction of its radius */
 export const LIQUID_WOBBLE = 0.03;
@@ -17,12 +18,13 @@ float smin(float a, float b, float k) {
 
 /**
  * SkSL that meets a body of signed distance `d` with the wall whose inward unit normal and
- * offset are `wall` (see renderScene.ts, SCENE_WALL_X): joined to it by a wet fillet `neck`
- * wide when the neck is set, and cut off at it either way. A zero normal is no wall.
+ * offset are `wall` (see sceneRecord.ts, SceneDot.wallX): joined to it by a wet fillet
+ * `neck` wide when the neck is set, and cut off at it either way. A zero normal is no wall,
+ * judged as the scene record judges it.
  */
-export const WALL_SKSL = `
+export const WALL_SKSL = `${HAS_WALL_SKSL}
 float atWall(float d, float2 p, float3 wall, float neck) {
-	if (abs(wall.x) + abs(wall.y) < 0.5) return d;
+	if (!hasWall(wall)) return d;
 	float w = dot(p, wall.xy) - wall.z;
 	if (neck > 0.0) d = smin(d, w, neck);
 	return max(d, -w);

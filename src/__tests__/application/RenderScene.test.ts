@@ -13,35 +13,16 @@ import {
 	MERGE_SWELL_MAX,
 	mergeSlide,
 	mergeSwell,
-	SCENE_COLOR,
-	SCENE_CORE,
-	SCENE_CORE_X,
-	SCENE_CORE_Y,
-	SCENE_DENT,
-	SCENE_KIND,
-	SCENE_KIND_MERGING,
-	SCENE_KIND_PLAYER,
-	SCENE_KIND_POINT,
-	SCENE_KIND_REJECTED,
-	SCENE_KIND_SMALL,
-	SCENE_MERGE,
-	SCENE_NECK,
-	SCENE_RADIUS,
-	SCENE_STRETCH_X,
-	SCENE_STRETCH_Y,
-	SCENE_STRIDE,
-	SCENE_WALL_C,
-	SCENE_WALL_X,
-	SCENE_WALL_Y,
-	SCENE_WALL2_C,
-	SCENE_WALL2_X,
-	SCENE_WALL2_Y,
-	SCENE_WOBBLE,
-	SCENE_X,
-	SCENE_Y,
 	YOLK_PULL,
 	YOLK_RADIUS,
 } from "../../application/renderScene";
+import {
+	findPlayer,
+	readDot,
+	readScene,
+	sceneDot,
+	sceneLength,
+} from "../../application/sceneRecord";
 import {
 	DRIP_NECK,
 	DRIP_STRETCH,
@@ -56,46 +37,10 @@ import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../../domain/constants";
 import { dripHang, dripOffset, dripRadius } from "../../domain/engine/Drip";
 import type { DotView, GamePhase, RenderFrame, WallContact } from "../../domain/types";
 
-const KIND_NAMES = {
-	[SCENE_KIND_SMALL]: "small",
-	[SCENE_KIND_POINT]: "point",
-	[SCENE_KIND_PLAYER]: "player",
-	[SCENE_KIND_MERGING]: "merging",
-	[SCENE_KIND_REJECTED]: "rejected",
-} as Record<number, DotView["kind"] | "merging" | "rejected">;
-
-/** Decode the flat scene back into one object per dot, for readable assertions */
-function decode(scene: Float32Array) {
-	const dots = [];
-	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
-		dots.push({
-			x: scene[i + SCENE_X],
-			y: scene[i + SCENE_Y],
-			radius: scene[i + SCENE_RADIUS],
-			color: GAME_COLORS[scene[i + SCENE_COLOR]],
-			kind: KIND_NAMES[scene[i + SCENE_KIND]],
-			merge: scene[i + SCENE_MERGE],
-			dent: scene[i + SCENE_DENT],
-			core: scene[i + SCENE_CORE] < 0 ? undefined : GAME_COLORS[scene[i + SCENE_CORE]],
-			stretch: [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y]],
-			yolk: [scene[i + SCENE_CORE_X], scene[i + SCENE_CORE_Y]],
-			walls: [
-				[scene[i + SCENE_WALL_X], scene[i + SCENE_WALL_Y], scene[i + SCENE_WALL_C]],
-				[scene[i + SCENE_WALL2_X], scene[i + SCENE_WALL2_Y], scene[i + SCENE_WALL2_C]],
-			],
-			neck: scene[i + SCENE_NECK],
-		});
-	}
-	return dots;
-}
-
-const NO_WALLS = [
-	[0, 0, 0],
-	[0, 0, 0],
-];
+const NO_WALLS = { wallX: 0, wallY: 0, wallC: 0, wall2X: 0, wall2Y: 0, wall2C: 0 };
 
 function buildScene(f: RenderFrame, alpha: number, player: { x: number; y: number }) {
-	return decode(createSceneBuilder()(f, alpha, player));
+	return readScene(createSceneBuilder()(f, alpha, player));
 }
 
 function dot(partial: Partial<DotView>): DotView {
@@ -142,25 +87,20 @@ describe("buildScene", () => {
 		expect(d.radius).toBe(5);
 	});
 
-	it("draws the player at its live position, last (on top)", () => {
+	it("draws the player at its live position", () => {
 		const scene = buildScene(
 			frame([dot({ kind: "player", x: 0, y: 0, radius: 25, color: "#2196F3" }), dot({ id: "s" })]),
 			0.5,
 			PLAYER_POS,
 		);
 		expect(scene).toHaveLength(2);
-		expect(scene[1]).toEqual({
+		expect(scene.find((d) => d.kind === "player")).toEqual({
+			...sceneDot(),
 			x: 50,
 			y: 60,
 			radius: 25,
-			color: "#2196F3",
+			color: GAME_COLORS.indexOf("#2196F3"),
 			kind: "player",
-			merge: 0,
-			dent: 0,
-			stretch: [0, 0],
-			yolk: [0, 0],
-			walls: NO_WALLS,
-			neck: 0,
 		});
 	});
 
@@ -168,21 +108,20 @@ describe("buildScene", () => {
 		const build = createSceneBuilder();
 		const player = dot({ kind: "player", radius: 25 });
 		const free = dot({});
-		const last = (scene: Float32Array) => scene.length - SCENE_STRIDE;
+		const shapeOf = (scene: Float32Array, index: number) => {
+			const { stretchX, stretchY, wobble } = readDot(scene, index, sceneDot());
+			return { stretchX, stretchY, wobble };
+		};
 		let scene = build(frame([free, player]), 0, { x: 50, y: 60 }, 16);
 		for (let i = 1; i <= 30; i++)
 			scene = build(frame([free, player]), 0, { x: 50 + 10 * i, y: 60 }, 16);
-		expect(Math.abs(scene[last(scene) + SCENE_STRETCH_X])).toBeGreaterThan(0);
-		expect(scene[last(scene) + SCENE_WOBBLE]).toBeGreaterThan(0);
-		expect([scene[SCENE_STRETCH_X], scene[SCENE_STRETCH_Y], scene[SCENE_WOBBLE]]).toEqual([
-			0, 0, 0,
-		]);
+		const moving = shapeOf(scene, findPlayer(scene));
+		expect(Math.abs(moving.stretchX)).toBeGreaterThan(0);
+		expect(moving.wobble).toBeGreaterThan(0);
+		expect(shapeOf(scene, 0)).toEqual({ stretchX: 0, stretchY: 0, wobble: 0 });
 
-		const moving = Array.from(scene.subarray(last(scene)));
 		const paused = build(frame([free, player], "PAUSED"), 0, { x: 400, y: 60 }, 16);
-		expect(Array.from(paused.subarray(last(paused) + SCENE_STRETCH_X))).toEqual(
-			moving.slice(SCENE_STRETCH_X),
-		);
+		expect(shapeOf(paused, findPlayer(paused))).toEqual(moving);
 	});
 
 	it("omits the player when not in the frame (kiosk)", () => {
@@ -209,8 +148,8 @@ describe("buildScene", () => {
 			PLAYER_POS,
 		);
 		expect(scene.map((d) => [d.color, d.kind])).toEqual([
-			[GAME_COLORS[2], "point"],
-			[GAME_COLORS[1], "small"],
+			[2, "point"],
+			[1, "small"],
 		]);
 	});
 
@@ -222,15 +161,15 @@ describe("buildScene", () => {
 		const second = build(f, 0.5, PLAYER_POS);
 		expect(second).not.toBe(first);
 		expect(second.buffer).toBe(first.buffer);
-		expect(second).toHaveLength(2 * SCENE_STRIDE);
+		expect(second).toHaveLength(sceneLength(2));
 	});
 
 	it("grows the buffer when the dot count no longer fits", () => {
 		const build = createSceneBuilder();
 		build(frame([dot({})]), 0, PLAYER_POS);
 		const scene = build(frame([dot({}), dot({}), dot({ kind: "player" })]), 0, PLAYER_POS);
-		expect(decode(scene)).toHaveLength(3);
-		expect(decode(scene)[2]).toMatchObject({ x: 50, y: 60, kind: "player" });
+		expect(readScene(scene)).toHaveLength(3);
+		expect(readScene(scene)[2]).toMatchObject({ x: 50, y: 60, kind: "player" });
 	});
 
 	describe("merging dots", () => {
@@ -293,47 +232,47 @@ describe("buildScene", () => {
 			buildScene(frame([point(x, partial), player]), 0, PLAYER_POS)[0];
 
 		it("has a shell in the player's colour round a yolk in the colour it turns them into", () => {
-			expect(drawn(400)).toMatchObject({ color: GAME_COLORS[0], core: GAME_COLORS[1] });
+			expect(drawn(400)).toMatchObject({ color: 0, core: 1 });
 		});
 
 		it("keeps its own colour and no yolk once caught, or with no player to match", () => {
 			const caught = drawn(80, { absorb: 0.1, prevAbsorb: 0.1 });
-			expect(caught).toMatchObject({ kind: "merging", color: GAME_COLORS[1], core: undefined });
+			expect(caught).toMatchObject({ kind: "merging", color: 1, core: -1 });
 			const [alone] = buildScene(frame([point(400)], "KIOSK"), 0, PLAYER_POS);
-			expect(alone).toMatchObject({ color: GAME_COLORS[1], core: undefined });
+			expect(alone).toMatchObject({ color: 1, core: -1 });
 		});
 
 		it("is the only dot with a yolk", () => {
 			const scene = buildScene(frame([dot({}), point(400), player]), 0, PLAYER_POS);
-			expect(scene.map((d) => d.core)).toEqual([undefined, GAME_COLORS[1], undefined]);
+			expect(scene.map((d) => d.core)).toEqual([-1, 1, -1]);
 		});
 
 		it("sits round and still while the player is out of range", () => {
 			const far = 50 + 20 + 10 + LEAN_RANGE * 20 + 1;
-			expect(drawn(far)).toMatchObject({ x: far, y: 60, stretch: [0, 0] });
+			expect(drawn(far)).toMatchObject({ x: far, y: 60, stretchX: 0, stretchY: 0 });
 		});
 
 		it("draws its yolk to the player from the start, wherever they are", () => {
 			const pull = 10 * (1 - YOLK_RADIUS) * YOLK_PULL;
 			// Far off to the right of the player, then far below it
 			const right = drawn(1000);
-			expect(right.yolk[0]).toBeCloseTo(-pull);
-			expect(right.yolk[1]).toBeCloseTo(0);
+			expect(right.coreX).toBeCloseTo(-pull);
+			expect(right.coreY).toBeCloseTo(0);
 			const [below] = buildScene(
 				frame([dot({ kind: "point", x: 50, y: 1000, radius: 10 }), player]),
 				0,
 				PLAYER_POS,
 			);
-			expect(below.yolk[0]).toBeCloseTo(0);
-			expect(below.yolk[1]).toBeCloseTo(-pull);
+			expect(below.coreX).toBeCloseTo(0);
+			expect(below.coreY).toBeCloseTo(-pull);
 			// Still inside the shell
 			expect(pull + 10 * YOLK_RADIUS).toBeLessThan(10);
 		});
 
 		it("has no yolk to pull once caught, and small dots have none", () => {
-			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 }).yolk).toEqual([0, 0]);
+			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 })).toMatchObject({ coreX: 0, coreY: 0 });
 			const [small] = buildScene(frame([dot({ x: 1000 }), player]), 0, PLAYER_POS);
-			expect(small.yolk).toEqual([0, 0]);
+			expect(small).toMatchObject({ coreX: 0, coreY: 0 });
 		});
 
 		it("leans toward a nearby player with its back edge held still", () => {
@@ -341,9 +280,9 @@ describe("buildScene", () => {
 			const d = drawn(110);
 			const reach = leanReach(30, 20, 10);
 			expect(reach).toBeGreaterThan(0);
-			expect(d.stretch[0]).toBeCloseTo(-reach / 20);
-			expect(d.stretch[1]).toBeCloseTo(0);
-			const halfLength = 10 * (1 + Math.abs(d.stretch[0]));
+			expect(d.stretchX).toBeCloseTo(-reach / 20);
+			expect(d.stretchY).toBeCloseTo(0);
+			const halfLength = 10 * (1 + Math.abs(d.stretchX));
 			expect(d.x + halfLength).toBeCloseTo(110 + 10);
 			expect(d.x - halfLength).toBeCloseTo(110 - 10 - reach);
 		});
@@ -351,14 +290,17 @@ describe("buildScene", () => {
 		it("never reaches the player before it is caught", () => {
 			for (let x = 81; x < 200; x += 1) {
 				const d = drawn(x);
-				const tip = d.x - 10 * (1 + Math.abs(d.stretch[0]));
+				const tip = d.x - 10 * (1 + Math.abs(d.stretchX));
 				const gap = x - 10 - (50 + 20);
 				expect(tip - (50 + 20)).toBeGreaterThanOrEqual(gap * (1 - LEAN_GAP_SHARE) - 1e-3);
 			}
 		});
 
 		it("does not lean while it is caught", () => {
-			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 }).stretch).toEqual([0, 0]);
+			expect(drawn(80, { absorb: 0.1, prevAbsorb: 0.1 })).toMatchObject({
+				stretchX: 0,
+				stretchY: 0,
+			});
 		});
 	});
 
@@ -393,11 +335,9 @@ describe("buildScene", () => {
 			dot({ id: "r", x: 79, y: 60, radius: 10, prevRadius: 10, reject, prevReject });
 		const at = (reject: number, phase: GamePhase = "REJECTING") => {
 			const scene = createSceneBuilder()(frame([player, refused(reject)], phase), 0, PLAYER_POS);
-			const p = scene.length - SCENE_STRIDE;
 			return {
-				dot: decode(scene).find((d) => d.kind === "rejected"),
-				player: decode(scene).find((d) => d.kind === "player"),
-				stretch: [scene[p + SCENE_STRETCH_X], scene[p + SCENE_STRETCH_Y]],
+				dot: readScene(scene).find((d) => d.kind === "rejected"),
+				player: readDot(scene, findPlayer(scene), sceneDot()),
 			};
 		};
 
@@ -410,8 +350,8 @@ describe("buildScene", () => {
 			expect(pressed.dot?.y).toBeCloseTo(60);
 			expect(pressed.dot?.dent).toBe(1);
 			// Squashed along the hit, so long across it
-			expect(pressed.stretch[0]).toBeCloseTo(0);
-			expect(Math.abs(pressed.stretch[1])).toBeCloseTo(REJECT_SQUASH);
+			expect(pressed.player.stretchX).toBeCloseTo(0);
+			expect(Math.abs(pressed.player.stretchY)).toBeCloseTo(REJECT_SQUASH);
 			expect(pressed.player).toMatchObject({ x: 50, y: 60, dent: 0 });
 		});
 
@@ -424,7 +364,7 @@ describe("buildScene", () => {
 			expect(done.dot?.x).toBeCloseTo(50 + 20 + 10 * (1 + REJECT_SPIT_GAP));
 			expect(done.dot?.dent).toBe(0);
 			expect(done.player?.x).toBeCloseTo(50);
-			expect(done.stretch).toEqual([0, 0]);
+			expect(done.player).toMatchObject({ stretchX: 0, stretchY: 0 });
 		});
 
 		it("is drawn exactly pushed out on the game over screen", () => {
@@ -466,15 +406,12 @@ describe("at the walls", () => {
 			expect(d.x).toBeCloseTo(grown * dripHang(0.4));
 			expect(d.y).toBe(100);
 			expect(d.kind).toBe("small");
-			expect(d.walls).toEqual([
-				[1, 0, 0],
-				[0, 0, 0],
-			]);
+			expect(d).toMatchObject({ ...NO_WALLS, wallX: 1, wallY: 0, wallC: 0 });
 			expect(d.neck).toBeCloseTo(10 * DRIP_NECK);
 			const [below] = buildScene(frame([forming(0.4, 0.4, BOTTOM)], "KIOSK"), 0, PLAYER_POS);
 			expect(below.x).toBe(100);
 			expect(below.y).toBeCloseTo(800 - grown * dripHang(0.4));
-			expect(below.walls[0]).toEqual([0, -1, -800]);
+			expect(below).toMatchObject({ wallX: 0, wallY: -1, wallC: -800 });
 		});
 
 		it("swells forward and is drawn out along the heading it will shoot off on", () => {
@@ -485,9 +422,9 @@ describe("at the walls", () => {
 			expect(d.x).toBeCloseTo(at.x * grown);
 			expect(d.y).toBeCloseTo(100 + at.y * grown);
 			expect(d.y).toBeGreaterThan(100);
-			expect(d.stretch[0]).toBeCloseTo(0.6 * DRIP_STRETCH);
-			expect(d.stretch[1]).toBeCloseTo(0.8 * DRIP_STRETCH);
-			expect(d.walls[0]).toEqual([1, 0, 0]);
+			expect(d.stretchX).toBeCloseTo(0.6 * DRIP_STRETCH);
+			expect(d.stretchY).toBeCloseTo(0.8 * DRIP_STRETCH);
+			expect(d).toMatchObject({ wallX: 1, wallY: 0, wallC: 0 });
 		});
 
 		it("grows between ticks, and holds still when frozen", () => {
@@ -510,24 +447,24 @@ describe("at the walls", () => {
 		it("is drawn out along its heading, still joined to the wall by the fillet", () => {
 			const [d] = buildScene(frame([launched(0.5)], "KIOSK"), 0, PLAYER_POS);
 			expect(d).toMatchObject({ x: 30, y: 100, radius: 10, neck: 10 * DRIP_NECK });
-			expect(d.walls[0]).toEqual([1, 0, 0]);
-			expect(Math.hypot(d.stretch[0], d.stretch[1])).toBeCloseTo(launchStretch(0.5));
-			expect(d.stretch[0] / d.stretch[1]).toBeCloseTo(6 / 8);
+			expect(d).toMatchObject({ wallX: 1, wallY: 0, wallC: 0 });
+			expect(Math.hypot(d.stretchX, d.stretchY)).toBeCloseTo(launchStretch(0.5));
+			expect(d.stretchX / d.stretchY).toBeCloseTo(6 / 8);
 		});
 
 		it("moves on between ticks as the launch eases, and is round again by the end", () => {
 			const [moving] = buildScene(frame([launched(0.5, 0.25)], "KIOSK"), 0.5, PLAYER_POS);
 			expect(moving).toMatchObject({ x: 33, y: 104 });
-			expect(Math.hypot(moving.stretch[0], moving.stretch[1])).toBeCloseTo(launchStretch(0.375));
+			expect(Math.hypot(moving.stretchX, moving.stretchY)).toBeCloseTo(launchStretch(0.375));
 			const [done] = buildScene(frame([launched(1)], "KIOSK"), 0, PLAYER_POS);
-			expect(done.stretch).toEqual([0, 0]);
+			expect(done).toMatchObject({ stretchX: 0, stretchY: 0 });
 		});
 
 		it("is drawn out straight off the wall when a frozen frame reports no heading", () => {
 			const still = dot({ x: 30, y: 100, launch: { wall: LEFT, progress: 0.5, prev: 0.5 } });
 			const [d] = buildScene(frame([still], "GAME_OVER"), 0, PLAYER_POS);
-			expect(d.stretch[0]).toBeCloseTo(launchStretch(0.5));
-			expect(d.stretch[1]).toBe(0);
+			expect(d.stretchX).toBeCloseTo(launchStretch(0.5));
+			expect(d.stretchY).toBe(0);
 		});
 	});
 
@@ -545,7 +482,7 @@ describe("at the walls", () => {
 			for (let i = 0; i < 60; i++) {
 				scene = build(frame([player]), 0, { ...at, pushX: push.x, pushY: push.y }, 16, SCREEN);
 			}
-			return decode(scene)[0];
+			return readScene(scene)[0];
 		}
 
 		it("presses into the wall as hard as it pushes, widening and wetting it", () => {
@@ -554,10 +491,7 @@ describe("at the walls", () => {
 			expect(p.x).toBeCloseTo(20 - depth, 1);
 			expect(p.y).toBe(300);
 			expect(p.radius).toBeCloseTo(pressedRadius(20, depth), 1);
-			expect(p.walls).toEqual([
-				[1, 0, 0],
-				[0, 0, 0],
-			]);
+			expect(p).toMatchObject({ ...NO_WALLS, wallX: 1, wallY: 0, wallC: 0 });
 			expect(p.neck).toBeCloseTo(20 * PLAYER_NECK * (depth / (20 * PLAYER_PRESS)), 1);
 			const harder = settled(createSceneBuilder(), { x: -10 * PLAYER_PUSH_SPEED, y: 0 });
 			expect(harder.x).toBeLessThan(p.x);
@@ -566,21 +500,19 @@ describe("at the walls", () => {
 
 		it("presses into each wall it is pushed toward, two in a corner", () => {
 			const corner = settled(createSceneBuilder(), { x: 300, y: 300 }, { x: 380, y: 780 });
-			expect(corner.walls).toEqual([
-				[-1, 0, -400],
-				[0, -1, -800],
-			]);
+			expect(corner).toMatchObject({ wallX: -1, wallY: 0, wallC: -400 });
+			expect(corner).toMatchObject({ wall2X: 0, wall2Y: -1, wall2C: -800 });
 			expect(corner.x).toBeGreaterThan(380);
 			expect(corner.y).toBeGreaterThan(780);
 			const top = settled(createSceneBuilder(), { x: 0, y: -300 }, { x: 200, y: 20 });
-			expect(top.walls[0]).toEqual([0, 1, 0]);
+			expect(top).toMatchObject({ wallX: 0, wallY: 1, wallC: 0 });
 			expect(top.y).toBeLessThan(20);
 		});
 
 		it("follows the push with a short lag rather than at once", () => {
 			const build = createSceneBuilder();
 			build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
-			const first = decode(
+			const first = readScene(
 				build(frame([player]), 0, { ...FLUSH_LEFT, pushX: -300 }, 16, SCREEN),
 			)[0];
 			expect(first.x).toBeLessThan(20);
@@ -590,22 +522,22 @@ describe("at the walls", () => {
 		it("eases back as the push lets up, and at once by any gap that opens as it pulls away", () => {
 			const build = createSceneBuilder();
 			settled(build, { x: -300, y: 0 });
-			const letUp = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			const letUp = readScene(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
 			expect(letUp.x).toBeLessThan(20);
-			expect(letUp.walls[0]).toEqual([1, 0, 0]);
+			expect(letUp).toMatchObject({ wallX: 1, wallY: 0, wallC: 0 });
 			for (let i = 0; i < 60; i++) build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
-			const gone = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
-			expect(gone).toMatchObject({ x: 20, radius: 20, walls: NO_WALLS, neck: 0 });
+			const gone = readScene(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			expect(gone).toMatchObject({ x: 20, radius: 20, ...NO_WALLS, neck: 0 });
 
 			settled(build, { x: -300, y: 0 });
 			const depth = pressDepth(300, 20);
-			const pulled = decode(
+			const pulled = readScene(
 				build(frame([player]), 0, { x: 20 + depth / 2, y: 300 }, 16, SCREEN),
 			)[0];
 			expect(20 + depth / 2 - pulled.x).toBeLessThan(depth / 2 + 1e-6);
-			const clear = decode(build(frame([player]), 0, { x: 20 + depth, y: 300 }, 16, SCREEN))[0];
+			const clear = readScene(build(frame([player]), 0, { x: 20 + depth, y: 300 }, 16, SCREEN))[0];
 			expect(clear.x).toBeCloseTo(20 + depth);
-			expect(clear.walls).toEqual(NO_WALLS);
+			expect(clear).toMatchObject(NO_WALLS);
 		});
 
 		it("needs the screen to know where the walls are", () => {
@@ -614,15 +546,19 @@ describe("at the walls", () => {
 			for (let i = 0; i < 60; i++) {
 				scene = build(frame([player]), 0, { ...FLUSH_LEFT, pushX: -300, pushY: 0 }, 16);
 			}
-			expect(decode(scene)[0]).toMatchObject({ x: 20, walls: NO_WALLS, neck: 0 });
+			expect(readScene(scene)[0]).toMatchObject({ x: 20, ...NO_WALLS, neck: 0 });
 		});
 
 		it("holds the press while frozen", () => {
 			const build = createSceneBuilder();
 			const pressed = settled(build, { x: -300, y: 0 });
-			const paused = decode(build(frame([player], "PAUSED"), 0, FLUSH_LEFT, 0, SCREEN))[0];
+			const paused = readScene(build(frame([player], "PAUSED"), 0, FLUSH_LEFT, 0, SCREEN))[0];
 			expect(paused.x).toBeCloseTo(pressed.x);
-			expect(paused.walls).toEqual(pressed.walls);
+			expect(paused).toMatchObject({
+				wallX: pressed.wallX,
+				wallY: pressed.wallY,
+				wallC: pressed.wallC,
+			});
 		});
 
 		it("keeps its slosh on its own path, not the press", () => {
@@ -630,8 +566,8 @@ describe("at the walls", () => {
 			const build = createSceneBuilder();
 			settled(build, { x: -300, y: 0 });
 			for (let i = 0; i < 60; i++) build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
-			const p = decode(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
-			expect(p.stretch).toEqual([0, 0]);
+			const p = readScene(build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN))[0];
+			expect(p).toMatchObject({ stretchX: 0, stretchY: 0 });
 		});
 	});
 });

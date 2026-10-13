@@ -1,13 +1,7 @@
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { ClockFactory } from "../../application/ports";
-import {
-	SCENE_NECK,
-	SCENE_RADIUS,
-	SCENE_STRIDE,
-	SCENE_WALL_X,
-	SCENE_X,
-} from "../../application/renderScene";
+import { dotCount, findPlayer, readDot, sceneDot } from "../../application/sceneRecord";
 import { GAME_COLORS } from "../../domain/constants";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -74,7 +68,7 @@ describe("GameSession", () => {
 		expect(scenes).toHaveLength(0);
 		clock.frame(16, 0.5);
 		expect(scenes).toHaveLength(1);
-		expect(scenes[0].length).toBe(store.getState().frame.dots.length * SCENE_STRIDE);
+		expect(dotCount(scenes[0])).toBe(store.getState().frame.dots.length);
 	});
 
 	it("start begins a run in the chosen colour with the player mid-screen", () => {
@@ -222,10 +216,10 @@ describe("GameSession", () => {
 		session.feedTilt({ x: -1, y: 0, facingDown: false });
 		for (let i = 0; i < 120; i++) clock.frame(16, 0);
 		const scene = scenes[scenes.length - 1];
-		const player = scene.length - SCENE_STRIDE;
-		expect(scene[player + SCENE_WALL_X]).toBe(1);
-		expect(scene[player + SCENE_X]).toBeLessThan(scene[player + SCENE_RADIUS]);
-		expect(scene[player + SCENE_NECK]).toBeGreaterThan(0);
+		const player = readDot(scene, findPlayer(scene), sceneDot());
+		expect(player.wallX).toBe(1);
+		expect(player.x).toBeLessThan(player.radius);
+		expect(player.neck).toBeGreaterThan(0);
 	});
 
 	it("presenting can be undone", () => {

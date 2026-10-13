@@ -1,14 +1,4 @@
-import {
-	SCENE_NECK,
-	SCENE_RADIUS,
-	SCENE_STRETCH_X,
-	SCENE_STRETCH_Y,
-	SCENE_WALL_C,
-	SCENE_WALL_X,
-	SCENE_WALL_Y,
-	SCENE_X,
-	SCENE_Y,
-} from "../application/renderScene";
+import type { SceneDot } from "../application/sceneRecord";
 import { SMIN_SKSL, WALL_SKSL } from "./liquidShader";
 
 /**
@@ -19,7 +9,7 @@ import { SMIN_SKSL, WALL_SKSL } from "./liquidShader";
  * one point; output is premultiplied.
  *
  * Uniforms, in order: `center`, `radius`, `stretch` (long-axis vector, length the stretch
- * fraction), `wall` (inward unit normal x, y and offset, see renderScene.ts SCENE_WALL_X),
+ * fraction), `wall` (inward unit normal x, y and offset, see sceneRecord.ts SceneDot.wallX),
  * `neck` (points) and `color` (unpremultiplied RGBA).
  */
 export const WALL_DROP_SKSL = `
@@ -53,28 +43,13 @@ export interface WallDropUniforms {
 	bottom: number;
 }
 
-/** Pack the dot whose record starts at `offset` in the drawable scene into shader uniforms */
-export function packWallDropUniforms(scene: Float32Array, offset: number): WallDropUniforms {
+/** Pack a small dot at a wall, read from the drawable scene, into shader uniforms */
+export function packWallDropUniforms(dot: SceneDot): WallDropUniforms {
 	"worklet";
-	const x = scene[offset + SCENE_X];
-	const y = scene[offset + SCENE_Y];
-	const radius = scene[offset + SCENE_RADIUS];
-	const stretchX = scene[offset + SCENE_STRETCH_X];
-	const stretchY = scene[offset + SCENE_STRETCH_Y];
-	const neck = scene[offset + SCENE_NECK];
+	const { x, y, radius, stretchX, stretchY, neck } = dot;
 	const reach = radius * (1 + Math.hypot(stretchX, stretchY)) + neck + 1;
 	return {
-		values: [
-			x,
-			y,
-			radius,
-			stretchX,
-			stretchY,
-			scene[offset + SCENE_WALL_X],
-			scene[offset + SCENE_WALL_Y],
-			scene[offset + SCENE_WALL_C],
-			neck,
-		],
+		values: [x, y, radius, stretchX, stretchY, dot.wallX, dot.wallY, dot.wallC, neck],
 		left: x - reach,
 		top: y - reach,
 		right: x + reach,

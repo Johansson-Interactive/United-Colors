@@ -1,10 +1,5 @@
-import {
-	createSceneBuilder,
-	SCENE_RADIUS,
-	SCENE_STRIDE,
-	SCENE_X,
-	SCENE_Y,
-} from "../../application/renderScene";
+import { createSceneBuilder } from "../../application/renderScene";
+import { readDot, sceneDot } from "../../application/sceneRecord";
 import { POINT_DOT_VALUE } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import type { Dot } from "../../domain/entities/Dot";
@@ -44,12 +39,7 @@ describe("a drip between ticks", () => {
 	const { frame, drip, player } = engineAtDrip();
 	const others = frame.dots.filter((d) => d.kind !== "player");
 	const scene = createSceneBuilder()(frame, ALPHA, player);
-	const at = others.indexOf(drip) * SCENE_STRIDE;
-	const drawn = {
-		x: scene[at + SCENE_X],
-		y: scene[at + SCENE_Y],
-		radius: scene[at + SCENE_RADIUS],
-	};
+	const drawn = readDot(scene, others.indexOf(drip), sceneDot());
 	const wall = drip.drip?.wall ?? { nx: 1, ny: 0 };
 	// Straight out from the wall, and slanting either way along it, little enough that the
 	// player is still clear of the wall
@@ -102,7 +92,7 @@ function drawnAndCaught(dot: Dot, alpha: number) {
 	};
 	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots: [view], events: [] };
 	const scene = createSceneBuilder()(frame, alpha, { x: 5000, y: 5000 });
-	const drawn = { x: scene[SCENE_X], y: scene[SCENE_Y], radius: scene[SCENE_RADIUS] };
+	const drawn = readDot(scene, 0, sceneDot());
 	return { drawn, caught: dot.circleAt(alpha, { x: 0, y: 0, radius: 0 }) };
 }
 

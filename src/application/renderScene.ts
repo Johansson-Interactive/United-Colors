@@ -1,6 +1,6 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import { dripCircle } from "../domain/engine/Drip";
-import type { DotView, RenderFrame, ScreenSize, WallContact } from "../domain/types";
+import type { RenderFrame, ScreenSize, WallContact } from "../domain/types";
 import { createJelly, JELLY_MAX_STRETCH } from "./jelly";
 import { leanReach } from "./lean";
 import {
@@ -12,6 +12,16 @@ import {
 	rejectRecoil,
 } from "./rejection";
 import {
+	sceneLength,
+	setDent,
+	setMerge,
+	setNeck,
+	setStretch,
+	setWall,
+	setYolk,
+	writeDot,
+} from "./sceneRecord";
+import {
 	DRIP_NECK,
 	DRIP_STRETCH,
 	launchStretch,
@@ -22,66 +32,6 @@ import {
 	stepPress,
 } from "./wall";
 
-/**
- * The drawable scene is a flat Float32Array with one record of SCENE_STRIDE floats per dot,
- * so one typed-array copy crosses to the UI thread per frame instead of an object per dot.
- */
-export const SCENE_STRIDE = 20;
-export const SCENE_X = 0;
-export const SCENE_Y = 1;
-export const SCENE_RADIUS = 2;
-/** Index into GAME_COLORS */
-export const SCENE_COLOR = 3;
-/** One of the SCENE_KIND_* codes */
-export const SCENE_KIND = 4;
-/** For SCENE_KIND_MERGING dots: how far the slide into the player has come, 0..1 */
-export const SCENE_MERGE = 5;
-/**
- * For the player: its liquid stretch vector and wobble clock (see jelly.ts). For a point
- * dot: its lean toward the player as a stretch vector (see lean.ts). 0 otherwise.
- */
-export const SCENE_STRETCH_X = 6;
-export const SCENE_STRETCH_Y = 7;
-export const SCENE_WOBBLE = 8;
-/**
- * For a SCENE_KIND_REJECTED dot: how soft the dent it presses into the player is, 1 while it
- * presses and falling to 0 as it is pushed clear (so no dent is left once it is out)
- */
-export const SCENE_DENT = 9;
-/**
- * For a point dot: the GAME_COLORS index of its yolk, the colour the player turns into on
- * catching it, while its shell (SCENE_COLOR) is the player's own colour; -1 for no yolk
- */
-export const SCENE_CORE = 10;
-/**
- * For a point dot: where its yolk sits, as an offset (px) from the dot's centre before the
- * lean stretches it; 0 otherwise
- */
-export const SCENE_CORE_X = 11;
-export const SCENE_CORE_Y = 12;
-/**
- * The wall the dot is in contact with (and a second, for the player in a corner): the unit
- * normal from the wall into the screen, and the wall's offset along it, so a point p is on
- * the screen side where p . n - c > 0. A zero normal is no wall. A body is cut off at its
- * walls and, with a neck, joined to them by a wet fillet.
- */
-export const SCENE_WALL_X = 13;
-export const SCENE_WALL_Y = 14;
-export const SCENE_WALL_C = 15;
-export const SCENE_WALL2_X = 16;
-export const SCENE_WALL2_Y = 17;
-export const SCENE_WALL2_C = 18;
-/** Width (px) of the fillet joining the body to its walls (a smooth-min radius); 0 is dry */
-export const SCENE_NECK = 19;
-
-export const SCENE_KIND_SMALL = 0;
-export const SCENE_KIND_POINT = 1;
-export const SCENE_KIND_PLAYER = 2;
-/** A caught dot sliding into the player; drawn as one liquid body with it */
-export const SCENE_KIND_MERGING = 3;
-/** The wrong-colour dot the player is refusing; it dents the player's liquid */
-export const SCENE_KIND_REJECTED = 4;
-
 /** The player may swell to at most this multiple of its radius while taking dots in */
 export const MERGE_SWELL_MAX = 1.3;
 /** A merging dot has shrunk to this fraction of its radius by the time it reaches the player */
@@ -90,11 +40,6 @@ const MERGE_SHRINK = 0.55;
 export const YOLK_RADIUS = 0.5;
 /** The yolk is drawn this share of the way from the dot's centre to its rim, toward the player */
 export const YOLK_PULL = 0.7;
-
-function kindCode(kind: DotView["kind"]): number {
-	if (kind === "player") return SCENE_KIND_PLAYER;
-	return kind === "point" ? SCENE_KIND_POINT : SCENE_KIND_SMALL;
-}
 
 /**
  * How far along its slide into the player a caught dot is, 0..1, from its absorb progress
@@ -142,26 +87,6 @@ export function addStretches(ax: number, ay: number, bx: number, by: number): [n
 	return [Math.cos(angle) * e, Math.sin(angle) * e];
 }
 
-/** Zero the fields only the player, a point dot, a refused dot or a dot at a wall use */
-function clearExtraFields(buffer: Float32Array, offset: number): void {
-	buffer[offset + SCENE_STRETCH_X] = 0;
-	buffer[offset + SCENE_STRETCH_Y] = 0;
-	buffer[offset + SCENE_WOBBLE] = 0;
-	buffer[offset + SCENE_DENT] = 0;
-	buffer[offset + SCENE_CORE] = -1;
-	buffer[offset + SCENE_CORE_X] = 0;
-	buffer[offset + SCENE_CORE_Y] = 0;
-	for (let i = SCENE_WALL_X; i <= SCENE_NECK; i++) buffer[offset + i] = 0;
-}
-
-/** Write `wall` into the record's first or second wall slot */
-function setWall(buffer: Float32Array, offset: number, slot: 0 | 1, wall: WallContact): void {
-	const base = offset + (slot === 0 ? SCENE_WALL_X : SCENE_WALL2_X);
-	buffer[base] = wall.nx;
-	buffer[base + 1] = wall.ny;
-	buffer[base + 2] = wall.nx * wall.x + wall.ny * wall.y;
-}
-
 /** Where the player is this frame, and how hard they push into the walls (see GameEngine.getPlayerPush) */
 export interface PlayerPose {
 	x: number;
@@ -198,7 +123,7 @@ function colorIndex(color: string): number {
  *   progress (see Drip.ts), joined to the wall by a wet fillet and swelling forward, drawn
  *   out, along the heading it will shoot off on. Once it lets go it stays joined to the wall
  *   while it tears free, rounding up as it goes (see wall.ts).
- * - The player is drawn at its live position (moved every frame) and always last (on top),
+ * - The player is drawn at its live position (moved every frame),
  *   with the liquid shape its movement over the last `dtMs` gives it. Pushed into a wall
  *   (given the `screen`), it presses into it as hard as it pushes, with a wet fillet, and
  *   eases back as the push lets up or it pulls away.
@@ -227,10 +152,10 @@ export function createSceneBuilder() {
 		const frozen = frame.phase === "PAUSED" || frame.phase === "GAME_OVER";
 		const moveT = frozen ? 0 : alpha;
 		const sizeT = frozen ? 1 : alpha;
-		const needed = frame.dots.length * SCENE_STRIDE;
+		const needed = sceneLength(frame.dots.length);
 		if (buffer.length < needed) buffer = new Float32Array(needed);
 
-		let offset = 0;
+		let n = 0;
 		const playerDot = frame.dots.find((d) => d.kind === "player");
 		// Sum of (caught radius / player radius)^2 weighted by how much of each is in the player
 		let swell = 0;
@@ -244,17 +169,16 @@ export function createSceneBuilder() {
 		for (const dot of frame.dots) {
 			if (dot.kind === "player") continue;
 			const radius = dot.prevRadius + (dot.radius - dot.prevRadius) * sizeT;
-			buffer[offset + SCENE_COLOR] = colorIndex(dot.color);
+			const color = colorIndex(dot.color);
 			if (dot.absorb !== undefined) {
 				const prev = dot.prevAbsorb ?? dot.absorb;
 				const absorb = prev + (dot.absorb - prev) * sizeT;
 				const slide = mergeSlide(absorb);
-				buffer[offset + SCENE_X] = dot.x + (player.x - dot.x) * slide;
-				buffer[offset + SCENE_Y] = dot.y + (player.y - dot.y) * slide;
-				buffer[offset + SCENE_RADIUS] = radius * (1 - (1 - MERGE_SHRINK) * slide);
-				buffer[offset + SCENE_KIND] = SCENE_KIND_MERGING;
-				buffer[offset + SCENE_MERGE] = slide;
-				clearExtraFields(buffer, offset);
+				const x = dot.x + (player.x - dot.x) * slide;
+				const y = dot.y + (player.y - dot.y) * slide;
+				const shrunk = radius * (1 - (1 - MERGE_SHRINK) * slide);
+				writeDot(buffer, n, "merging", x, y, shrunk, color);
+				setMerge(buffer, n, slide);
 				if (playerDot && playerDot.radius > 0) {
 					const ratio = radius / playerDot.radius;
 					swell += ratio * ratio * mergeSwell(absorb);
@@ -271,41 +195,54 @@ export function createSceneBuilder() {
 				const playerRadius = playerDot?.radius ?? 0;
 				const touching = playerRadius + radius;
 				const depth = rejectPenetration(reject, touching - distance, radius);
-				buffer[offset + SCENE_X] = player.x + nx * (touching - depth);
-				buffer[offset + SCENE_Y] = player.y + ny * (touching - depth);
-				buffer[offset + SCENE_RADIUS] = radius;
-				buffer[offset + SCENE_KIND] = SCENE_KIND_REJECTED;
-				buffer[offset + SCENE_MERGE] = 0;
-				clearExtraFields(buffer, offset);
-				buffer[offset + SCENE_DENT] = 1 - rejectPush(reject);
+				const x = player.x + nx * (touching - depth);
+				const y = player.y + ny * (touching - depth);
+				writeDot(buffer, n, "rejected", x, y, radius, color);
+				setDent(buffer, n, 1 - rejectPush(reject));
 				const press = Math.min(1, Math.max(0, depth / (radius * REJECT_PRESS_DEPTH)));
 				squashX -= ny * REJECT_SQUASH * press;
 				squashY += nx * REJECT_SQUASH * press;
 				const recoil = playerRadius * REJECT_RECOIL * rejectRecoil(reject);
 				playerX -= nx * recoil;
 				playerY -= ny * recoil;
+			} else if (dot.drip) {
+				const { wall, heading } = dot.drip;
+				// The same pose the engine catches it at (see SmallDot.circleAt)
+				const { prev, progress } = dot.drip;
+				dripCircle(wall, heading, dot.drip.radius, prev, progress, sizeT, dripPose);
+				writeDot(buffer, n, "small", dripPose.x, dripPose.y, dripPose.radius, color);
+				setStretch(buffer, n, heading.vx * DRIP_STRETCH, heading.vy * DRIP_STRETCH);
+				setWall(buffer, n, 0, wall);
+				setNeck(buffer, n, dot.drip.radius * DRIP_NECK);
 			} else {
 				const x = dot.x + dot.vx * moveT;
 				const y = dot.y + dot.vy * moveT;
-				buffer[offset + SCENE_X] = x;
-				buffer[offset + SCENE_Y] = y;
-				buffer[offset + SCENE_RADIUS] = radius;
-				buffer[offset + SCENE_KIND] = kindCode(dot.kind);
-				buffer[offset + SCENE_MERGE] = 0;
-				clearExtraFields(buffer, offset);
-				if (dot.drip) {
-					const { wall, heading } = dot.drip;
-					// The same pose the engine catches it at (see SmallDot.circleAt)
-					const { prev, progress } = dot.drip;
-					dripCircle(wall, heading, dot.drip.radius, prev, progress, sizeT, dripPose);
-					buffer[offset + SCENE_X] = dripPose.x;
-					buffer[offset + SCENE_Y] = dripPose.y;
-					buffer[offset + SCENE_RADIUS] = dripPose.radius;
-					buffer[offset + SCENE_STRETCH_X] = heading.vx * DRIP_STRETCH;
-					buffer[offset + SCENE_STRETCH_Y] = heading.vy * DRIP_STRETCH;
-					setWall(buffer, offset, 0, wall);
-					buffer[offset + SCENE_NECK] = dot.drip.radius * DRIP_NECK;
-				} else if (dot.launch) {
+				if (dot.kind === "point" && playerDot && radius > 0) {
+					const dx = player.x - x;
+					const dy = player.y - y;
+					const distance = Math.hypot(dx, dy);
+					const nx = distance > 1e-6 ? dx / distance : 0;
+					const ny = distance > 1e-6 ? dy / distance : 0;
+					const reach = leanReach(distance - playerDot.radius - radius, playerDot.radius, radius);
+					// Stretched along the lean, the tip moves out by twice the centre's shift
+					const shift = Math.max(0, reach) / 2;
+					writeDot(
+						buffer,
+						n,
+						"point",
+						x + nx * shift,
+						y + ny * shift,
+						radius,
+						colorIndex(playerDot.color),
+					);
+					const pull = radius * (1 - YOLK_RADIUS) * YOLK_PULL;
+					setYolk(buffer, n, color, nx * pull, ny * pull);
+					if (reach > 0)
+						setStretch(buffer, n, (nx * reach) / (2 * radius), (ny * reach) / (2 * radius));
+				} else {
+					writeDot(buffer, n, dot.kind, x, y, radius, color);
+				}
+				if (dot.launch) {
 					const { wall } = dot.launch;
 					const progress = dot.launch.prev + (dot.launch.progress - dot.launch.prev) * sizeT;
 					const stretch = launchStretch(progress);
@@ -313,33 +250,12 @@ export function createSceneBuilder() {
 					const speed = Math.hypot(dot.vx, dot.vy);
 					const ux = speed > 1e-6 ? dot.vx / speed : wall.nx;
 					const uy = speed > 1e-6 ? dot.vy / speed : wall.ny;
-					buffer[offset + SCENE_STRETCH_X] = ux * stretch;
-					buffer[offset + SCENE_STRETCH_Y] = uy * stretch;
-					setWall(buffer, offset, 0, wall);
-					buffer[offset + SCENE_NECK] = radius * DRIP_NECK;
-				}
-				if (dot.kind === "point" && playerDot && radius > 0) {
-					buffer[offset + SCENE_COLOR] = colorIndex(playerDot.color);
-					buffer[offset + SCENE_CORE] = colorIndex(dot.color);
-					const dx = player.x - x;
-					const dy = player.y - y;
-					const distance = Math.hypot(dx, dy);
-					const nx = distance > 1e-6 ? dx / distance : 0;
-					const ny = distance > 1e-6 ? dy / distance : 0;
-					const pull = radius * (1 - YOLK_RADIUS) * YOLK_PULL;
-					buffer[offset + SCENE_CORE_X] = nx * pull;
-					buffer[offset + SCENE_CORE_Y] = ny * pull;
-					const reach = leanReach(distance - playerDot.radius - radius, playerDot.radius, radius);
-					if (reach > 0) {
-						// Stretched along the lean, the tip moves out by twice the centre's shift
-						buffer[offset + SCENE_X] = x + (nx * reach) / 2;
-						buffer[offset + SCENE_Y] = y + (ny * reach) / 2;
-						buffer[offset + SCENE_STRETCH_X] = (nx * reach) / (2 * radius);
-						buffer[offset + SCENE_STRETCH_Y] = (ny * reach) / (2 * radius);
-					}
+					setStretch(buffer, n, ux * stretch, uy * stretch);
+					setWall(buffer, n, 0, wall);
+					setNeck(buffer, n, radius * DRIP_NECK);
 				}
 			}
-			offset += SCENE_STRIDE;
+			n++;
 		}
 
 		const step = frozen ? 0 : dtMs;
@@ -348,11 +264,12 @@ export function createSceneBuilder() {
 
 		if (playerDot) {
 			const shape = jelly(playerX, playerY, playerDot.radius, step);
-			clearExtraFields(buffer, offset);
 			let radius = playerDot.radius * Math.min(MERGE_SWELL_MAX, Math.sqrt(1 + swell));
+			// Pressed into each wall the push is toward: the body sinks in as hard as it is
+			// pushed, less any gap that has opened as the player pulls away
+			const pressed: WallContact[] = [];
+			let deepest = 0;
 			if (screen && playerDot.radius > 0) {
-				// Pressed into each wall the push is toward: the body sinks in as hard as it is
-				// pushed, less any gap that has opened as the player pulls away
 				const r = playerDot.radius;
 				const walls: Array<{ wall: WallContact; push: number }> = [];
 				if (pressX < 0) walls.push({ wall: { nx: 1, ny: 0, x: 0, y: playerY }, push: -pressX });
@@ -363,36 +280,30 @@ export function createSceneBuilder() {
 				if (pressY > 0) {
 					walls.push({ wall: { nx: 0, ny: -1, x: playerX, y: screen.height }, push: pressY });
 				}
-				let deepest = 0;
-				let slot: 0 | 1 = 0;
 				for (const { wall, push } of walls) {
 					const gap = (playerX - wall.x) * wall.nx + (playerY - wall.y) * wall.ny - r;
 					const depth = pressDepth(push, r) - Math.max(0, gap);
 					if (depth <= 0) continue;
 					playerX -= wall.nx * depth;
 					playerY -= wall.ny * depth;
-					setWall(buffer, offset, slot, wall);
-					slot = 1;
+					pressed.push(wall);
 					deepest = Math.max(deepest, depth);
 				}
-				if (deepest > 0) {
-					buffer[offset + SCENE_NECK] = r * PLAYER_NECK * (deepest / (r * PLAYER_PRESS));
-					radius = pressedRadius(radius, deepest);
-				}
+				if (deepest > 0) radius = pressedRadius(radius, deepest);
 			}
-			buffer[offset + SCENE_X] = playerX;
-			buffer[offset + SCENE_Y] = playerY;
-			buffer[offset + SCENE_RADIUS] = radius;
-			buffer[offset + SCENE_COLOR] = colorIndex(playerDot.color);
-			buffer[offset + SCENE_KIND] = SCENE_KIND_PLAYER;
-			buffer[offset + SCENE_MERGE] = 0;
+			writeDot(buffer, n, "player", playerX, playerY, radius, colorIndex(playerDot.color));
 			const [stretchX, stretchY] = addStretches(shape.stretchX, shape.stretchY, squashX, squashY);
-			buffer[offset + SCENE_STRETCH_X] = stretchX;
-			buffer[offset + SCENE_STRETCH_Y] = stretchY;
-			buffer[offset + SCENE_WOBBLE] = shape.wobble;
-			offset += SCENE_STRIDE;
+			setStretch(buffer, n, stretchX, stretchY, shape.wobble);
+			pressed.forEach((wall, slot) => {
+				setWall(buffer, n, slot === 0 ? 0 : 1, wall);
+			});
+			if (deepest > 0) {
+				const r = playerDot.radius;
+				setNeck(buffer, n, r * PLAYER_NECK * (deepest / (r * PLAYER_PRESS)));
+			}
+			n++;
 		}
 
-		return buffer.subarray(0, offset);
+		return buffer.subarray(0, sceneLength(n));
 	};
 }

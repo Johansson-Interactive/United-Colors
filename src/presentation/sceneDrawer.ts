@@ -5,28 +5,15 @@ import {
 	TileMode,
 	vec,
 } from "@shopify/react-native-skia";
+import { YOLK_RADIUS } from "../application/renderScene";
 import {
-	SCENE_COLOR,
-	SCENE_CORE,
-	SCENE_CORE_X,
-	SCENE_CORE_Y,
-	SCENE_KIND,
-	SCENE_KIND_MERGING,
-	SCENE_KIND_PLAYER,
-	SCENE_KIND_POINT,
-	SCENE_KIND_REJECTED,
-	SCENE_KIND_SMALL,
-	SCENE_MERGE,
-	SCENE_RADIUS,
-	SCENE_STRETCH_X,
-	SCENE_STRETCH_Y,
-	SCENE_STRIDE,
-	SCENE_WALL_X,
-	SCENE_WALL_Y,
-	SCENE_X,
-	SCENE_Y,
-	YOLK_RADIUS,
-} from "../application/renderScene";
+	dotCount,
+	findPlayer,
+	hasWall,
+	readDot,
+	type SceneDot,
+	sceneDot,
+} from "../application/sceneRecord";
 import { GAME_COLORS } from "../domain/constants";
 import { MERGE_SKSL, packMergeUniforms } from "./mergeShader";
 import { packWallDropUniforms, WALL_DROP_SKSL } from "./wallDropShader";
@@ -116,7 +103,7 @@ function glareOffset(light: number): number {
 }
 
 /**
- * Draw one frame of the scene (see renderScene.ts for the records) on the UI thread, lit from
+ * Draw one frame of the scene (see sceneRecord.ts for the records) on the UI thread, lit from
  * a light tilted by (`lightX`, `lightY`) radians.
  *
  * Every dot is drawn as a lit glass bead: a soft halo in its own colour, a solid body and a
@@ -147,29 +134,25 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 	const gx = glareOffset(lightX);
 	const gy = glareOffset(lightY);
 
-	const end = dots.length;
+	const count = dotCount(dots);
+	const dot = sceneDot();
 	// Halos first so no glow sits on top of a neighbouring body; a merging dot's halo
 	// shrinks away as the dot slides into the player
-	for (let i = 0; i < end; i += SCENE_STRIDE) {
-		const radius = dots[i + SCENE_RADIUS];
-		const kind = dots[i + SCENE_KIND];
-		if (radius <= 0 || kind === SCENE_KIND_PLAYER) continue;
-		const fade = kind === SCENE_KIND_MERGING ? 1 - dots[i + SCENE_MERGE] : 1;
+	for (let i = 0; i < count; i++) {
+		const { radius, kind } = readDot(dots, i, dot);
+		if (radius <= 0 || kind === "player") continue;
+		const fade = kind === "merging" ? 1 - dot.merge : 1;
 		const scale = radius * HALO_SCALE * fade;
 		if (scale <= 0) continue;
 		canvas.save();
-		canvas.translate(dots[i + SCENE_X], dots[i + SCENE_Y]);
+		canvas.translate(dot.x, dot.y);
 		canvas.scale(scale, scale);
-		canvas.drawCircle(0, 0, 1, HALO_PAINTS[dots[i + SCENE_COLOR]]);
+		canvas.drawCircle(0, 0, 1, HALO_PAINTS[dot.color]);
 		canvas.restore();
 	}
 	// A glass bead: body, the yolk of a point dot and glare, all stretched along its lean
-	const drawBead = (i: number) => {
-		const radius = dots[i + SCENE_RADIUS];
-		const x = dots[i + SCENE_X];
-		const y = dots[i + SCENE_Y];
-		const sx = dots[i + SCENE_STRETCH_X];
-		const sy = dots[i + SCENE_STRETCH_Y];
+	const drawBead = (bead: SceneDot) => {
+		const { x, y, radius, stretchX: sx, stretchY: sy } = bead;
 		const stretch = Math.hypot(sx, sy);
 		canvas.save();
 		if (stretch > 0) {
@@ -180,17 +163,11 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 			canvas.rotate(-degrees, 0, 0);
 			canvas.translate(-x, -y);
 		}
-		FILL_PAINT.setColor(FILL_COLORS[dots[i + SCENE_COLOR]]);
+		FILL_PAINT.setColor(FILL_COLORS[bead.color]);
 		canvas.drawCircle(x, y, radius, FILL_PAINT);
-		const core = dots[i + SCENE_CORE];
-		if (core >= 0) {
-			FILL_PAINT.setColor(FILL_COLORS[core]);
-			canvas.drawCircle(
-				x + dots[i + SCENE_CORE_X],
-				y + dots[i + SCENE_CORE_Y],
-				radius * YOLK_RADIUS,
-				FILL_PAINT,
-			);
+		if (bead.core >= 0) {
+			FILL_PAINT.setColor(FILL_COLORS[bead.core]);
+			canvas.drawCircle(x + bead.coreX, y + bead.coreY, radius * YOLK_RADIUS, FILL_PAINT);
 		}
 		canvas.translate(x + gx * radius, y + gy * radius);
 		canvas.scale(radius, radius);
@@ -198,40 +175,41 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 		canvas.restore();
 	};
 	// A small dot at a wall: its body by the wall shader, then its glare
-	const drawWallDrop = (i: number) => {
-		const drop = packWallDropUniforms(dots, i);
-		const color = FILL_COLORS[dots[i + SCENE_COLOR]];
-		drop.values.push(color[0], color[1], color[2], color[3]);
-		WALL_DROP_PAINT.setShader(WALL_DROP_EFFECT.makeShader(drop.values));
+	const drawWallDrop = (drop: SceneDot) => {
+		const packed = packWallDropUniforms(drop);
+		const color = FILL_COLORS[drop.color];
+		packed.values.push(color[0], color[1], color[2], color[3]);
+		WALL_DROP_PAINT.setShader(WALL_DROP_EFFECT.makeShader(packed.values));
 		canvas.drawRect(
-			Skia.XYWHRect(drop.left, drop.top, drop.right - drop.left, drop.bottom - drop.top),
+			Skia.XYWHRect(
+				packed.left,
+				packed.top,
+				packed.right - packed.left,
+				packed.bottom - packed.top,
+			),
 			WALL_DROP_PAINT,
 		);
-		const radius = dots[i + SCENE_RADIUS];
+		const { radius } = drop;
 		canvas.save();
-		canvas.translate(dots[i + SCENE_X] + gx * radius, dots[i + SCENE_Y] + gy * radius);
+		canvas.translate(drop.x + gx * radius, drop.y + gy * radius);
 		canvas.scale(radius, radius);
 		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
 		canvas.restore();
 	};
 	// Free dots
-	for (let i = 0; i < end; i += SCENE_STRIDE) {
-		const kind = dots[i + SCENE_KIND];
-		if (dots[i + SCENE_RADIUS] <= 0) continue;
-		if (
-			kind === SCENE_KIND_SMALL &&
-			(dots[i + SCENE_WALL_X] !== 0 || dots[i + SCENE_WALL_Y] !== 0)
-		) {
-			drawWallDrop(i);
-		} else if (kind === SCENE_KIND_SMALL || kind === SCENE_KIND_POINT) {
-			drawBead(i);
+	for (let i = 0; i < count; i++) {
+		const { kind, radius } = readDot(dots, i, dot);
+		if (radius <= 0) continue;
+		if (kind === "small" && hasWall(dot.wallX, dot.wallY)) {
+			drawWallDrop(dot);
+		} else if (kind === "small" || kind === "point") {
+			drawBead(dot);
 		}
 	}
 	// The player and whatever is merging into it, as one liquid body
 	const merge = packMergeUniforms(dots);
 	if (merge === null) return;
-	const playerOffset = end - SCENE_STRIDE;
-	const color = FILL_COLORS[dots[playerOffset + SCENE_COLOR]];
+	const color = FILL_COLORS[readDot(dots, findPlayer(dots), dot).color];
 	merge.values.push(color[0], color[1], color[2], color[3]);
 	MERGE_PAINT.setShader(MERGE_EFFECT.makeShader(merge.values));
 	canvas.drawRect(
@@ -240,20 +218,15 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 	);
 	// Glare on the liquid: fading on each merging dot, full on the player and stretched
 	// with it
-	for (let i = 0; i < end; i += SCENE_STRIDE) {
-		const radius = dots[i + SCENE_RADIUS];
-		const kind = dots[i + SCENE_KIND];
-		if (radius <= 0 || (kind !== SCENE_KIND_PLAYER && kind !== SCENE_KIND_MERGING)) continue;
-		const x = dots[i + SCENE_X];
-		const y = dots[i + SCENE_Y];
-		const isPlayer = kind === SCENE_KIND_PLAYER;
-		GLARE_PAINT.setAlphaf(isPlayer ? 1 : 1 - dots[i + SCENE_MERGE]);
+	for (let i = 0; i < count; i++) {
+		const { radius, kind, x, y } = readDot(dots, i, dot);
+		if (radius <= 0 || (kind !== "player" && kind !== "merging")) continue;
+		const isPlayer = kind === "player";
+		GLARE_PAINT.setAlphaf(isPlayer ? 1 : 1 - dot.merge);
 		canvas.save();
 		if (isPlayer) {
-			const sx = dots[i + SCENE_STRETCH_X];
-			const sy = dots[i + SCENE_STRETCH_Y];
-			const k = 1 + Math.hypot(sx, sy);
-			const degrees = (Math.atan2(sy, sx) * 180) / Math.PI;
+			const k = 1 + Math.hypot(dot.stretchX, dot.stretchY);
+			const degrees = (Math.atan2(dot.stretchY, dot.stretchX) * 180) / Math.PI;
 			canvas.translate(x, y);
 			canvas.rotate(degrees, 0, 0);
 			canvas.scale(k, 1 / k);
@@ -267,9 +240,7 @@ export function drawScene(canvas: SkCanvas, dots: Float32Array, lightX: number, 
 	}
 	GLARE_PAINT.setAlphaf(1);
 	// A refused dot sits on top, in the dent it presses into the liquid
-	for (let i = 0; i < end; i += SCENE_STRIDE) {
-		if (dots[i + SCENE_KIND] === SCENE_KIND_REJECTED && dots[i + SCENE_RADIUS] > 0) {
-			drawBead(i);
-		}
+	for (let i = 0; i < count; i++) {
+		if (readDot(dots, i, dot).kind === "rejected" && dot.radius > 0) drawBead(dot);
 	}
 }

@@ -1,21 +1,12 @@
 import { JELLY_MAX_STRETCH } from "../application/jelly";
 import {
-	SCENE_DENT,
-	SCENE_KIND,
-	SCENE_KIND_MERGING,
-	SCENE_KIND_PLAYER,
-	SCENE_KIND_REJECTED,
-	SCENE_NECK,
-	SCENE_RADIUS,
-	SCENE_STRETCH_X,
-	SCENE_STRETCH_Y,
-	SCENE_STRIDE,
-	SCENE_WALL_X,
-	SCENE_WALL2_C,
-	SCENE_WOBBLE,
-	SCENE_X,
-	SCENE_Y,
-} from "../application/renderScene";
+	dotCount,
+	dotKind,
+	findDent,
+	findPlayer,
+	readDot,
+	sceneDot,
+} from "../application/sceneRecord";
 import { LIQUID_SKSL, LIQUID_WOBBLE, SMIN_SKSL, WALL_SKSL } from "./liquidShader";
 
 /** Most bodies (the player plus dots merging into it) the shader draws as one liquid */
@@ -96,15 +87,14 @@ export interface MergeUniforms {
  */
 export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	"worklet";
+	const playerIndex = findPlayer(scene);
+	if (playerIndex < 0) return null;
+	const player = readDot(scene, playerIndex, sceneDot());
 	const blobs: number[] = [];
-	let playerRadius = 0;
-	let playerOffset = 0;
 	let left = Number.POSITIVE_INFINITY;
 	let top = Number.POSITIVE_INFINITY;
 	let right = Number.NEGATIVE_INFINITY;
 	let bottom = Number.NEGATIVE_INFINITY;
-
-	let jelly = [0, 0, 0];
 
 	/** `reach` is how far the body can extend from its centre, if past its radius */
 	const add = (x: number, y: number, radius: number, reach = radius) => {
@@ -115,48 +105,41 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 		bottom = Math.max(bottom, y + reach);
 	};
 
-	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
-		if (scene[i + SCENE_KIND] !== SCENE_KIND_PLAYER) continue;
-		playerOffset = i;
-		playerRadius = scene[i + SCENE_RADIUS];
-		const reach = playerRadius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
-		add(scene[i + SCENE_X], scene[i + SCENE_Y], playerRadius, reach);
-		jelly = [scene[i + SCENE_STRETCH_X], scene[i + SCENE_STRETCH_Y], scene[i + SCENE_WOBBLE]];
-		break;
-	}
-	if (blobs.length === 0) return null;
+	const playerReach = player.radius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
+	add(player.x, player.y, player.radius, playerReach);
 
-	for (let i = 0; i < scene.length && blobs.length < MERGE_MAX_BLOBS * 3; i += SCENE_STRIDE) {
-		if (scene[i + SCENE_KIND] !== SCENE_KIND_MERGING) continue;
-		add(scene[i + SCENE_X], scene[i + SCENE_Y], scene[i + SCENE_RADIUS]);
+	const count = dotCount(scene);
+	const body = sceneDot();
+	for (let i = 0; i < count && blobs.length < MERGE_MAX_BLOBS * 3; i++) {
+		if (dotKind(scene, i) !== "merging") continue;
+		readDot(scene, i, body);
+		add(body.x, body.y, body.radius);
 	}
 
-	const count = blobs.length / 3;
+	const bodies = blobs.length / 3;
 	while (blobs.length < MERGE_MAX_BLOBS * 3) blobs.push(0, 0, 0);
-	const blend = playerRadius * MERGE_BLEND;
-	blobs.push(count, blend, ...jelly);
+	const blend = player.radius * MERGE_BLEND;
+	blobs.push(bodies, blend, player.stretchX, player.stretchY, player.wobble);
 
 	// A smooth max only ever cuts the liquid away, so the dent needs no extra bounds
-	let dent = [0, 0, 0, 0];
-	for (let i = 0; i < scene.length; i += SCENE_STRIDE) {
-		if (scene[i + SCENE_KIND] !== SCENE_KIND_REJECTED) continue;
-		const radius = scene[i + SCENE_RADIUS];
-		dent = [
-			scene[i + SCENE_X],
-			scene[i + SCENE_Y],
-			radius * (1 + DENT_GAP),
-			radius * DENT_SOFTNESS * scene[i + SCENE_DENT],
-		];
-		break;
+	const dentIndex = findDent(scene);
+	if (dentIndex < 0) {
+		blobs.push(0, 0, 0, 0);
+	} else {
+		const dent = readDot(scene, dentIndex, body);
+		blobs.push(
+			dent.x,
+			dent.y,
+			dent.radius * (1 + DENT_GAP),
+			dent.radius * DENT_SOFTNESS * dent.dent,
+		);
 	}
-	blobs.push(...dent);
 	// The walls cut the liquid off and wet it with a fillet: the fillet reaches along the
 	// wall by up to the neck
-	for (let i = SCENE_WALL_X; i <= SCENE_WALL2_C; i++) blobs.push(scene[playerOffset + i]);
-	const neck = scene[playerOffset + SCENE_NECK];
-	blobs.push(neck);
+	blobs.push(player.wallX, player.wallY, player.wallC, player.wall2X, player.wall2Y, player.wall2C);
+	blobs.push(player.neck);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
-	const pad = blend / 4 + neck + 1;
+	const pad = blend / 4 + player.neck + 1;
 	return {
 		values: blobs,
 		left: left - pad,

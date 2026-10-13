@@ -1,21 +1,18 @@
 import { JELLY_MAX_STRETCH } from "../../application/jelly";
+import { createSceneBuilder } from "../../application/renderScene";
 import {
-	createSceneBuilder,
-	SCENE_KIND,
-	SCENE_KIND_MERGING,
-	SCENE_NECK,
-	SCENE_RADIUS,
-	SCENE_STRETCH_X,
-	SCENE_STRETCH_Y,
-	SCENE_STRIDE,
-	SCENE_WALL_C,
-	SCENE_WALL_X,
-	SCENE_WALL2_C,
-	SCENE_WALL2_Y,
-	SCENE_WOBBLE,
-	SCENE_X,
-	SCENE_Y,
-} from "../../application/renderScene";
+	dotCount,
+	dotKind,
+	findPlayer,
+	readDot,
+	sceneDot,
+	sceneLength,
+	setDent,
+	setNeck,
+	setStretch,
+	setWall,
+	writeDot,
+} from "../../application/sceneRecord";
 import type { DotView, RenderFrame } from "../../domain/types";
 import { LIQUID_WOBBLE } from "../../presentation/liquidShader";
 import {
@@ -90,9 +87,7 @@ describe("packMergeUniforms", () => {
 
 	it("passes the player's stretch and wobble clock from the scene to the shader", () => {
 		const s = scene([PLAYER]);
-		s[SCENE_STRETCH_X] = 0.1;
-		s[SCENE_STRETCH_Y] = -0.05;
-		s[SCENE_WOBBLE] = 3;
+		setStretch(s, findPlayer(s), 0.1, -0.05, 3);
 		const values = packMergeUniforms(s)?.values ?? [];
 		expect(values.slice(MERGE_MAX_BLOBS * 3 + 2, MERGE_MAX_BLOBS * 3 + 5)).toEqual([
 			Math.fround(0.1),
@@ -108,9 +103,7 @@ describe("packMergeUniforms", () => {
 		);
 		const s = scene([PLAYER, ...many]);
 		let merging = 0;
-		for (let i = 0; i < s.length; i += SCENE_STRIDE) {
-			if (s[i + SCENE_KIND] === SCENE_KIND_MERGING) merging++;
-		}
+		for (let i = 0; i < dotCount(s); i++) if (dotKind(s, i) === "merging") merging++;
 		expect(merging).toBe(MERGE_MAX_BLOBS + 3);
 		const packed = packMergeUniforms(s);
 		expect(packed?.values[MERGE_MAX_BLOBS * 3]).toBe(MERGE_MAX_BLOBS);
@@ -118,7 +111,7 @@ describe("packMergeUniforms", () => {
 
 	it("reads body positions from the scene layout the shader expects", () => {
 		const s = scene([PLAYER]);
-		expect([s[SCENE_X], s[SCENE_Y], s[SCENE_RADIUS]]).toEqual([50, 60, 20]);
+		expect(readDot(s, findPlayer(s), sceneDot())).toMatchObject({ x: 50, y: 60, radius: 20 });
 		expect(MERGE_SKSL).toContain(`uniform float3 blobs[${MERGE_MAX_BLOBS}]`);
 	});
 
@@ -138,15 +131,28 @@ describe("packMergeUniforms", () => {
 
 	it("passes the walls the player is pressed into, with the neck, and pads the bounds by it", () => {
 		const s = scene([PLAYER]);
-		s[SCENE_WALL_X] = 1;
-		s[SCENE_WALL_C] = 0;
-		s[SCENE_WALL2_Y] = -1;
-		s[SCENE_WALL2_C] = -800;
-		s[SCENE_NECK] = 5;
+		const player = findPlayer(s);
+		setWall(s, player, 0, { nx: 1, ny: 0, x: 0, y: 60 });
+		setWall(s, player, 1, { nx: 0, ny: -1, x: 50, y: 800 });
+		setNeck(s, player, 5);
 		const packed = packMergeUniforms(s);
 		expect(packed?.values.slice(MERGE_MAX_BLOBS * 3 + 9)).toEqual([1, 0, 0, 0, -1, -800, 5]);
 		const pad = (20 * MERGE_BLEND) / 4 + 5 + 1;
 		const reach = 20 * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
 		expect(packed?.left).toBeCloseTo(50 - reach - pad);
+	});
+
+	it("finds the player and the one dent through the scene record, wherever they sit", () => {
+		const s = new Float32Array(sceneLength(4));
+		writeDot(s, 0, "rejected", 75, 60, 10, 0);
+		setDent(s, 0, 1);
+		writeDot(s, 1, "player", 50, 60, 20, 1);
+		writeDot(s, 2, "rejected", 300, 300, 4, 0);
+		setDent(s, 2, 1);
+		writeDot(s, 3, "merging", 70, 60, 5, 1);
+		const values = packMergeUniforms(s)?.values ?? [];
+		expect(values.slice(0, 6)).toEqual([50, 60, 20, 70, 60, 5]);
+		const dent = values.slice(MERGE_MAX_BLOBS * 3 + 5, MERGE_MAX_BLOBS * 3 + 9);
+		expect(dent.slice(0, 3)).toEqual([75, 60, 10 * (1 + DENT_GAP)]);
 	});
 });
