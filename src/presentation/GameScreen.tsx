@@ -206,9 +206,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 
 	// Leaving the app mid-run lands on the pause screen when the player comes back
+	const pauseOnLeave = useEffectEvent(() => dispatch({ type: "pausePressed" }));
 	useEffect(
-		() => bindPauseOnLeave(store, watchAppActive, handlePause),
-		[handlePause, store, watchAppActive],
+		() => bindPauseOnLeave(store, watchAppActive, () => pauseOnLeave()),
+		[store, watchAppActive],
 	);
 
 	const handleResume = useCallback(() => dispatch({ type: "resumePressed" }), [dispatch]);

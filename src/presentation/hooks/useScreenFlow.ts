@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { GameStore } from "../../application/GameStore";
 import type { StoragePort } from "../../application/ports";
 import { calibrateTilt } from "../../application/useCases/CalibrateTilt";
+import type { GamePhase } from "../../domain/types";
 import type { FloodController } from "../effects/Flood";
 import {
 	type FlowAction,
@@ -64,15 +65,16 @@ export function useScreenFlow(
 	}
 
 	// The flow the taps step from takes the phase the moment the store changes, even mid-dispatch
+	const phaseChanged = useEffectEvent((next: GamePhase) =>
+		dispatch({ type: "phaseChanged", phase: next }),
+	);
 
 	useEffect(() => {
-		dispatch({ type: "phaseChanged", phase: store.getState().frame.phase });
+		phaseChanged(store.getState().frame.phase);
 		return store.subscribe((state, previous) => {
-			if (state.frame.phase !== previous.frame.phase) {
-				dispatch({ type: "phaseChanged", phase: state.frame.phase });
-			}
+			if (state.frame.phase !== previous.frame.phase) phaseChanged(state.frame.phase);
 		});
-	}, [dispatch, store]);
+	}, [store]);
 
 	return { screen: view.screen, dispatch };
 }
