@@ -1,7 +1,10 @@
+import type { GamePhase } from "../../domain/types";
 import {
 	type FlowState,
 	INITIAL_FLOW,
 	kioskQuiet,
+	type Screen,
+	screenOf,
 	stepFlow,
 } from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
@@ -12,10 +15,14 @@ const PINK = "#E91E63";
 const BLUE = "#2196F3";
 
 const open = (from: "start" | "pause" | "menu", color = PINK): FlowState => ({
+	...INITIAL_FLOW,
 	settle: { from, color },
-	speed: null,
-	flooding: false,
 });
+
+const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
+
+/** A step that only leaves the flow in `state`, showing its screen */
+const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
 
 describe("screen flow", () => {
 	it("a first PLAY opens the settle bowl in the play dot's colour instead of playing", () => {
@@ -86,12 +93,12 @@ describe("screen flow", () => {
 
 	it("a settle with no bowl open does nothing", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "settled", zero: ZERO, facingDown: false, at: AT });
-		expect(step).toEqual({ state: INITIAL_FLOW });
+		expect(step).toEqual(rests(INITIAL_FLOW));
 	});
 
 	it("backing out of the bowl closes it without saving", () => {
 		const step = stepFlow(open("start"), { type: "settleBacked" });
-		expect(step).toEqual({ state: INITIAL_FLOW });
+		expect(step).toEqual(rests(INITIAL_FLOW));
 	});
 
 	it("RETRY floods into a new game in the player's colour", () => {
@@ -112,9 +119,15 @@ describe("screen flow", () => {
 	});
 
 	it("the speed button opens the speed view in the player's colour, and BACK closes it", () => {
-		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", color: BLUE });
-		expect(opened).toEqual({ state: { ...INITIAL_FLOW, speed: { color: BLUE } } });
-		expect(stepFlow(opened.state, { type: "speedBacked" })).toEqual({ state: INITIAL_FLOW });
+		const opened = stepFlow(PAUSED, { type: "speedPressed", color: BLUE });
+		expect(opened).toEqual({
+			state: { ...PAUSED, speed: { color: BLUE } },
+			screen: { kind: "speed", color: BLUE },
+		});
+		expect(stepFlow(opened.state, { type: "speedBacked" })).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
+		});
 	});
 
 	it("the speed view saves nothing and starts no flood, and leaves the kiosk alone", () => {
@@ -130,15 +143,18 @@ describe("screen flow", () => {
 	});
 
 	it("the pause dot and leaving the app pause the game, opening no screen", () => {
-		expect(stepFlow(INITIAL_FLOW, { type: "pausePressed" })).toEqual({
-			state: INITIAL_FLOW,
+		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
+		expect(stepFlow(running, { type: "pausePressed" })).toEqual({
+			state: running,
+			screen: { kind: "hud" },
 			act: { kind: "pause" },
 		});
 	});
 
 	it("the level ring, held or tapped, resumes the game", () => {
-		expect(stepFlow(INITIAL_FLOW, { type: "resumePressed" })).toEqual({
-			state: INITIAL_FLOW,
+		expect(stepFlow(PAUSED, { type: "resumePressed" })).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
 			act: { kind: "resume" },
 		});
 	});
@@ -147,7 +163,7 @@ describe("screen flow", () => {
 		const quit = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT });
 		expect(quit.state.flooding).toBe(true);
 		const resume = stepFlow(quit.state, { type: "resumePressed" });
-		expect(resume).toEqual({ state: quit.state });
+		expect(resume).toEqual(rests(quit.state));
 		const covered = stepFlow(resume.state, { type: "covered" });
 		expect(covered.state).toEqual(INITIAL_FLOW);
 		expect(quit.flood?.action).toEqual({ kind: "kiosk" });
@@ -156,10 +172,10 @@ describe("screen flow", () => {
 	it("a second tap on RETRY while its flood runs starts no second flood", () => {
 		const first = stepFlow(INITIAL_FLOW, { type: "retryPressed", color: BLUE, at: AT });
 		expect(first.flood).toBeDefined();
-		expect(stepFlow(first.state, { type: "retryPressed", color: BLUE, at: AT })).toEqual({
-			state: first.state,
-		});
-		expect(stepFlow(first.state, { type: "leavePressed", at: AT })).toEqual({ state: first.state });
+		expect(stepFlow(first.state, { type: "retryPressed", color: BLUE, at: AT })).toEqual(
+			rests(first.state),
+		);
+		expect(stepFlow(first.state, { type: "leavePressed", at: AT })).toEqual(rests(first.state));
 	});
 
 	it("screen-changing taps are ignored while a flood runs, until it covers the screen", () => {
@@ -171,7 +187,7 @@ describe("screen flow", () => {
 			{ type: "startPressed", color: PINK, hasZero: true, at: AT },
 			{ type: "settleBacked" },
 		] as const) {
-			expect(stepFlow(flooding, event)).toEqual({ state: flooding });
+			expect(stepFlow(flooding, event)).toEqual(rests(flooding));
 		}
 		const after = stepFlow(flooding, { type: "covered" }).state;
 		expect(stepFlow(after, { type: "retryPressed", color: BLUE, at: AT }).flood).toBeDefined();
@@ -184,9 +200,105 @@ describe("screen flow", () => {
 			facingDown: false,
 			at: AT,
 		});
-		expect(stepFlow(step.state, { type: "resumePressed" })).toEqual({ state: step.state });
+		expect(stepFlow(step.state, { type: "resumePressed" })).toEqual(rests(step.state));
 		expect(
 			stepFlow(step.state, { type: "settled", zero: ZERO, facingDown: false, at: AT }),
-		).toEqual({ state: step.state });
+		).toEqual(rests(step.state));
 	});
+
+	it("a phase change is recorded and answers with that phase's screen", () => {
+		const step = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "RUNNING" });
+		expect(step).toEqual({ state: { ...INITIAL_FLOW, phase: "RUNNING" }, screen: { kind: "hud" } });
+	});
+
+	it("a phase change still lands while a flood runs, and the flood covering keeps it", () => {
+		const flooding = stepFlow(INITIAL_FLOW, { type: "retryPressed", color: BLUE, at: AT }).state;
+		const paused = stepFlow(flooding, { type: "phaseChanged", phase: "PAUSED" }).state;
+		expect(paused).toEqual({ ...flooding, phase: "PAUSED" });
+		expect(stepFlow(paused, { type: "covered" }).state).toEqual({
+			...INITIAL_FLOW,
+			phase: "PAUSED",
+		});
+	});
+
+	it("every step answers with the screen of the state it leaves", () => {
+		const step = stepFlow(INITIAL_FLOW, { type: "levelPressed", from: "menu", color: BLUE });
+		expect(step.screen).toEqual({ kind: "settle", color: BLUE });
+		expect(stepFlow(step.state, { type: "settleBacked" }).screen).toEqual({ kind: "title" });
+	});
+});
+
+describe("which screen shows", () => {
+	const PHASES: readonly GamePhase[] = ["KIOSK", "RUNNING", "REJECTING", "PAUSED", "GAME_OVER"];
+	const SETTLES = [null, "start", "menu", "pause"] as const;
+	const SPEEDS = [false, true] as const;
+	const FLOODS = [false, true] as const;
+
+	const title: Screen = { kind: "title" };
+	const hud: Screen = { kind: "hud" };
+	const pause: Screen = { kind: "pause" };
+	const gameOver: Screen = { kind: "gameOver" };
+	const bowl: Screen = { kind: "settle", color: PINK };
+	const speed: Screen = { kind: "speed", color: BLUE };
+
+	/**
+	 * The expected screen for each phase and flow, written out by hand. The flood never decides
+	 * the screen: the one under it stays until it covers. Combinations no tap sequence reaches
+	 * (marked "impossible") resolve to the phase's own screen.
+	 */
+	const EXPECTED: Record<
+		GamePhase,
+		Record<NonNullable<(typeof SETTLES)[number]> | "none", [Screen, Screen]>
+	> = {
+		// [without speed view, with speed view]; the speed view only opens over the pause
+		KIOSK: {
+			none: [title, title], // impossible: speed over the title
+			start: [bowl, bowl], // a first PLAY; speed: impossible
+			menu: [bowl, bowl], // the level button on the title; speed: impossible
+			pause: [title, title], // impossible: the pause's bowl over the title
+		},
+		RUNNING: {
+			none: [hud, hud], // speed: impossible
+			start: [hud, hud], // impossible: a bowl over a running game
+			menu: [hud, hud], // impossible
+			pause: [hud, hud], // impossible
+		},
+		REJECTING: {
+			none: [hud, hud], // speed: impossible
+			start: [hud, hud], // impossible
+			menu: [hud, hud], // impossible
+			pause: [hud, hud], // impossible
+		},
+		PAUSED: {
+			none: [pause, speed],
+			start: [pause, speed], // impossible: the title's bowl over the pause
+			menu: [pause, speed], // impossible
+			pause: [bowl, bowl], // the level button on the pause; with speed: impossible
+		},
+		GAME_OVER: {
+			none: [gameOver, gameOver], // speed: impossible
+			start: [gameOver, gameOver], // impossible
+			menu: [gameOver, gameOver], // impossible
+			pause: [gameOver, gameOver], // impossible
+		},
+	};
+
+	for (const phase of PHASES) {
+		for (const from of SETTLES) {
+			for (const withSpeed of SPEEDS) {
+				for (const flooding of FLOODS) {
+					const state: FlowState = {
+						phase,
+						settle: from ? { from, color: PINK } : null,
+						speed: withSpeed ? { color: BLUE } : null,
+						flooding,
+					};
+					const expected = EXPECTED[phase][from ?? "none"][withSpeed ? 1 : 0];
+					it(`${phase}, bowl ${from ?? "closed"}, speed ${withSpeed ? "open" : "closed"}${flooding ? ", flooding" : ""}: ${expected.kind}`, () => {
+						expect(screenOf(state)).toEqual(expected);
+					});
+				}
+			}
+		}
+	}
 });

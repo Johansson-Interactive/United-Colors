@@ -3,10 +3,11 @@
  * view and the game over, and the floods between them. A flood is a dot growing from under the finger until it
  * covers the screen; the scene changes underneath, then it lifts. A first game starts by
  * setting the level pose; the settled dot then floods into play. While a flood is on its way
- * the screen under it is already decided, so taps on that screen are ignored.
+ * the screen under it is already decided, so taps on that screen are ignored. The game's phase
+ * comes in as an event too, and every step answers with the one screen to show.
  */
 
-import type { TiltZero } from "../../domain/types";
+import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
 
@@ -25,13 +26,29 @@ interface SpeedRequest {
 }
 
 export interface FlowState {
+	/** The game's phase, as the session last reported it */
+	phase: GamePhase;
 	settle: SettleRequest | null;
 	speed: SpeedRequest | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
 }
 
-export const INITIAL_FLOW: FlowState = { settle: null, speed: null, flooding: false };
+export const INITIAL_FLOW: FlowState = {
+	phase: "KIOSK",
+	settle: null,
+	speed: null,
+	flooding: false,
+};
+
+/** The one screen over the playfield; the HUD is the screen of a run in play */
+export type Screen =
+	| { kind: "title" }
+	| { kind: "hud" }
+	| { kind: "pause" }
+	| { kind: "speed"; color: string }
+	| { kind: "settle"; color: string }
+	| { kind: "gameOver" };
 
 export type FlowEvent =
 	/** PLAY on the title, in the colour the play dot held; `hasZero`: a level pose is set */
@@ -54,7 +71,9 @@ export type FlowEvent =
 	/** The level ring on the pause, held level or tapped */
 	| { type: "resumePressed" }
 	/** The flood covers the screen; whatever was under it can go */
-	| { type: "covered" };
+	| { type: "covered" }
+	/** The game moved to another phase */
+	| { type: "phaseChanged"; phase: GamePhase };
 
 /** What the game does: straight away, or once a flood covers the screen */
 export type FlowAction =
@@ -65,6 +84,8 @@ export type FlowAction =
 
 export interface FlowStep {
 	state: FlowState;
+	/** The screen to show for `state` */
+	screen: Screen;
 	/** Adopt this pose as level for the side the screen faced */
 	calibrate?: { zero: TiltZero; facingDown: boolean };
 	/** Do this to the game now */
@@ -75,18 +96,51 @@ export interface FlowStep {
 
 const play = (color: string): FlowAction => ({ kind: "play", color });
 
+/**
+ * The screen for a phase and the flow over it. The bowl opens over the screen it was opened
+ * from, and the speed view over the pause; anywhere else they cannot be open, and the phase's
+ * own screen shows. A flood leaves the screen under it as it is until it covers.
+ */
+export function screenOf(state: FlowState): Screen {
+	const { phase, settle, speed } = state;
+	switch (phase) {
+		case "KIOSK":
+			return settle && settle.from !== "pause"
+				? { kind: "settle", color: settle.color }
+				: { kind: "title" };
+		case "PAUSED":
+			if (settle?.from === "pause") return { kind: "settle", color: settle.color };
+			return speed ? { kind: "speed", color: speed.color } : { kind: "pause" };
+		case "RUNNING":
+		case "REJECTING":
+			return { kind: "hud" };
+		case "GAME_OVER":
+			return { kind: "gameOver" };
+	}
+}
+
+/** A step before its screen is worked out */
+type BareStep = Omit<FlowStep, "screen">;
+
 /** Start a flood; the state stays as it is underneath until the flood covers the screen */
 const startFlood = (
 	state: FlowState,
 	flood: NonNullable<FlowStep["flood"]>,
 	calibrate?: FlowStep["calibrate"],
-): FlowStep => ({
+): BareStep => ({
 	state: { ...state, flooding: true },
 	...(calibrate && { calibrate }),
 	flood,
 });
 
 export function stepFlow(state: FlowState, event: FlowEvent): FlowStep {
+	const step = bareStep(state, event);
+	return { ...step, screen: screenOf(step.state) };
+}
+
+function bareStep(state: FlowState, event: FlowEvent): BareStep {
+	// The phase is the game's to report, flood or not
+	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
 	switch (event.type) {
@@ -121,7 +175,7 @@ export function stepFlow(state: FlowState, event: FlowEvent): FlowStep {
 		case "resumePressed":
 			return { state, act: { kind: "resume" } };
 		case "covered":
-			return { state: INITIAL_FLOW };
+			return { state: { ...INITIAL_FLOW, phase: state.phase } };
 	}
 }
 

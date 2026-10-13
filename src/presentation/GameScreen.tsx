@@ -20,7 +20,6 @@ import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
-import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import { handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
@@ -31,18 +30,11 @@ import { HUD } from "./components/HUD";
 import { Bursts } from "./effects/Bursts";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
-import {
-	type FlowAction,
-	type FlowEvent,
-	type FlowState,
-	type FlowStep,
-	INITIAL_FLOW,
-	kioskQuiet,
-	stepFlow,
-} from "./flow/screenFlow";
+import { type FlowAction, kioskQuiet } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useQuietKiosk } from "./hooks/useQuietKiosk";
+import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useSoundToggles } from "./hooks/useSoundToggles";
@@ -185,33 +177,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session, store, detectGyro],
 	);
 
-	// The screens and the floods between them (see screenFlow.ts); each step may save a level
-	// pose and may start a flood, which changes the scene once it covers the screen
-	const [flow, setFlow] = useState<FlowState>(INITIAL_FLOW);
-	const flowRef = useRef<FlowState>(INITIAL_FLOW);
-	const dispatch = useCallback(
-		(event: FlowEvent) => {
-			const apply = (next: FlowEvent): FlowStep => {
-				const step = stepFlow(flowRef.current, next);
-				flowRef.current = step.state;
-				setFlow(step.state);
-				return step;
-			};
-			const step = apply(event);
-			if (step.calibrate) {
-				void calibrateTilt(step.calibrate.zero, store, storage, step.calibrate.facingDown);
-			}
-			if (step.act) perform(step.act);
-			if (step.flood) {
-				const { color, at, action } = step.flood;
-				flood.run(color, at.x, at.y, () => {
-					apply({ type: "covered" });
-					perform(action);
-				});
-			}
-		},
-		[flood, perform, store, storage],
-	);
+	const { flow, screen, dispatch } = useScreenFlow(store, storage, flood, perform);
 
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 
@@ -268,9 +234,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const { handleToggleSound, handleToggleMusic } = useSoundToggles(store, storage);
 	const { sensitivity, setSensitivity } = useSensitivitySetting(store, storage, session);
 
-	const settle = flow.settle;
-	const speedView = flow.speed;
-
 	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
 	// runs under the home indicator, as before; the interface layer also respects the bottom
 	const stageInsets = {
@@ -300,11 +263,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 			<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
 				<View style={styles.stage} pointerEvents="box-none">
-					{(phase === "RUNNING" || phase === "REJECTING") && (
-						<HUD score={score} color={playerColor} onPause={handlePause} />
-					)}
+					{screen.kind === "hud" && <HUD score={score} color={playerColor} onPause={handlePause} />}
 
-					{phase === "KIOSK" && !settle && (
+					{screen.kind === "title" && (
 						<KioskOverlay
 							highScore={highScore}
 							soundEnabled={soundEnabled}
@@ -317,7 +278,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						/>
 					)}
 
-					{phase === "PAUSED" && !settle && !speedView && (
+					{screen.kind === "pause" && (
 						<PauseOverlay
 							color={playerColor}
 							onResume={handleResume}
@@ -332,25 +293,25 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						/>
 					)}
 
-					{phase === "PAUSED" && speedView && (
+					{screen.kind === "speed" && (
 						<SpeedOverlay
-							color={speedView.color}
+							color={screen.color}
 							sensitivity={sensitivity}
 							onSelect={setSensitivity}
 							onBack={handleSpeedBack}
 						/>
 					)}
 
-					{settle && (
+					{screen.kind === "settle" && (
 						<SettleOverlay
-							color={settle.color}
+							color={screen.color}
 							onSettled={handleSettled}
 							onBack={handleSettleBack}
 							onSnap={handleSettleSnap}
 						/>
 					)}
 
-					{phase === "GAME_OVER" && (
+					{screen.kind === "gameOver" && (
 						<GameOverOverlay
 							score={score}
 							previousBest={previousBest}
