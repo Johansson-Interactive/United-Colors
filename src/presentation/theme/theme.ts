@@ -1,7 +1,7 @@
 import { GAME_COLORS } from "../../domain/constants";
 
 /**
- * Visual language of United Colors: everything is a dot.
+ * Visual language of Tiltling: everything is a dot.
  * Ink background makes the three game colors glow; UI chrome reuses them.
  */
 export const INK = "#0B0E14";

@@ -20,7 +20,7 @@ vi.mock("@react-native-async-storage/async-storage", () => {
 	};
 });
 
-const SETTINGS_KEY = "@united_colors/settings";
+const SETTINGS_KEY = "@tiltling/settings";
 
 /** Persist a raw value as an older or hand-edited app might have, then load it */
 async function loadStored(raw: unknown): Promise<GameSettings> {

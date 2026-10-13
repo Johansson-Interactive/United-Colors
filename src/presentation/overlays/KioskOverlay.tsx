@@ -34,7 +34,7 @@ interface KioskOverlayProps {
 	sensitivity: number;
 }
 
-const TITLE_COLS = 35; // "UNITED" / "COLORS": 6 glyphs x 5 + 5 gaps
+const TITLE_COLS = 47; // "TILTLING": 8 glyphs x 5 + 7 gaps
 const PLAY_SIZE = 128;
 const COLOR_CYCLE_MS = 2600;
 
@@ -84,14 +84,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 			pointerEvents="box-none"
 		>
 			<View style={styles.title} pointerEvents="none">
-				<DotMatrixText
-					text={"UNITED\nCOLORS"}
-					pitch={titlePitch}
-					colors={TRIO}
-					glow
-					parallax
-					wave
-				/>
+				<DotMatrixText text="TILTLING" pitch={titlePitch} colors={TRIO} glow parallax wave />
 			</View>
 
 			<View style={styles.centre} pointerEvents="box-none">

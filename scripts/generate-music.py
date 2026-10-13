@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the United Colors music: two seamless loops and a game-over stinger.
+"""Generate the Tiltling music: two seamless loops and a game-over stinger.
 
 Usage (from the repo root, or anywhere):
 

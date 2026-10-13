@@ -1,4 +1,4 @@
-# United Colors
+# Tiltling
 
 A top-down gyroscope game for Android and iOS, built with Expo and React Native. Tilt the device to steer your dot, collect points, and avoid the others.
 
@@ -118,7 +118,7 @@ The legacy source lives on `master`. The last working version is tagged:
 git checkout legacy-android-last-working
 ```
 
-The new app uses new identifiers (`com.johanssoninteractive.unitedcolors`) with no release continuity.
+The new app uses new identifiers (`com.johanssoninteractive.tiltling`) with no release continuity.
 
 Related projects:
 

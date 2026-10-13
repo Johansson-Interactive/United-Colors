@@ -50,7 +50,7 @@ describe("layoutDotMatrix", () => {
 	});
 
 	it("centres shorter lines and separates lines by the line gap", () => {
-		const layout = layoutDotMatrix("UNITED\nI");
+		const layout = layoutDotMatrix("TILTLING\nI");
 		expect(layout.rows).toBe(GLYPH_ROWS * 2 + LINE_GAP);
 		const secondLine = layout.dots.filter((d) => d.row >= GLYPH_ROWS + LINE_GAP);
 		expect(secondLine.length).toBe(11);
@@ -68,7 +68,7 @@ describe("layoutDotMatrix", () => {
 	});
 
 	it("assigns a stable colour index in 0..2", () => {
-		for (const dot of layoutDotMatrix("UNITED COLORS").dots) {
+		for (const dot of layoutDotMatrix("TILTLING").dots) {
 			const i = trioIndex(dot);
 			expect(i).toBeGreaterThanOrEqual(0);
 			expect(i).toBeLessThan(3);

@@ -4,8 +4,8 @@ import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "..
 import type { GameSettings, TiltZero } from "../domain/types";
 
 const KEYS = {
-	highScore: "@united_colors/high_score",
-	settings: "@united_colors/settings",
+	highScore: "@tiltling/high_score",
+	settings: "@tiltling/settings",
 } as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

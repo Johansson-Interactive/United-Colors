@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive the United Colors app icon files from the artwork in ``assets/icon-source.png``.
+"""Derive the Tiltling app icon files from the artwork in ``assets/icon-source.png``.
 
 Usage (from the repo root, or anywhere):
 
