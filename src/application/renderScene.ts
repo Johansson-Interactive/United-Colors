@@ -1,5 +1,5 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
-import { dripOffset, dripRadius } from "../domain/engine/Drip";
+import { dripCircle } from "../domain/engine/Drip";
 import type { DotView, RenderFrame, ScreenSize, WallContact } from "../domain/types";
 import { createJelly, JELLY_MAX_STRETCH } from "./jelly";
 import { leanReach } from "./lean";
@@ -214,6 +214,8 @@ export function createSceneBuilder() {
 	// The player's push into the walls, smoothed (px/s, signed toward the wall per axis)
 	let pressX = 0;
 	let pressY = 0;
+	// Scratch for a forming drip's pose
+	const dripPose = { x: 0, y: 0, radius: 0 };
 
 	return function buildScene(
 		frame: RenderFrame,
@@ -293,12 +295,12 @@ export function createSceneBuilder() {
 				clearExtraFields(buffer, offset);
 				if (dot.drip) {
 					const { wall, heading } = dot.drip;
-					const progress = dot.drip.prev + (dot.drip.progress - dot.drip.prev) * sizeT;
-					const grown = dot.drip.radius * dripRadius(progress);
-					const at = dripOffset(progress, wall.nx, wall.ny, heading.vx, heading.vy);
-					buffer[offset + SCENE_X] = wall.x + at.x * grown;
-					buffer[offset + SCENE_Y] = wall.y + at.y * grown;
-					buffer[offset + SCENE_RADIUS] = grown;
+					// The same pose the engine catches it at (see SmallDot.circleAt)
+					const { prev, progress } = dot.drip;
+					dripCircle(wall, heading, dot.drip.radius, prev, progress, sizeT, dripPose);
+					buffer[offset + SCENE_X] = dripPose.x;
+					buffer[offset + SCENE_Y] = dripPose.y;
+					buffer[offset + SCENE_RADIUS] = dripPose.radius;
 					buffer[offset + SCENE_STRETCH_X] = heading.vx * DRIP_STRETCH;
 					buffer[offset + SCENE_STRETCH_Y] = heading.vy * DRIP_STRETCH;
 					setWall(buffer, offset, 0, wall);

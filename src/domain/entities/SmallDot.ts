@@ -1,6 +1,6 @@
 import { DRIP_LAUNCH_TICKS } from "../constants";
-import { dripOffset, dripRadius } from "../engine/Drip";
-import type { DotView, WallContact } from "../types";
+import { dripCircle } from "../engine/Drip";
+import type { Circle, DotView, WallContact } from "../types";
 import { Dot } from "./Dot";
 
 type Stage = "forming" | "launching" | "free";
@@ -32,12 +32,11 @@ export class SmallDot extends Dot {
 	readonly fullSize: number;
 	private stage: Stage = "forming";
 	private stageTicks = 0;
-	/** The wall it is on: its inward normal and a point on it */
-	private nx: number;
-	private ny: number;
-	private footX: number;
-	private footY: number;
+	/** The wall it is on: its inward normal and its foot on it */
+	private readonly wall: WallContact;
 	private readonly heading: Heading;
+	/** Scratch for the drip's pose, so forming it allocates nothing */
+	private readonly pose: Circle = { x: 0, y: 0, radius: 0 };
 	private readonly growTicks: number;
 
 	/**
@@ -56,10 +55,7 @@ export class SmallDot extends Dot {
 		growTicks: number,
 	) {
 		super(id, foot.x, foot.y, 0, 0, color, 0, velocity, "small");
-		this.nx = nx;
-		this.ny = ny;
-		this.footX = foot.x;
-		this.footY = foot.y;
+		this.wall = { nx, ny, x: foot.x, y: foot.y };
 		this.heading = heading;
 		this.fullSize = size;
 		this.growTicks = Math.max(1, growTicks);
@@ -90,11 +86,10 @@ export class SmallDot extends Dot {
 			case "forming": {
 				this.stageTicks++;
 				this.drip = Math.min(1, this.stageTicks / this.growTicks);
-				this.setSize(this.fullSize * dripRadius(this.drip));
-				const radius = this.size / 2;
-				const at = dripOffset(this.drip, this.nx, this.ny, this.heading.vx, this.heading.vy);
-				this.x = this.footX + at.x * radius;
-				this.y = this.footY + at.y * radius;
+				const at = this.dripPose(this.drip, 0, this.pose);
+				this.x = at.x;
+				this.y = at.y;
+				this.setSize(at.radius * 2);
 				if (this.drip >= 1) {
 					this.stage = "launching";
 					this.stageTicks = 0;
@@ -113,6 +108,17 @@ export class SmallDot extends Dot {
 			default:
 				super.update(timeStep);
 		}
+	}
+
+	/** While forming, the drip as it hangs `alpha` of a tick on: the pose it is drawn at too */
+	override circleAt(alpha: number, out: Circle): Circle {
+		if (this.stage !== "forming") return super.circleAt(alpha, out);
+		return this.dripPose(this.prevDrip, alpha, out);
+	}
+
+	/** The drip `t` (0..1) of the way from progress `prev` to where it is now (see dripCircle) */
+	private dripPose(prev: number, t: number, out: Circle): Circle {
+		return dripCircle(this.wall, this.heading, this.fullSize / 2, prev, this.drip, t, out);
 	}
 
 	/**
@@ -140,7 +146,7 @@ export class SmallDot extends Dot {
 				return {
 					drip: {
 						// It hangs from its foot, leaning off it
-						wall: { nx: this.nx, ny: this.ny, x: this.footX, y: this.footY },
+						wall: { ...this.wall },
 						progress: this.drip,
 						prev: this.prevDrip,
 						radius: this.fullSize / 2,
@@ -158,12 +164,8 @@ export class SmallDot extends Dot {
 
 	private wallContact(): WallContact {
 		// The foot slides along the wall under the dot
-		const along = (this.x - this.footX) * this.nx + (this.y - this.footY) * this.ny;
-		return {
-			nx: this.nx,
-			ny: this.ny,
-			x: this.x - this.nx * along,
-			y: this.y - this.ny * along,
-		};
+		const { nx, ny } = this.wall;
+		const along = (this.x - this.wall.x) * nx + (this.y - this.wall.y) * ny;
+		return { nx, ny, x: this.x - nx * along, y: this.y - ny * along };
 	}
 }

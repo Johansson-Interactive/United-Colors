@@ -1,5 +1,5 @@
 import { ABSORB_TICKS, REJECT_TICKS } from "../constants";
-import type { DotKind } from "../types";
+import type { Circle, DotKind } from "../types";
 
 /** A moving dot in the game world */
 export class Dot {
@@ -65,6 +65,17 @@ export class Dot {
 		this.prevSize = this._size;
 		this.prevAbsorb = this.absorb;
 		this.prevReject = this.reject;
+	}
+
+	/**
+	 * Where the dot is `alpha` (0..1) of a tick after the last one, for catching it between
+	 * ticks: carried on along its velocity. Written to `out`, so it allocates nothing.
+	 */
+	circleAt(alpha: number, out: Circle): Circle {
+		out.x = this.x + this.vx * this.velocity * alpha;
+		out.y = this.y + this.vy * this.velocity * alpha;
+		out.radius = this._size / 2;
+		return out;
 	}
 
 	/** A drip still forming on its wall: not yet in play, see SmallDot */

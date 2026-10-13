@@ -43,6 +43,13 @@ export interface WallContact {
 	y: number;
 }
 
+/** Where a dot's centre is and how big it is */
+export interface Circle {
+	x: number;
+	y: number;
+	radius: number;
+}
+
 /** Progress (0..1) of something a dot does at a wall, at this tick and at the previous one */
 interface WallProgress {
 	wall: WallContact;

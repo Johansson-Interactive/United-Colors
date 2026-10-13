@@ -10,7 +10,7 @@ import {
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { SmallDot } from "../entities/SmallDot";
-import type { DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
+import type { Circle, DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
 import { circlesOverlap } from "./Collision";
 import { SpawnSystem } from "./SpawnSystem";
 import { StateMachine } from "./StateMachine";
@@ -49,6 +49,8 @@ export class GameEngine {
 	private tiltZero: TiltZero | null = null;
 	/** The same with the screen facing down */
 	private tiltZeroDown: TiltZero | null = null;
+	/** Scratch for where each dot is caught between ticks, so collisions allocate nothing */
+	private readonly collisionCircle: Circle = { x: 0, y: 0, radius: 0 };
 
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
@@ -338,16 +340,17 @@ export class GameEngine {
 		this.dots.length = kept;
 	}
 
-	/** Player vs other dots, with other dots advanced `alpha` of a tick along their velocity */
+	/** Player vs other dots, each where it is `alpha` of a tick on (see Dot.circleAt) */
 	private checkCollisions(alpha: number): void {
 		const player = this.player;
+		const caught = this.collisionCircle;
 		for (const dot of this.dots) {
 			if (dot === player) continue;
 			if (dot.isFlaggedForRemoval || dot.isAbsorbing) continue;
 
-			const x = dot.x + dot.vx * dot.velocity * alpha;
-			const y = dot.y + dot.vy * dot.velocity * alpha;
-			if (!circlesOverlap(player.x, player.y, player.size, x, y, dot.size)) continue;
+			dot.circleAt(alpha, caught);
+			const { x, y, radius } = caught;
+			if (!circlesOverlap(player.x, player.y, player.size, x, y, radius * 2)) continue;
 
 			if (dot.kind === "point") {
 				this.score += POINT_DOT_VALUE;
