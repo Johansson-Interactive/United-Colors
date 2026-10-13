@@ -1,14 +1,14 @@
 {
 	"expo": {
-		"name": "United Colors",
-		"slug": "united-colors",
+		"name": "Tiltling",
+		"slug": "tiltling",
 		"version": "1.0.0",
 		"orientation": "portrait",
 		"icon": "./assets/icon.png",
 		"userInterfaceStyle": "dark",
 		"ios": {
 			"supportsTablet": false,
-			"bundleIdentifier": "com.johanssoninteractive.unitedcolors",
+			"bundleIdentifier": "com.johanssoninteractive.tiltling",
 			"appleTeamId": "LVDUVZJ2U7",
 			"infoPlist": {
 				"ITSAppUsesNonExemptEncryption": false,
@@ -22,7 +22,7 @@
 				"monochromeImage": "./assets/adaptive-icon-mono.png",
 				"backgroundColor": "#0B0E14"
 			},
-			"package": "com.johanssoninteractive.unitedcolors",
+			"package": "com.johanssoninteractive.tiltling",
 			"predictiveBackGestureEnabled": false,
 			"blockedPermissions": ["android.permission.RECORD_AUDIO"]
 		},
@@ -64,7 +64,7 @@
 		},
 		"extra": {
 			"eas": {
-				"projectId": "c14907bc-59f6-4a25-b1dc-0dda820180ce"
+				"projectId": "ff5bf8ee-8776-43d7-9c67-31d9e50b5fd0"
 			}
 		},
 		"owner": "johansson-interactive"
