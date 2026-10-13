@@ -40,10 +40,10 @@ export interface MusicCue {
 export interface GameAudio {
 	/** Load sounds; safe to call repeatedly and again after dispose */
 	load(): Promise<void>;
-	/** A small dot of the player's colour was caught */
-	playCollect(): void;
-	/** A point dot was caught and recoloured the player */
-	playLargeCollect(): void;
+	/** A small dot of the player's colour was caught; `pitch` raises it, in semitones (0..12) */
+	playCollect(pitch: number): void;
+	/** A point dot was caught and recoloured the player; `pitch` as for playCollect */
+	playLargeCollect(pitch: number): void;
 	playPointSpawn(): void;
 	/** One-shot stinger when a run ends */
 	playGameOver(): void;

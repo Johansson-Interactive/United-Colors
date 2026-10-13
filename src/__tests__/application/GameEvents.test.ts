@@ -14,11 +14,15 @@ describe("onGameEvents", () => {
 		const store = createGameStore();
 		const seen: Array<[GameEvent, number]> = [];
 		onGameEvents(store, (event, frame) => seen.push([event, frame.score]));
-		store.getState().updateFrame(frameWith([{ type: "collect", value: 1 }, { type: "spit" }], 1));
+		store
+			.getState()
+			.updateFrame(
+				frameWith([{ type: "collect", value: 1, step: 1, sameTick: false }, { type: "spit" }], 1),
+			);
 		store.getState().updateFrame(frameWith([], 1));
 		store.getState().updateFrame(frameWith([{ type: "gameOver" }], 1));
 		expect(seen).toEqual([
-			[{ type: "collect", value: 1 }, 1],
+			[{ type: "collect", value: 1, step: 1, sameTick: false }, 1],
 			[{ type: "spit" }, 1],
 			[{ type: "gameOver" }, 1],
 		]);

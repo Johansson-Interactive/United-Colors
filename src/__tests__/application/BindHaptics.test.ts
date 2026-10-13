@@ -11,7 +11,7 @@ describe("bindHaptics", () => {
 		const store = createGameStore();
 		let spits = 0;
 		bindHaptics(store, { spit: () => spits++ });
-		report(store, [{ type: "collect", value: 1 }]);
+		report(store, [{ type: "collect", value: 1, step: 1, sameTick: false }]);
 		report(store, []);
 		report(store, [{ type: "spit" }]);
 		report(store, [{ type: "gameOver" }]);

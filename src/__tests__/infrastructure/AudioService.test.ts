@@ -57,6 +57,8 @@ beforeEach(() => {
 			pause: vi.fn(() => {
 				player.playing = false;
 			}),
+			shouldCorrectPitch: true,
+			setPlaybackRate: vi.fn(),
 			seekTo: vi.fn(async () => {}),
 			remove: vi.fn(),
 		};
@@ -121,7 +123,7 @@ describe("AudioService", () => {
 		await audio.load();
 		audio.setEffectsMuted(true);
 		audio.setEffectsMuted(false);
-		audio.playCollect();
+		audio.playCollect(0);
 		audio.playPointSpawn();
 		await flush();
 		const played = players.filter((p) => p.play.mock.calls.length > 0);
@@ -133,7 +135,7 @@ describe("AudioService", () => {
 		const loading = audio.load();
 		audio.setEffectsMuted(true);
 		await loading;
-		audio.playCollect();
+		audio.playCollect(0);
 		await flush();
 		expect(players.every((p) => p.seekTo.mock.calls.length === 0)).toBe(true);
 	});
@@ -157,7 +159,7 @@ describe("AudioService", () => {
 		});
 		const audio = new AudioService(sources, music, host());
 		await audio.load();
-		expect(() => audio.playCollect()).not.toThrow();
+		expect(() => audio.playCollect(0)).not.toThrow();
 
 		await audio.load();
 		expect(audioMock.setAudioModeAsync).toHaveBeenCalledTimes(2);
@@ -196,7 +198,7 @@ describe("AudioService", () => {
 		audio.setMusic({ track: "menu", volume: 0.5 });
 		audio.setEffectsMuted(true);
 		await audio.load();
-		audio.playCollect();
+		audio.playCollect(0);
 		await flush();
 		expect(players.slice(0, EFFECT_PLAYERS).every((p) => p.play.mock.calls.length === 0)).toBe(
 			true,
@@ -205,7 +207,7 @@ describe("AudioService", () => {
 
 		audio.setEffectsMuted(false);
 		audio.setMusicMuted(true);
-		audio.playCollect();
+		audio.playCollect(0);
 		await flush();
 		expect(players.slice(0, EFFECT_PLAYERS).some((p) => p.play.mock.calls.length > 0)).toBe(true);
 		expect(menuLoop()?.pause).toHaveBeenCalled();
@@ -252,7 +254,7 @@ describe("AudioService", () => {
 			await audio.load();
 			expect(menuLoop()?.play).not.toHaveBeenCalled();
 
-			audio.playCollect();
+			audio.playCollect(0);
 			await vi.advanceTimersByTimeAsync(0);
 			expect(players[0]?.play).toHaveBeenCalledTimes(1);
 		});
@@ -322,14 +324,14 @@ describe("AudioService", () => {
 				setForeground(false);
 				expect(menuLoop()?.pause).toHaveBeenCalled();
 				expect(menuLoop()?.volume).toBe(0);
-				audio.playCollect();
+				audio.playCollect(0);
 				await vi.advanceTimersByTimeAsync(0);
 				expect(players[0]?.play).not.toHaveBeenCalled();
 
 				setForeground(true);
 				vi.advanceTimersByTime(2000);
 				expect(menuLoop()?.volume).toBe(1);
-				audio.playCollect();
+				audio.playCollect(0);
 				await vi.advanceTimersByTimeAsync(0);
 				expect(players[0]?.play).toHaveBeenCalledTimes(1);
 			} finally {

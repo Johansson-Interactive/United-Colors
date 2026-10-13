@@ -6,10 +6,12 @@ import {
 	withSequence,
 	withTiming,
 } from "react-native-reanimated";
+import { createCatchStagger } from "../../application/catchCue";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
 import type { GamePhase } from "../../domain/types";
 import { BURST_LIFETIME_MS, type Burst, type BurstInput } from "../effects/Bursts";
+import { catchPop } from "../effects/catchPop";
 import { INK_LIFT, WHITE } from "../theme/theme";
 import { createTimeoutGroup } from "./timeoutGroup";
 
@@ -59,38 +61,44 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	);
 
 	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
-	// is at its live position: the frame was published by the very move that scored.
-	useEffect(
-		() =>
-			onGameEvents(store, (event, frame) => {
-				const player = frame.dots.find((d) => d.kind === "player");
-				if (!player) return;
-				const { x, y, color } = player;
-				switch (event.type) {
-					case "collect":
-					case "collectPoint":
-						addBurst({ kind: "pop", x, y, text: `+${event.value}`, color });
-						if (event.type === "collectPoint") addBurst({ kind: "ring", x, y, color, size: 80 });
-						return;
-					case "gameOver":
-						addBurst({ kind: "ring", x, y, color: WHITE, size: 90 });
-						shake.set(
-							withSequence(
-								withTiming(-10, { duration: 40 }),
-								withTiming(9, { duration: 50 }),
-								withTiming(-6, { duration: 50 }),
-								withTiming(3, { duration: 50 }),
-								withTiming(0, { duration: 60 }),
-							),
-						);
-						return;
-					case "pointSpawn":
-					case "spit":
-						return;
+	// is at its live position: the frame was published by the very move that scored. A catch on
+	// the same tick as the one before pops a moment later, where that one did (see catchCue).
+	useEffect(() => {
+		const stagger = createCatchStagger(burstTimers.schedule);
+		let catchSpot = { x: 0, y: 0 };
+		return onGameEvents(store, (event, frame) => {
+			const player = frame.dots.find((d) => d.kind === "player");
+			if (!player) return;
+			const { x, y, color } = player;
+			switch (event.type) {
+				case "collect":
+				case "collectPoint": {
+					if (!event.sameTick) catchSpot = { x, y };
+					const at = catchSpot;
+					stagger(event.sameTick, () => {
+						addBurst({ kind: "pop", ...at, ...catchPop(event, color) });
+						if (event.type === "collectPoint") addBurst({ kind: "ring", ...at, color, size: 80 });
+					});
+					return;
 				}
-			}),
-		[store, addBurst, shake],
-	);
+				case "gameOver":
+					addBurst({ kind: "ring", x, y, color: WHITE, size: 90 });
+					shake.set(
+						withSequence(
+							withTiming(-10, { duration: 40 }),
+							withTiming(9, { duration: 50 }),
+							withTiming(-6, { duration: 50 }),
+							withTiming(3, { duration: 50 }),
+							withTiming(0, { duration: 60 }),
+						),
+					);
+					return;
+				case "pointSpawn":
+				case "spit":
+					return;
+			}
+		});
+	}, [store, addBurst, shake, burstTimers]);
 
 	const shakeStyle = useAnimatedStyle(() => ({
 		transform: [{ translateX: shake.get() }],

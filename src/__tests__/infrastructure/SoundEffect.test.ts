@@ -8,6 +8,8 @@ function fakeVoice() {
 		plays: 0,
 		pauses: 0,
 		removed: false,
+		shouldCorrectPitch: true,
+		setPlaybackRate: vi.fn(),
 		seekTo: vi.fn(
 			() =>
 				new Promise<void>((resolve) => {
@@ -44,6 +46,22 @@ describe("SoundEffect", () => {
 		expect(a.voice.plays).toBe(0);
 		await a.finishSeeks();
 		expect(a.voice.plays).toBe(1);
+	});
+
+	it("plays at the pitch asked, in semitones, by speeding the voice up without correcting pitch", async () => {
+		const a = fakeVoice();
+		const effect = new SoundEffect([a.asVoice]);
+		expect(a.voice.shouldCorrectPitch).toBe(false);
+		effect.play();
+		expect(a.voice.setPlaybackRate).toHaveBeenLastCalledWith(1);
+		await a.finishSeeks();
+		a.voice.playing = false;
+		effect.play(12);
+		expect(a.voice.setPlaybackRate).toHaveBeenLastCalledWith(2);
+		await a.finishSeeks();
+		a.voice.playing = false;
+		effect.play(7);
+		expect(a.voice.setPlaybackRate.mock.lastCall?.[0]).toBeCloseTo(1.4983);
 	});
 
 	it("overlapping plays use separate voices", async () => {

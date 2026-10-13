@@ -10,6 +10,9 @@ export const WHITE = "#F4F6FB";
 
 export const TRIO = GAME_COLORS;
 
+/** Score pops for catches that carry a combo on (Amber 500) */
+export const COMBO_AMBER = "#FFC107";
+
 /** Diameter of the big ring shared by the title, level and pause screens */
 export const BOWL_SIZE = 236;
 

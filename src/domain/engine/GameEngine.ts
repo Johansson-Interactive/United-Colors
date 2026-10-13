@@ -1,4 +1,5 @@
 import {
+	COMBO_WINDOW_TICKS,
 	GAME_COLORS,
 	PLAYER_DOT_SIZE_RATIO,
 	PLAYER_SPEED_PER_DEGREE,
@@ -10,7 +11,15 @@ import {
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { SmallDot } from "../entities/SmallDot";
-import type { Circle, DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
+import type {
+	Catch,
+	Circle,
+	DotView,
+	GameEvent,
+	RenderFrame,
+	ScreenSize,
+	TiltZero,
+} from "../types";
 import { circlesOverlap } from "./Collision";
 import type { Spawner } from "./Spawner";
 import { SpawnSystem } from "./SpawnSystem";
@@ -37,6 +46,9 @@ export class GameEngine {
 	private dots: Dot[] = [];
 	private score = 0;
 	private timeStep = 0;
+	/** Combo step of the last catch (0 before any), and the tick it landed on */
+	private comboStep = 0;
+	private lastCatchTick = 0;
 	private density: number;
 	private screen: ScreenSize;
 	private random: () => number;
@@ -76,6 +88,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
+		this.comboStep = 0;
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -89,6 +102,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
+		this.comboStep = 0;
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -356,15 +370,13 @@ export class GameEngine {
 			if (!circlesOverlap(player.x, player.y, player.size, x, y, radius * 2)) continue;
 
 			if (dot.kind === "point") {
-				this.score += POINT_DOT_VALUE;
 				this.player.color = dot.color;
 				dot.startAbsorb();
-				this.events.push({ type: "collectPoint", value: POINT_DOT_VALUE });
+				this.events.push({ type: "collectPoint", ...this.scoreCatch(POINT_DOT_VALUE) });
 			} else if (dot.color === this.player.color) {
 				// A drip of the player's colour can be plucked off its wall like any other dot
-				this.score += 1;
 				dot.startAbsorb();
-				this.events.push({ type: "collect", value: 1 });
+				this.events.push({ type: "collect", ...this.scoreCatch(1) });
 			} else if (dot.isForming) {
 				// A drip of another colour is part of the wall until it leaves: harmless
 			} else {
@@ -375,5 +387,16 @@ export class GameEngine {
 				return;
 			}
 		}
+	}
+
+	/** Score a catch worth `base` on its own, carrying the combo on if it is still going */
+	private scoreCatch(base: number): Catch {
+		const since = this.timeStep - this.lastCatchTick;
+		const going = this.comboStep > 0 && since <= COMBO_WINDOW_TICKS;
+		this.comboStep = going ? this.comboStep + 1 : 1;
+		this.lastCatchTick = this.timeStep;
+		const value = base + this.comboStep - 1;
+		this.score += value;
+		return { value, step: this.comboStep, sameTick: going && since === 0 };
 	}
 }

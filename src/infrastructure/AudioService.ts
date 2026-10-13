@@ -103,12 +103,12 @@ export class AudioService implements GameAudio {
 		return this.loading;
 	}
 
-	playCollect(): void {
-		this.effects.collect?.play();
+	playCollect(pitch: number): void {
+		this.effects.collect?.play(pitch);
 	}
 
-	playLargeCollect(): void {
-		this.effects.collectLarge?.play();
+	playLargeCollect(pitch: number): void {
+		this.effects.collectLarge?.play(pitch);
 	}
 
 	playPointSpawn(): void {

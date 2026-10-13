@@ -97,15 +97,25 @@ export interface DotView {
 	launch?: WallProgress;
 }
 
+/** What a catch paid and where it falls in its combo (see COMBO_WINDOW_TICKS) */
+export interface Catch {
+	/** What it added to the score, its combo bonus included */
+	value: number;
+	/** Its combo step: 1 for a catch on its own or the first of a combo, 2 for the next, ... */
+	step: number;
+	/** It landed on the same tick as the catch before it, in the same combo */
+	sameTick: boolean;
+}
+
 /**
  * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
  * once, with the next frame.
  */
 export type GameEvent =
 	/** A small dot of the player's colour was caught */
-	| { type: "collect"; value: number }
+	| ({ type: "collect" } & Catch)
 	/** A point dot was caught and recoloured the player */
-	| { type: "collectPoint"; value: number }
+	| ({ type: "collectPoint" } & Catch)
 	| { type: "pointSpawn" }
 	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
 	| { type: "spit" }

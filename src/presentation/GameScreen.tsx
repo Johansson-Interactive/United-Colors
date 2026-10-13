@@ -237,7 +237,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[dispatch],
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
-	const handleSettleSnap = useCallback(() => audio.playCollect(), [audio]);
+	const handleSettleSnap = useCallback(() => audio.playCollect(0), [audio]);
 	const handleSpeedPress = useCallback(
 		() => dispatch({ type: "speedPressed", color: playerColor }),
 		[dispatch, playerColor],

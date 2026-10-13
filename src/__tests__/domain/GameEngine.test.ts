@@ -1,5 +1,6 @@
 import {
 	ABSORB_TICKS,
+	COMBO_WINDOW_TICKS,
 	DRIP_LAUNCH_TICKS,
 	GAME_COLORS,
 	PLAYER_DOT_SIZE_RATIO,
@@ -152,7 +153,7 @@ describe("GameEngine", () => {
 			const frame = engine.getFrame();
 			expect(frame.phase).toBe("RUNNING");
 			expect(frame.score).toBe(1);
-			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			expect(frame.events).toEqual([{ type: "collect", value: 1, step: 1, sameTick: false }]);
 			// It stays in the frame right away as merging, frozen where it was
 			expect(frame.dots.find((d) => d.id === "caught")).toMatchObject({
 				absorb: 0,
@@ -202,10 +203,116 @@ describe("GameEngine", () => {
 			expect(frame.score).toBe(POINT_DOT_VALUE);
 			expect(frame.events).toEqual([
 				{ type: "pointSpawn" },
-				{ type: "collectPoint", value: POINT_DOT_VALUE },
+				{ type: "collectPoint", value: POINT_DOT_VALUE, step: 1, sameTick: false },
 			]);
 			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(OTHER);
 			expect(frame.dots.find((d) => d.id === "point")?.absorb).toBe(0);
+		});
+	});
+
+	describe("combos", () => {
+		/** A point dot right on the player, in `color` */
+		const pointOnPlayer = (id: string, color: string) =>
+			new PointDot(id, 0, CENTRE.x, CENTRE.y, color, 12, POINT_DOT_VALUE);
+
+		/** The catches reported with the next frame, as [value, step, sameTick] */
+		function catches(engine: GameEngine) {
+			return engine
+				.getFrame()
+				.events.flatMap((e) =>
+					e.type === "collect" || e.type === "collectPoint" ? [[e.value, e.step, e.sameTick]] : [],
+				);
+		}
+
+		function ticks(engine: GameEngine, count: number) {
+			for (let i = 0; i < count; i++) engine.tick();
+		}
+
+		it("each catch within COMBO_WINDOW_TICKS of the last pays one more than the one before it would", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[1, 1, false]]);
+
+			ticks(engine, COMBO_WINDOW_TICKS - 1);
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[2, 2, false]]);
+
+			ticks(engine, COMBO_WINDOW_TICKS - 1);
+			point.push(pointOnPlayer("p", OTHER));
+			engine.tick();
+			expect(catches(engine)).toEqual([[POINT_DOT_VALUE + 2, 3, false]]);
+			expect(engine.getScore()).toBe(1 + 2 + POINT_DOT_VALUE + 2);
+		});
+
+		it("a point dot keeps the combo going in the player's new colour", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			point.push(pointOnPlayer("p", OTHER));
+			engine.tick();
+			expect(catches(engine)).toEqual([[POINT_DOT_VALUE, 1, false]]);
+			small.push(smallDotAt(CENTRE, OTHER, { id: "a" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[2, 2, false]]);
+		});
+
+		it("catches on the same tick are consecutive steps", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			point.push(pointOnPlayer("p", OTHER));
+			engine.tick();
+			expect(catches(engine)).toEqual([
+				[1, 1, false],
+				[POINT_DOT_VALUE + 1, 2, true],
+			]);
+			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[3, 3, false]]);
+		});
+
+		it("ends silently once the window lapses", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			engine.getFrame();
+			ticks(engine, COMBO_WINDOW_TICKS);
+			expect(engine.getFrame().events).toEqual([]);
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[1, 1, false]]);
+		});
+
+		it("a drip plucked off its wall counts", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			small.push(dripAt(CENTRE, OWN, { id: "drip" }));
+			engine.tick();
+			engine.getFrame();
+			engine.tick();
+			expect(catches(engine)).toEqual([[2, 2, false]]);
+		});
+
+		it("survives a pause, since ticks stop too", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			engine.getFrame();
+			engine.pause();
+			ticks(engine, COMBO_WINDOW_TICKS * 3);
+			engine.resume();
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[2, 2, false]]);
+		});
+
+		it("a new game starts without one", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			engine.startGame(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[1, 1, false]]);
 		});
 	});
 
@@ -338,7 +445,7 @@ describe("GameEngine", () => {
 			engine.tick();
 			const frame = engine.getFrame();
 			expect(frame.score).toBe(1);
-			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			expect(frame.events).toEqual([{ type: "collect", value: 1, step: 1, sameTick: false }]);
 			const plucked = frame.dots.find((d) => d.id === "drip");
 			expect(plucked?.absorb).toBe(0);
 			expect(plucked?.drip).toBeUndefined();
@@ -659,7 +766,7 @@ describe("GameEngine", () => {
 			expect(engine.advancePlayer(0, 0.5)).toBe(true);
 			const frame = engine.getFrame();
 			expect(frame.score).toBe(1);
-			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			expect(frame.events).toEqual([{ type: "collect", value: 1, step: 1, sameTick: false }]);
 			expect(frame.dots.find((d) => d.id === "near")).toMatchObject({
 				absorb: 0,
 				prevAbsorb: 0,
@@ -678,7 +785,9 @@ describe("GameEngine", () => {
 			expect(engine.advancePlayer(0, 0)).toBe(true);
 			const frame = engine.getFrame();
 			expect(frame.score).toBe(POINT_DOT_VALUE);
-			expect(frame.events).toEqual([{ type: "collectPoint", value: POINT_DOT_VALUE }]);
+			expect(frame.events).toEqual([
+				{ type: "collectPoint", value: POINT_DOT_VALUE, step: 1, sameTick: false },
+			]);
 			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(OTHER);
 		});
 

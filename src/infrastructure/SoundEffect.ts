@@ -1,11 +1,16 @@
 import type { AudioPlayer } from "expo-audio";
 
 /** The slice of an expo-audio player a sound effect drives */
-export type Voice = Pick<AudioPlayer, "playing" | "play" | "pause" | "seekTo" | "remove">;
+export type Voice = Pick<
+	AudioPlayer,
+	"playing" | "play" | "pause" | "seekTo" | "remove" | "shouldCorrectPitch" | "setPlaybackRate"
+>;
 
 /**
  * One sound effect backed by a small pool of players. Rapid repeats take a free voice and
  * overlap, rather than rewinding a single player that is still playing or still seeking.
+ * A play can be pitched up by playing faster without pitch correction (varispeed), as far as
+ * the octave a rate of 2 gives, the most expo-audio allows.
  */
 export class SoundEffect {
 	private cursor = 0;
@@ -13,12 +18,16 @@ export class SoundEffect {
 	private disposed = false;
 	private readonly rewinding = new Set<Voice>();
 
-	constructor(private readonly voices: readonly Voice[]) {}
+	constructor(private readonly voices: readonly Voice[]) {
+		for (const voice of voices) voice.shouldCorrectPitch = false;
+	}
 
-	play(): void {
+	/** Play once, raised by `pitch` semitones (0..12) */
+	play(pitch = 0): void {
 		if (this.muted || this.disposed) return;
 		const voice = this.takeVoice();
 		if (!voice) return;
+		voice.setPlaybackRate(2 ** (pitch / 12));
 		this.rewinding.add(voice);
 		voice
 			.seekTo(0)
