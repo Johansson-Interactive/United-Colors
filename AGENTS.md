@@ -11,3 +11,17 @@ React Native (Expo) remake of a legacy Android tilt game. The original Java app 
 - Screen logic goes in pure steppers with tests (`presentation/flow/screenFlow.ts`, `presentation/tilt/*.ts`), with thin React shells around them. Hooks are not unit-tested here.
 - Any behavior change needs a test in the same change (Vitest, `src/__tests__`).
 - Before you finish, run `pnpm preflight`. It applies Biome fixes, then runs `pnpm verify`: the read-only check (Biome, typecheck, tests, Knip, react-doctor, expo-doctor) that CI should run.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `Johansson-Interactive/United-Colors`, used through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root, created as needed. See `docs/agents/domain.md`.
