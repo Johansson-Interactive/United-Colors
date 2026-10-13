@@ -4,6 +4,7 @@ import {
 	LINE_GAP,
 	layoutDotMatrix,
 	matrixSize,
+	paletteIndex,
 	pitchToFit,
 	trioIndex,
 } from "../../presentation/dotmatrix/layout";
@@ -74,6 +75,27 @@ describe("layoutDotMatrix", () => {
 			expect(i).toBeLessThan(3);
 			expect(trioIndex(dot)).toBe(i);
 		}
+	});
+});
+
+describe("paletteIndex", () => {
+	it("gives every dot of a letter the same colour, cycling the palette letter by letter", () => {
+		const dots = layoutDotMatrix("TILTLING").dots;
+		for (const dot of dots) {
+			expect(paletteIndex(dot, 3, "letter")).toBe(dot.charIndex % 3);
+		}
+		const firstOf = (c: number) => dots.find((d) => d.charIndex === c);
+		const t = firstOf(0);
+		const i = firstOf(1);
+		if (!t || !i) throw new Error("missing letters");
+		expect(paletteIndex(t, 3, "letter")).not.toBe(paletteIndex(i, 3, "letter"));
+	});
+
+	it("scatters colours within a letter by dot", () => {
+		const t = layoutDotMatrix("T").dots;
+		const used = new Set(t.map((d) => paletteIndex(d, 3, "dot")));
+		expect(used.size).toBeGreaterThan(1);
+		for (const dot of t) expect(paletteIndex(dot, 3, "dot")).toBe(trioIndex(dot));
 	});
 });
 

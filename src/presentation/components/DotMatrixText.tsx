@@ -20,7 +20,7 @@ import {
 	withRepeat,
 	withTiming,
 } from "react-native-reanimated";
-import { layoutDotMatrix, matrixSize, trioIndex } from "../dotmatrix/layout";
+import { type ColorBy, layoutDotMatrix, matrixSize, paletteIndex } from "../dotmatrix/layout";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface DotMatrixTextProps {
@@ -32,9 +32,14 @@ interface DotMatrixTextProps {
 	/** Single colour (may be animated), or a palette assigned per dot */
 	color?: string | SharedValue<string>;
 	colors?: readonly string[];
+	/** Spread the palette per dot (default) or give each letter one colour */
+	colorBy?: ColorBy;
 	/** Soft glow behind each dot */
 	glow?: boolean;
-	/** Colour layers drift apart with device tilt, giving the text depth */
+	/**
+	 * Colour layers drift apart with device tilt, giving the text depth. With one colour per
+	 * letter the word drifts as one, so letters never slide into each other.
+	 */
 	parallax?: boolean;
 	/** Dots swell in a slow travelling wave */
 	wave?: boolean;
@@ -47,6 +52,7 @@ const WAVE_AMPLITUDE = 0.22;
 /** Pixels of drift per radian of tilt for the deepest layer */
 const PARALLAX_GAIN = 26;
 const LAYER_DEPTH = [1, 0.55, 0.2] as const;
+const WORD_DEPTH = 0.6;
 const GLOW_SCALE = 2.6;
 const GLOW_CORE_ALPHA = 0.35;
 
@@ -89,6 +95,7 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	dotScale = 0.38,
 	color = "#F4F6FB",
 	colors,
+	colorBy = "dot",
 	glow = false,
 	parallax = false,
 	wave = false,
@@ -103,9 +110,9 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 			layout.dots.map((d) => ({
 				col: d.col,
 				row: d.row,
-				ci: colors ? trioIndex(d) % colors.length : 0,
+				ci: colors ? paletteIndex(d, colors.length, colorBy) : 0,
 			})),
-		[layout, colors],
+		[layout, colors, colorBy],
 	);
 	const base = useMemo(() => matrixSize(layout, pitch), [layout, pitch]);
 	// Room for parallax drift and glow so nothing clips at the canvas edge
@@ -167,7 +174,11 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 			for (let pass = glows ? 0 : 1; pass < 2; pass++) {
 				for (const dot of dots) {
 					const ci = dot.ci;
-					const depth = parallax ? LAYER_DEPTH[ci % LAYER_DEPTH.length] : 0;
+					const depth = !parallax
+						? 0
+						: colorBy === "letter"
+							? WORD_DEPTH
+							: LAYER_DEPTH[ci % LAYER_DEPTH.length];
 					const cx = pad + (dot.col + 0.5) * pitch + tx * depth;
 					const cy = pad + (dot.row + 0.5) * pitch + ty * depth;
 					const swell = wave

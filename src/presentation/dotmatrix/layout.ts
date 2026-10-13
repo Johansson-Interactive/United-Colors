@@ -68,6 +68,14 @@ export function trioIndex(dot: MatrixDot): number {
 	return (dot.col * 7 + dot.row * 3 + dot.charIndex) % 3;
 }
 
+/** How a palette is spread over text: scattered per dot, or one colour per letter */
+export type ColorBy = "dot" | "letter";
+
+/** Palette index for a dot: a stable scatter, or its letter's place in the text */
+export function paletteIndex(dot: MatrixDot, size: number, by: ColorBy): number {
+	return (by === "letter" ? dot.charIndex : trioIndex(dot)) % size;
+}
+
 /** Largest pitch, up to `maxPitch`, at which the layout's width fits within `maxWidth` */
 export function pitchToFit(layout: MatrixLayout, maxWidth: number, maxPitch: number): number {
 	if (layout.cols === 0) return maxPitch;
