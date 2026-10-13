@@ -10,6 +10,7 @@ import {
 import {
 	addStretches,
 	createSceneBuilder,
+	MERGE_MAX_DOTS,
 	MERGE_SWELL_MAX,
 	mergeSlide,
 	mergeSwell,
@@ -221,6 +222,38 @@ describe("buildScene", () => {
 			);
 			const scene = buildScene(frame([player, ...arriving]), 0, PLAYER_POS);
 			expect(scene[3].radius).toBeCloseTo(20 * MERGE_SWELL_MAX);
+		});
+
+		describe("with more dots merging than the liquid body holds", () => {
+			// Small enough that the swell stays under its cap, so every dot shows in it
+			const merging = (i: number, absorb: number) =>
+				dot({ id: `c${i}`, x: 100 + i, radius: 4, prevRadius: 4, absorb, prevAbsorb: absorb });
+			const playerRadius = (scene: ReturnType<typeof buildScene>) =>
+				scene.find((d) => d.kind === "player")?.radius;
+
+			it("draws only as many as the body holds, and swells only for those", () => {
+				const many = Array.from({ length: MERGE_MAX_DOTS + 2 }, (_, i) => merging(i, F));
+				const scene = buildScene(frame([player, ...many]), 0, PLAYER_POS);
+				expect(scene.filter((d) => d.kind === "merging")).toHaveLength(MERGE_MAX_DOTS);
+
+				const held = buildScene(frame([player, ...many.slice(0, MERGE_MAX_DOTS)]), 0, PLAYER_POS);
+				expect(playerRadius(scene)).toBeCloseTo(playerRadius(held) ?? 0);
+				expect(playerRadius(held)).toBeLessThan(20 * MERGE_SWELL_MAX);
+			});
+
+			it("leaves out the dots caught last, so none vanishes mid-slide", () => {
+				const many = Array.from({ length: MERGE_MAX_DOTS }, (_, i) => merging(i, F / 2));
+				const scene = buildScene(frame([merging(99, 0), player, ...many]), 0, PLAYER_POS);
+				const drawn = scene.filter((d) => d.kind === "merging");
+				expect(drawn).toHaveLength(MERGE_MAX_DOTS);
+				expect(drawn.every((d) => d.merge > 0)).toBe(true);
+			});
+
+			it("draws them all once there is room", () => {
+				const few = Array.from({ length: MERGE_MAX_DOTS }, (_, i) => merging(i, F));
+				const scene = buildScene(frame([player, ...few]), 0, PLAYER_POS);
+				expect(scene.filter((d) => d.kind === "merging")).toHaveLength(MERGE_MAX_DOTS);
+			});
 		});
 	});
 

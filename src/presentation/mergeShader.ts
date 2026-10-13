@@ -1,4 +1,5 @@
 import { JELLY_MAX_STRETCH } from "../application/jelly";
+import { MERGE_MAX_DOTS } from "../application/renderScene";
 import {
 	dotCount,
 	dotKind,
@@ -9,8 +10,11 @@ import {
 } from "../application/sceneRecord";
 import { LIQUID_SKSL, LIQUID_WOBBLE, SMIN_SKSL, WALL_SKSL } from "./liquidShader";
 
-/** Most bodies (the player plus dots merging into it) the shader draws as one liquid */
-export const MERGE_MAX_BLOBS = 8;
+/**
+ * Bodies the shader draws as one liquid: the player plus every dot the scene builder draws
+ * merging into it, so no merging dot is ever left out of the body
+ */
+export const MERGE_MAX_BLOBS = 1 + MERGE_MAX_DOTS;
 /** Smooth-min radius as a multiple of the player radius: how early two bodies start to neck */
 export const MERGE_BLEND = 0.9;
 /** The dent a refused dot presses is this much wider than the dot, as a fraction of its radius */

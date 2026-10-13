@@ -1,6 +1,6 @@
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import { dripCircle } from "../domain/engine/Drip";
-import type { RenderFrame, ScreenSize, WallContact } from "../domain/types";
+import type { DotView, RenderFrame, ScreenSize, WallContact } from "../domain/types";
 import { createJelly, JELLY_MAX_STRETCH } from "./jelly";
 import { leanReach } from "./lean";
 import {
@@ -32,6 +32,12 @@ import {
 	stepPress,
 } from "./wall";
 
+/**
+ * Most caught dots drawn merging into the player at once: as many as the liquid body holds
+ * besides the player (see mergeShader.ts). Past this, the dots caught last are left out
+ * of the scene altogether, body, halo, glare and swell alike, until there is room.
+ */
+export const MERGE_MAX_DOTS = 8;
 /** The player may swell to at most this multiple of its radius while taking dots in */
 export const MERGE_SWELL_MAX = 1.3;
 /** A merging dot has shrunk to this fraction of its radius by the time it reaches the player */
@@ -96,6 +102,25 @@ export interface PlayerPose {
 	pushY?: number;
 }
 
+/** Whether `dot` is a caught dot sliding into the player */
+function isMerging(dot: DotView): boolean {
+	return dot.kind !== "player" && dot.absorb !== undefined;
+}
+
+/**
+ * The caught dots to draw merging when more are merging than the body holds: those furthest
+ * along, so the one left out is a dot just caught rather than one already sliding in (ties go
+ * to the earlier dot in the frame). Null when every caught dot fits, which is counted without
+ * allocating since it is every frame of normal play.
+ */
+function mergingWithinCap(dots: readonly DotView[]): Set<DotView> | null {
+	let count = 0;
+	for (const d of dots) if (isMerging(d)) count++;
+	if (count <= MERGE_MAX_DOTS) return null;
+	const furthest = dots.filter(isMerging).sort((a, b) => (b.absorb ?? 0) - (a.absorb ?? 0));
+	return new Set(furthest.slice(0, MERGE_MAX_DOTS));
+}
+
 function colorIndex(color: string): number {
 	const index = (GAME_COLORS as readonly string[]).indexOf(color);
 	return index < 0 ? 0 : index;
@@ -111,7 +136,8 @@ function colorIndex(color: string): number {
  * - Size animations (point dots) are interpolated from the previous tick, since
  *   extrapolating them would overshoot when a pulse reverses.
  * - Caught dots slide from where they were caught into the player's live position, shrinking
- *   as they go, and the player swells by the volume it takes in before settling back.
+ *   as they go, and the player swells by the volume it takes in before settling back. At most
+ *   MERGE_MAX_DOTS are drawn at once (see mergingWithinCap).
  * - A point dot is drawn as a yolk: a shell in the player's colour, since it is safe to catch
  *   like any dot of that colour, round a core in the colour it turns the player into. The
  *   yolk is drawn to the player wherever they are; as they near, the whole dot leans toward
@@ -157,6 +183,7 @@ export function createSceneBuilder() {
 
 		let n = 0;
 		const playerDot = frame.dots.find((d) => d.kind === "player");
+		const withinCap = mergingWithinCap(frame.dots);
 		// Sum of (caught radius / player radius)^2 weighted by how much of each is in the player
 		let swell = 0;
 		// Where the player is drawn: its live position, less any recoil from a refused dot
@@ -168,6 +195,7 @@ export function createSceneBuilder() {
 
 		for (const dot of frame.dots) {
 			if (dot.kind === "player") continue;
+			if (withinCap && isMerging(dot) && !withinCap.has(dot)) continue;
 			const radius = dot.prevRadius + (dot.radius - dot.prevRadius) * sizeT;
 			const color = colorIndex(dot.color);
 			if (dot.absorb !== undefined) {

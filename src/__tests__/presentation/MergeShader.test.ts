@@ -97,16 +97,15 @@ describe("packMergeUniforms", () => {
 		expect(MERGE_SKSL).toContain("uniform float3 jelly;");
 	});
 
-	it("never packs more than MERGE_MAX_BLOBS bodies", () => {
+	it("holds in its body every dot the scene draws merging, however many are caught", () => {
 		const many = Array.from({ length: MERGE_MAX_BLOBS + 3 }, (_, i) =>
 			dot({ id: `c${i}`, x: 60 + i, y: 60, absorb: 0 }),
 		);
 		const s = scene([PLAYER, ...many]);
 		let merging = 0;
 		for (let i = 0; i < dotCount(s); i++) if (dotKind(s, i) === "merging") merging++;
-		expect(merging).toBe(MERGE_MAX_BLOBS + 3);
-		const packed = packMergeUniforms(s);
-		expect(packed?.values[MERGE_MAX_BLOBS * 3]).toBe(MERGE_MAX_BLOBS);
+		expect(merging).toBe(MERGE_MAX_BLOBS - 1);
+		expect(packMergeUniforms(s)?.values[MERGE_MAX_BLOBS * 3]).toBe(MERGE_MAX_BLOBS);
 	});
 
 	it("reads body positions from the scene layout the shader expects", () => {
