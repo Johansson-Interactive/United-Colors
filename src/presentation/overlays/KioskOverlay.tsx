@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
 	cancelAnimation,
@@ -17,6 +17,7 @@ import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
+import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
 import { BOWL_SIZE, CAPTION, TRIO } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 import { playColourAt } from "./playColour";
@@ -34,7 +35,12 @@ interface KioskOverlayProps {
 	sensitivity: number;
 }
 
-const TITLE_COLS = 47; // "TILTLING": 8 glyphs x 5 + 7 gaps
+const TITLE = "TILTLING";
+/** Share of the screen width the title's dots span, and its pitch bounds */
+const TITLE_WIDTH = 0.86;
+const TITLE_PITCH = { min: 6, max: 11 };
+/** Share of the screen height the title group sits above centre, so the top isn't left empty */
+const GROUP_LIFT = 0.03;
 const PLAY_SIZE = 128;
 const COLOR_CYCLE_MS = 2600;
 
@@ -44,9 +50,10 @@ function heldColor(cycle: number): string {
 }
 
 /**
- * Title / attract screen, drawn over the kiosk simulation. The name is set in living dots
- * that drift with the tilt; the play dot is a drop of the player's liquid rolling in a bowl
- * the way the player will, and the best score waits at the bottom.
+ * Title / attract screen, drawn over the kiosk simulation. The name, one colour per letter,
+ * sits right above the bowl so the two read as one group, lifted a little above centre; it
+ * drifts with the tilt. The play dot is a drop of the player's liquid rolling in a bowl the
+ * way the player will, and the best score waits at the bottom.
  */
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
@@ -58,9 +65,13 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	onToggleMusic,
 	sensitivity,
 }) => {
-	const { width } = useWindowDimensions();
+	const { width, height } = useWindowDimensions();
 	const tiltAvailable = useTiltAvailable();
-	const titlePitch = Math.max(6, Math.min(10, Math.floor((width - 56) / TITLE_COLS)));
+	const titleLayout = useMemo(() => layoutDotMatrix(TITLE), []);
+	const titlePitch = Math.max(
+		TITLE_PITCH.min,
+		pitchToFit(titleLayout, width * TITLE_WIDTH, TITLE_PITCH.max),
+	);
 
 	// The play dot takes each of the three colours in turn: held, then a quick blend over.
 	// It opens on a random one, each equally likely.
@@ -83,11 +94,20 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 			exiting={FadeOut.duration(250)}
 			pointerEvents="box-none"
 		>
-			<View style={styles.title} pointerEvents="none">
-				<DotMatrixText text="TILTLING" pitch={titlePitch} colors={TRIO} glow parallax wave />
-			</View>
-
-			<View style={styles.centre} pointerEvents="box-none">
+			<View
+				style={[styles.centre, { paddingBottom: height * GROUP_LIFT * 2 }]}
+				pointerEvents="box-none"
+			>
+				<DotMatrixText
+					text={TITLE}
+					pitch={titlePitch}
+					dotScale={0.42}
+					colors={TRIO}
+					colorBy="letter"
+					glow
+					parallax
+					wave
+				/>
 				<TiltBowl size={BOWL_SIZE} dotSize={PLAY_SIZE} sensitivity={sensitivity}>
 					<DotButton
 						size={PLAY_SIZE}
@@ -132,10 +152,6 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 const styles = StyleSheet.create({
 	container: {
 		...StyleSheet.absoluteFill,
-	},
-	title: {
-		alignItems: "center",
-		paddingTop: 22,
 	},
 	centre: {
 		flex: 1,
