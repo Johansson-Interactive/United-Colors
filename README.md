@@ -32,8 +32,19 @@ On devices without motion sensors (simulators) every gyro-driven control falls b
 The icons and the splash mark are derived from the artwork in `assets/icon-source.png` by
 `scripts/derive-icons.py` (Python 3 + Pillow). Replace the artwork and rerun it to change them.
 The music in `assets/music/` (menu loop, game loop, game-over stinger) is synthesised by
-`scripts/generate-music.py` (Python 3 plus `afconvert` or `ffmpeg`). The menu loop plays in
-the kiosk, the game loop during play and ducked while paused, and both follow the sound toggle.
+`scripts/generate-music.py`, the catch sounds and the spawn cue in `assets/sounds/` by
+`scripts/generate-sounds.py` (Python 3 plus `afconvert` or `ffmpeg`; the spawn cue needs
+`ffmpeg`). Both share `scripts/mastering.py`: the loops are mastered to -16 LUFS and the
+effects to a -1 dBFS peak, so the mix lives in code (`MUSIC_CUES` in `BindMusic.ts`, `VOLUME`
+in `AudioService.ts`). In play the game loop sits near -17 LUFS, a few dB under what Spotify
+and YouTube play at. The menu loop plays in the kiosk, the game loop during play and ducked
+while paused, and each follows its toggle.
+
+The game mixes with the player's own audio instead of stopping it. When something else is
+already playing (their music, a video), the game's music stays silent and the effects play
+over it; the music fades in once the other audio stops. On iOS the game follows the
+Ring/Silent switch. The check comes from the local native module in `modules/other-audio`,
+so it needs a native rebuild; without it the music simply always plays.
 
 For the stack, architecture, and quality gates, see [AGENTS.md](./AGENTS.md).
 
@@ -85,6 +96,7 @@ ports) and never reaches into `domain/engine`, `domain/entities` or `infrastruct
 `src/__tests__/architecture/Layers.test.ts` reads every import and fails on a breach.
 
 `ios/` and `android/` are generated and git-ignored. Run `pnpm prebuild` to recreate them.
+`modules/` holds local native modules, which Expo autolinks into those projects.
 
 ## Running on a physical device
 

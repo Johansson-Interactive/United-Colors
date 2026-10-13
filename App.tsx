@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
@@ -7,7 +8,8 @@ import { AudioService } from "./src/infrastructure/AudioService";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
 import { FrameClock } from "./src/infrastructure/FrameClock";
 import { HapticsService } from "./src/infrastructure/HapticsService";
-import { watchAppActive } from "./src/infrastructure/watchAppActive";
+import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
+import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
 
@@ -27,13 +29,14 @@ const audio = new AudioService(
 	{
 		collect: require("./assets/sounds/collect-small.m4a"),
 		collectLarge: require("./assets/sounds/collect-large.m4a"),
-		pointSpawn: require("./assets/sounds/jump.ogg"),
+		pointSpawn: require("./assets/sounds/point-spawn.m4a"),
 		gameOver: require("./assets/music/game-over.m4a"),
 	},
 	{
 		menu: require("./assets/music/menu.m4a"),
 		game: require("./assets/music/game.m4a"),
 	},
+	{ os: Platform.OS, isOtherAudioPlaying, watchForeground: watchAppForeground },
 );
 
 const haptics = new HapticsService();

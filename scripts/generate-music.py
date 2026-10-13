@@ -20,22 +20,20 @@ pentatonic, so they crossfade into each other and sit under the sound effects.
 Loops are seamless: each loop is exactly 16 bars long (both tempos give a whole number
 of samples per beat at 44.1 kHz) and note tails that run past the end wrap around to
 the start, so the last bar rings into the first.
+
+Both loops are mastered to the same integrated loudness (see mastering.py), limited so no
+peak passes -1 dBFS, so the cue volumes in BindMusic.ts mix them directly. The stinger plays
+as an effect and is peak-normalised like the other effects.
 """
 
 import math
 import random
-import shutil
-import struct
-import subprocess
 import tempfile
-import wave
 from pathlib import Path
 
-MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
+from mastering import RATE, encode, integrated_loudness, master_loop, momentary_max, normalise, peak_db, write_wav
 
-RATE = 44100
-BITRATE = 96000
-PEAK = 0.89  # -1 dBFS
+MUSIC_DIR = Path(__file__).resolve().parent.parent / "assets" / "music"
 
 # One bar per chord, two passes of the progression make a 16-bar loop. Chords are MIDI
 # notes of a close voicing around middle C; the first note is also the bass root.
@@ -334,31 +332,6 @@ def fade_out(buf, seconds):
 # Output
 
 
-def normalise(buf):
-    peak = max(abs(x) for x in buf) or 1.0
-    scale = PEAK / peak
-    return [x * scale for x in buf]
-
-
-def write_wav(path, buf):
-    frames = b"".join(struct.pack("<h", int(max(-1.0, min(1.0, x)) * 32767)) for x in buf)
-    with wave.open(str(path), "wb") as f:
-        f.setnchannels(1)
-        f.setsampwidth(2)
-        f.setframerate(RATE)
-        f.writeframes(frames)
-
-
-def encode(wav_path, out_path):
-    if shutil.which("afconvert"):
-        cmd = ["afconvert", "-f", "m4af", "-d", "aac", "-b", str(BITRATE), str(wav_path), str(out_path)]
-    elif shutil.which("ffmpeg"):
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), "-c:a", "aac", "-b:a", str(BITRATE), str(out_path)]
-    else:
-        raise SystemExit("Need afconvert (macOS) or ffmpeg to encode AAC")
-    subprocess.run(cmd, check=True)
-
-
 def main():
     MUSIC_DIR.mkdir(parents=True, exist_ok=True)
     songs = (
@@ -368,12 +341,18 @@ def main():
     )
     with tempfile.TemporaryDirectory() as tmp:
         for name, render in songs:
-            buf = normalise(render().buf)
+            track = render()
+            if track.loop:
+                buf, reduction = master_loop(track.buf)
+                level = f"{integrated_loudness(buf, loop=True):.1f} LUFS, limited {reduction:.1f} dB"
+            else:
+                buf = normalise(track.buf)
+                level = f"{momentary_max(buf):.1f} LUFS momentary max"
             wav_path = Path(tmp) / f"{name}.wav"
             write_wav(wav_path, buf)
             out_path = MUSIC_DIR / f"{name}.m4a"
             encode(wav_path, out_path)
-            print(f"{out_path.relative_to(MUSIC_DIR.parent.parent)}  {len(buf) / RATE:.1f}s")
+            print(f"{out_path.relative_to(MUSIC_DIR.parent.parent)}  {len(buf) / RATE:.1f}s  {level}, peak {peak_db(buf):.1f} dBFS")
 
 
 if __name__ == "__main__":

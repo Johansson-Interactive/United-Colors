@@ -52,13 +52,22 @@ describe("bindMusic", () => {
 		]);
 	});
 
-	it("keeps the game loop playing quieter while paused, and the menu calmer than play", () => {
+	it("keeps the game loop playing quieter while refusing and quieter still while paused", () => {
 		expect(MUSIC_CUES.PAUSED.track).toBe(MUSIC_CUES.RUNNING.track);
-		expect(MUSIC_CUES.PAUSED.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
 		expect(MUSIC_CUES.REJECTING.track).toBe(MUSIC_CUES.RUNNING.track);
 		expect(MUSIC_CUES.REJECTING.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
+		expect(MUSIC_CUES.PAUSED.volume).toBeLessThan(MUSIC_CUES.REJECTING.volume);
+	});
+
+	it("plays the menu loop in the kiosk, and lower under the game-over stinger", () => {
 		expect(MUSIC_CUES.KIOSK.track).toBe("menu");
-		expect(MUSIC_CUES.KIOSK.volume).toBeLessThan(MUSIC_CUES.RUNNING.volume);
+		expect(MUSIC_CUES.GAME_OVER.track).toBe("menu");
+		expect(MUSIC_CUES.GAME_OVER.volume).toBeLessThan(MUSIC_CUES.KIOSK.volume);
+	});
+
+	it("plays the game loop near -17 LUFS, the loops being mastered to -16", () => {
+		const db = 20 * Math.log10(MUSIC_CUES.RUNNING.volume);
+		expect(-16 + db).toBeCloseTo(-17, 0);
 	});
 
 	it("ignores frame updates that keep the phase", () => {
