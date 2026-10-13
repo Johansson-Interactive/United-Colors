@@ -21,14 +21,14 @@ const INITIAL_VIEW = { state: INITIAL_FLOW, screen: screenOf(INITIAL_FLOW) };
  * The screens and the floods between them (see screenFlow.ts), fed the game's phase as the
  * store changes. Each step answers with the screen
  * to show, may save a level pose and may start a flood, which runs `perform` once it covers
- * the screen. Returns the flow, its screen and the dispatch for the screen's taps.
+ * the screen. Returns the screen and the dispatch for the screen's taps.
  */
 export function useScreenFlow(
 	store: GameStore,
 	storage: StoragePort,
 	flood: FloodController,
 	perform: (action: FlowAction) => void,
-): { flow: FlowState; screen: Screen; dispatch: (event: FlowEvent) => void } {
+): { screen: Screen; dispatch: (event: FlowEvent) => void } {
 	const [view, setView] = useState<Pick<FlowStep, "state" | "screen">>(INITIAL_VIEW);
 	const flowRef = useRef<FlowState>(INITIAL_FLOW);
 	const dispatch = useCallback(
@@ -74,5 +74,5 @@ export function useScreenFlow(
 		});
 	}, [dispatch, store]);
 
-	return { flow: view.state, screen: view.screen, dispatch };
+	return { screen: view.screen, dispatch };
 }

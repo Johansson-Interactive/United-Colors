@@ -1,6 +1,7 @@
 import type React from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from "react-native-reanimated";
+import type { BestVerdict } from "../../application/useCases/GameOver";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { Confetti } from "../effects/Confetti";
@@ -8,8 +9,8 @@ import { CAPTION, WHITE } from "../theme/theme";
 
 interface GameOverOverlayProps {
 	score: number;
-	/** Best score before this run, to recognise a new record */
-	previousBest: number;
+	/** How the run stands against the best; the best row shows once it is judged */
+	verdict: BestVerdict | null;
 	/** The player's final colour; the result and the retry drop of their liquid wear it */
 	color: string;
 	onRetry: (point: PressPoint) => void;
@@ -20,14 +21,13 @@ const TITLE_COLS = 51; // "GAME OVER"
 
 export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 	score,
-	previousBest,
+	verdict,
 	color,
 	onRetry,
 	onBack,
 }) => {
 	const { width } = useWindowDimensions();
-	const isNewBest = score > previousBest;
-	const best = Math.max(score, previousBest);
+	const isNewBest = verdict?.newBest ?? false;
 	const titlePitch = Math.max(5, Math.min(7, Math.floor((width - 48) / TITLE_COLS)));
 	const scorePitch = String(score).length > 3 ? 11 : 14;
 
@@ -47,13 +47,15 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 				<Animated.View entering={ZoomIn.delay(500).springify().damping(13)}>
 					<DotMatrixText text={String(score)} pitch={scorePitch} color={color} glow />
 				</Animated.View>
-				<Animated.View entering={FadeInDown.delay(800).duration(400)} style={styles.bestRow}>
-					{isNewBest ? (
-						<DotMatrixText text="NEW BEST!" pitch={5} colors={[color, WHITE, color]} glow />
-					) : (
-						<Text style={styles.caption}>best {best}</Text>
-					)}
-				</Animated.View>
+				{verdict ? (
+					<Animated.View entering={FadeInDown.delay(800).duration(400)} style={styles.bestRow}>
+						{verdict.newBest ? (
+							<DotMatrixText text="NEW BEST!" pitch={5} colors={[color, WHITE, color]} glow />
+						) : (
+							<Text style={styles.caption}>best {verdict.best}</Text>
+						)}
+					</Animated.View>
+				) : null}
 			</View>
 
 			<Animated.View style={styles.actions} entering={FadeInDown.delay(950).duration(450)}>

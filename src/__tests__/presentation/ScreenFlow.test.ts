@@ -2,7 +2,6 @@ import type { GamePhase } from "../../domain/types";
 import {
 	type FlowState,
 	INITIAL_FLOW,
-	kioskQuiet,
 	type Screen,
 	screenOf,
 	stepFlow,
@@ -20,6 +19,10 @@ const open = (from: "start" | "pause" | "menu", color = PINK): FlowState => ({
 });
 
 const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
+
+/** A run that beat the best, and one that fell short of a best that loaded late */
+const NEW_BEST = { best: 40, newBest: true };
+const LATE_BEST = { best: 50, newBest: false };
 
 /** A step that only leaves the flow in `state`, showing its screen */
 const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
@@ -98,7 +101,9 @@ describe("screen flow", () => {
 
 	it("backing out of the bowl closes it without saving", () => {
 		const step = stepFlow(open("start"), { type: "settleBacked" });
-		expect(step).toEqual(rests(INITIAL_FLOW));
+		expect(step.state).toEqual(INITIAL_FLOW);
+		expect(step.calibrate).toBeUndefined();
+		expect(step.flood).toBeUndefined();
 	});
 
 	it("RETRY floods into a new game in the player's colour", () => {
@@ -111,11 +116,66 @@ describe("screen flow", () => {
 		expect(step.flood).toEqual({ color: INK_LIFT, at: AT, action: { kind: "kiosk" } });
 	});
 
-	it("the kiosk is quiet while the bowl is open over the title, not over the pause", () => {
-		expect(kioskQuiet(INITIAL_FLOW)).toBe(false);
-		expect(kioskQuiet(open("start"))).toBe(true);
-		expect(kioskQuiet(open("menu"))).toBe(true);
-		expect(kioskQuiet(open("pause"))).toBe(false);
+	it("levelling from the title halts the kiosk, and settling brings it back", () => {
+		const opened = stepFlow(INITIAL_FLOW, { type: "levelPressed", from: "menu", color: BLUE });
+		expect(opened.act).toEqual({ kind: "haltKiosk" });
+		const settled = stepFlow(opened.state, {
+			type: "settled",
+			zero: ZERO,
+			facingDown: false,
+			at: AT,
+		});
+		expect(settled.act).toEqual({ kind: "runKiosk" });
+	});
+
+	it("backing out of the bowl over the title brings the kiosk back", () => {
+		expect(stepFlow(open("menu"), { type: "settleBacked" }).act).toEqual({ kind: "runKiosk" });
+		expect(stepFlow(open("start"), { type: "settleBacked" }).act).toEqual({ kind: "runKiosk" });
+	});
+
+	it("a first PLAY halts the kiosk while the bowl is open", () => {
+		const step = stepFlow(INITIAL_FLOW, {
+			type: "startPressed",
+			color: PINK,
+			hasZero: false,
+			at: AT,
+		});
+		expect(step.act).toEqual({ kind: "haltKiosk" });
+	});
+
+	it("starting a game from the bowl does not restart the kiosk", () => {
+		const settled = stepFlow(open("start"), {
+			type: "settled",
+			zero: ZERO,
+			facingDown: false,
+			at: AT,
+		});
+		expect(settled.act).toBeUndefined();
+		expect(settled.flood?.action).toEqual({ kind: "play", color: PINK });
+		expect(stepFlow(settled.state, { type: "covered" }).act).toBeUndefined();
+	});
+
+	it("PLAY with a level pose set leaves the kiosk to the game it floods into", () => {
+		const step = stepFlow(INITIAL_FLOW, {
+			type: "startPressed",
+			color: BLUE,
+			hasZero: true,
+			at: AT,
+		});
+		expect(step.act).toBeUndefined();
+	});
+
+	it("the bowl over the pause leaves the frozen game alone", () => {
+		const opened = stepFlow(PAUSED, { type: "levelPressed", from: "pause", color: PINK });
+		expect(opened.act).toBeUndefined();
+		expect(stepFlow(opened.state, { type: "settleBacked" }).act).toBeUndefined();
+		const settled = stepFlow(opened.state, {
+			type: "settled",
+			zero: ZERO,
+			facingDown: false,
+			at: AT,
+		});
+		expect(settled.act).toBeUndefined();
 	});
 
 	it("the speed button opens the speed view in the player's colour, and BACK closes it", () => {
@@ -131,10 +191,11 @@ describe("screen flow", () => {
 	});
 
 	it("the speed view saves nothing and starts no flood, and leaves the kiosk alone", () => {
-		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", color: PINK });
+		const opened = stepFlow(PAUSED, { type: "speedPressed", color: PINK });
 		expect(opened.calibrate).toBeUndefined();
 		expect(opened.flood).toBeUndefined();
-		expect(kioskQuiet(opened.state)).toBe(false);
+		expect(opened.act).toBeUndefined();
+		expect(stepFlow(opened.state, { type: "speedBacked" }).act).toBeUndefined();
 	});
 
 	it("a flood covering the screen closes the speed view too", () => {
@@ -221,6 +282,38 @@ describe("screen flow", () => {
 		});
 	});
 
+	it("the game over shows no verdict on the best until it is judged, then shows that one", () => {
+		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" });
+		expect(over.screen).toEqual({ kind: "gameOver", verdict: null });
+		const judged = stepFlow(over.state, { type: "bestJudged", verdict: LATE_BEST });
+		expect(judged.screen).toEqual({ kind: "gameOver", verdict: LATE_BEST });
+	});
+
+	it("the first verdict on a run stands", () => {
+		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" }).state;
+		const judged = stepFlow(over, { type: "bestJudged", verdict: NEW_BEST }).state;
+		expect(stepFlow(judged, { type: "bestJudged", verdict: LATE_BEST }).screen).toEqual({
+			kind: "gameOver",
+			verdict: NEW_BEST,
+		});
+	});
+
+	it("a verdict arriving outside the game over is dropped", () => {
+		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
+		expect(stepFlow(running, { type: "bestJudged", verdict: NEW_BEST })).toEqual(rests(running));
+	});
+
+	it("a verdict lands under the retry flood, and the next run starts without it", () => {
+		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" }).state;
+		const flooding = stepFlow(over, { type: "retryPressed", color: BLUE, at: AT }).state;
+		const judged = stepFlow(flooding, { type: "bestJudged", verdict: NEW_BEST });
+		expect(judged.screen).toEqual({ kind: "gameOver", verdict: NEW_BEST });
+		const covered = stepFlow(judged.state, { type: "covered" }).state;
+		const running = stepFlow(covered, { type: "phaseChanged", phase: "RUNNING" }).state;
+		const next = stepFlow(running, { type: "phaseChanged", phase: "GAME_OVER" });
+		expect(next.screen).toEqual({ kind: "gameOver", verdict: null });
+	});
+
 	it("every step answers with the screen of the state it leaves", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "levelPressed", from: "menu", color: BLUE });
 		expect(step.screen).toEqual({ kind: "settle", color: BLUE });
@@ -237,7 +330,7 @@ describe("which screen shows", () => {
 	const title: Screen = { kind: "title" };
 	const hud: Screen = { kind: "hud" };
 	const pause: Screen = { kind: "pause" };
-	const gameOver: Screen = { kind: "gameOver" };
+	const gameOver: Screen = { kind: "gameOver", verdict: null };
 	const bowl: Screen = { kind: "settle", color: PINK };
 	const speed: Screen = { kind: "speed", color: BLUE };
 
@@ -292,6 +385,7 @@ describe("which screen shows", () => {
 						settle: from ? { from, color: PINK } : null,
 						speed: withSpeed ? { color: BLUE } : null,
 						flooding,
+						verdict: null,
 					};
 					const expected = EXPECTED[phase][from ?? "none"][withSpeed ? 1 : 0];
 					it(`${phase}, bowl ${from ?? "closed"}, speed ${withSpeed ? "open" : "closed"}${flooding ? ", flooding" : ""}: ${expected.kind}`, () => {

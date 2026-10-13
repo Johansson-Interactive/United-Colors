@@ -1,7 +1,7 @@
 import type React from "react";
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
@@ -20,7 +20,7 @@ import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
-import { handleGameOver } from "../application/useCases/GameOver";
+import { type BestVerdict, handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import type { ScreenSize, TiltZero } from "../domain/types";
@@ -30,10 +30,9 @@ import { HUD } from "./components/HUD";
 import { Bursts } from "./effects/Bursts";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
-import { type FlowAction, kioskQuiet } from "./flow/screenFlow";
+import type { FlowAction } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useDevControlMode } from "./hooks/useDevControlMode";
-import { useQuietKiosk } from "./hooks/useQuietKiosk";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
@@ -83,7 +82,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const kioskInitializedRef = useRef(false);
 
 	const flood = useFlood();
-	const [previousBest, setPreviousBest] = useState(0);
 	const scene = useSessionScene(session);
 
 	// Dev only: prefer gyro, fall back to touch drag when gyro is missing (e.g. simulator)
@@ -139,11 +137,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Samples arrive on every screen; the game only moves the player while a run is on
 	useEffect(() => sensor.onSample((sample) => handleSensorSample(sample)), [sensor]);
 
-	// The session has halted itself; the score is in the final frame
-	useEffect(() => {
-		if (phase === "GAME_OVER") void handleGameOver(store, storage);
-	}, [phase, store, storage]);
-
 	const handleLayout = useCallback(
 		(size: ScreenSize) => {
 			session.setScreen(size);
@@ -154,12 +147,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session],
 	);
 
+	// The stage fades out while the kiosk is halted under the settle bowl
+	const stageOpacity = useSharedValue(1);
+	const stageFadeStyle = useAnimatedStyle(() => ({ opacity: stageOpacity.get() }));
+
 	// What a step does to the game, straight away or once its flood covers the screen
 	const perform = useCallback(
 		(action: FlowAction) => {
 			switch (action.kind) {
 				case "play":
-					setPreviousBest(store.getState().highScore);
+					// A game started from the bowl shows at once as its flood lifts
+					stageOpacity.set(1);
 					session.start(action.color);
 					detectGyro();
 					return;
@@ -172,12 +170,38 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				case "kiosk":
 					session.startKiosk();
 					return;
+				case "haltKiosk":
+					session.halt();
+					stageOpacity.set(withTiming(0, { duration: 300 }));
+					return;
+				case "runKiosk":
+					stageOpacity.set(withTiming(1, { duration: 400 }));
+					session.run();
+					return;
 			}
 		},
-		[session, store, detectGyro],
+		[session, detectGyro, stageOpacity],
 	);
 
-	const { flow, screen, dispatch } = useScreenFlow(store, storage, flood, perform);
+	const { screen, dispatch } = useScreenFlow(store, storage, flood, perform);
+
+	const judged = useEffectEvent((verdict: BestVerdict) =>
+		dispatch({ type: "bestJudged", verdict }),
+	);
+
+	// The session has halted itself; the score is in the final frame. The verdict on the best
+	// is judged once, against storage, and the game over shows that one; a verdict landing after
+	// its game over has gone belongs to no screen
+	useEffect(() => {
+		if (phase !== "GAME_OVER") return;
+		let current = true;
+		void handleGameOver(store, storage).then((verdict) => {
+			if (current) judged(verdict);
+		});
+		return () => {
+			current = false;
+		};
+	}, [phase, store, storage]);
 
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 
@@ -188,9 +212,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 
 	const handleResume = useCallback(() => dispatch({ type: "resumePressed" }), [dispatch]);
-
-	// Levelling from the title stops and hides the kiosk
-	const stageFadeStyle = useQuietKiosk(kioskQuiet(flow), store, session);
 
 	const handleStartPress = useCallback(
 		(at: PressPoint, color: string) =>
@@ -314,7 +335,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					{screen.kind === "gameOver" && (
 						<GameOverOverlay
 							score={score}
-							previousBest={previousBest}
+							verdict={screen.verdict}
 							color={playerColor}
 							onRetry={handleRetryPress}
 							onBack={handleLeavePress}
