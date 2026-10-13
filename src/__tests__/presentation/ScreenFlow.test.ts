@@ -14,6 +14,7 @@ const BLUE = "#2196F3";
 const open = (from: "start" | "pause" | "menu", color = PINK): FlowState => ({
 	settle: { from, color },
 	speed: null,
+	flooding: false,
 });
 
 describe("screen flow", () => {
@@ -36,7 +37,7 @@ describe("screen flow", () => {
 			hasZero: true,
 			at: AT,
 		});
-		expect(step.state).toBe(INITIAL_FLOW);
+		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
 	});
 
@@ -60,6 +61,7 @@ describe("screen flow", () => {
 		expect(step.flood).toEqual({ color: PINK, at: AT, action: { kind: "play", color: PINK } });
 		// The bowl stays under the flood until it has covered the screen
 		expect(step.state.settle).toEqual({ from: "start", color: PINK });
+		expect(step.state.flooding).toBe(true);
 		expect(stepFlow(step.state, { type: "covered" }).state).toEqual(INITIAL_FLOW);
 	});
 
@@ -111,7 +113,7 @@ describe("screen flow", () => {
 
 	it("the speed button opens the speed view in the player's colour, and BACK closes it", () => {
 		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", color: BLUE });
-		expect(opened).toEqual({ state: { settle: null, speed: { color: BLUE } } });
+		expect(opened).toEqual({ state: { ...INITIAL_FLOW, speed: { color: BLUE } } });
 		expect(stepFlow(opened.state, { type: "speedBacked" })).toEqual({ state: INITIAL_FLOW });
 	});
 
@@ -125,5 +127,66 @@ describe("screen flow", () => {
 	it("a flood covering the screen closes the speed view too", () => {
 		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", color: PINK }).state;
 		expect(stepFlow(opened, { type: "covered" }).state).toEqual(INITIAL_FLOW);
+	});
+
+	it("the pause dot and leaving the app pause the game, opening no screen", () => {
+		expect(stepFlow(INITIAL_FLOW, { type: "pausePressed" })).toEqual({
+			state: INITIAL_FLOW,
+			act: { kind: "pause" },
+		});
+	});
+
+	it("the level ring, held or tapped, resumes the game", () => {
+		expect(stepFlow(INITIAL_FLOW, { type: "resumePressed" })).toEqual({
+			state: INITIAL_FLOW,
+			act: { kind: "resume" },
+		});
+	});
+
+	it("after QUIT starts the flood, the level ring completing does not resume; the flood still lands on the title", () => {
+		const quit = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT });
+		expect(quit.state.flooding).toBe(true);
+		const resume = stepFlow(quit.state, { type: "resumePressed" });
+		expect(resume).toEqual({ state: quit.state });
+		const covered = stepFlow(resume.state, { type: "covered" });
+		expect(covered.state).toEqual(INITIAL_FLOW);
+		expect(quit.flood?.action).toEqual({ kind: "kiosk" });
+	});
+
+	it("a second tap on RETRY while its flood runs starts no second flood", () => {
+		const first = stepFlow(INITIAL_FLOW, { type: "retryPressed", color: BLUE, at: AT });
+		expect(first.flood).toBeDefined();
+		expect(stepFlow(first.state, { type: "retryPressed", color: BLUE, at: AT })).toEqual({
+			state: first.state,
+		});
+		expect(stepFlow(first.state, { type: "leavePressed", at: AT })).toEqual({ state: first.state });
+	});
+
+	it("screen-changing taps are ignored while a flood runs, until it covers the screen", () => {
+		const flooding = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }).state;
+		for (const event of [
+			{ type: "pausePressed" },
+			{ type: "speedPressed", color: PINK },
+			{ type: "levelPressed", from: "pause", color: PINK },
+			{ type: "startPressed", color: PINK, hasZero: true, at: AT },
+			{ type: "settleBacked" },
+		] as const) {
+			expect(stepFlow(flooding, event)).toEqual({ state: flooding });
+		}
+		const after = stepFlow(flooding, { type: "covered" }).state;
+		expect(stepFlow(after, { type: "retryPressed", color: BLUE, at: AT }).flood).toBeDefined();
+	});
+
+	it("the bowl settling from the pause ignores a resume tap while its flood runs", () => {
+		const step = stepFlow(open("pause"), {
+			type: "settled",
+			zero: ZERO,
+			facingDown: false,
+			at: AT,
+		});
+		expect(stepFlow(step.state, { type: "resumePressed" })).toEqual({ state: step.state });
+		expect(
+			stepFlow(step.state, { type: "settled", zero: ZERO, facingDown: false, at: AT }),
+		).toEqual({ state: step.state });
 	});
 });

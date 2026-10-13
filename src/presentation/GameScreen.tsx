@@ -162,19 +162,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session],
 	);
 
-	const handlePause = useCallback(() => {
-		session.pause();
-	}, [session]);
-
-	// Leaving the app mid-run lands on the pause screen when the player comes back
-	useEffect(
-		() => bindPauseOnLeave(store, watchAppActive, handlePause),
-		[handlePause, store, watchAppActive],
-	);
-
-	const handleResume = useCallback(() => session.resume(), [session]);
-
-	// What a flood does to the game once it covers the screen
+	// What a step does to the game, straight away or once its flood covers the screen
 	const perform = useCallback(
 		(action: FlowAction) => {
 			switch (action.kind) {
@@ -182,6 +170,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					setPreviousBest(store.getState().highScore);
 					session.start(action.color);
 					detectGyro();
+					return;
+				case "pause":
+					session.pause();
 					return;
 				case "resume":
 					session.resume();
@@ -210,6 +201,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 			if (step.calibrate) {
 				void calibrateTilt(step.calibrate.zero, store, storage, step.calibrate.facingDown);
 			}
+			if (step.act) perform(step.act);
 			if (step.flood) {
 				const { color, at, action } = step.flood;
 				flood.run(color, at.x, at.y, () => {
@@ -220,6 +212,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		},
 		[flood, perform, store, storage],
 	);
+
+	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
+
+	// Leaving the app mid-run lands on the pause screen when the player comes back
+	useEffect(
+		() => bindPauseOnLeave(store, watchAppActive, handlePause),
+		[handlePause, store, watchAppActive],
+	);
+
+	const handleResume = useCallback(() => dispatch({ type: "resumePressed" }), [dispatch]);
 
 	// Levelling from the title stops and hides the kiosk
 	const stageFadeStyle = useQuietKiosk(kioskQuiet(flow), store, session);
