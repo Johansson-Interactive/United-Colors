@@ -1,4 +1,4 @@
-# United Colors
+# Tiltling
 
 A tilt game: the player steers a dot by tilting the phone, catching dots of its own colour and avoiding the rest.
 
