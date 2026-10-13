@@ -196,8 +196,8 @@ function colorIndex(color: string): number {
  *   recoils the other way (see rejection.ts).
  * - A drip forming on a wall is drawn where the simulation has it, from the interpolated
  *   progress (see Drip.ts), joined to the wall by a wet fillet and swelling forward, drawn
- *   out, along the heading it will shoot off on. Once it shoots off it is drawn out further
- *   along its heading while it tears free (see wall.ts).
+ *   out, along the heading it will shoot off on. Once it lets go it stays joined to the wall
+ *   while it tears free, rounding up as it goes (see wall.ts).
  * - The player is drawn at its live position (moved every frame) and always last (on top),
  *   with the liquid shape its movement over the last `dtMs` gives it. Pushed into a wall
  *   (given the `screen`), it presses into it as hard as it pushes, with a wet fillet, and

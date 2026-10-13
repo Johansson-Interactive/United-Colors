@@ -1,6 +1,5 @@
 import {
 	DRIP_STRETCH,
-	LAUNCH_STRETCH,
 	launchStretch,
 	PLAYER_PRESS,
 	PLAYER_PUSH_SPEED,
@@ -10,10 +9,11 @@ import {
 } from "../../application/wall";
 
 describe("wall curves", () => {
-	it("a launched drip leaves the wall as drawn out as it was forming, longer through the tear, round at the end", () => {
+	it("a launched drip leaves the wall as drawn out as it was forming and only rounds up from there", () => {
 		expect(launchStretch(0)).toBe(DRIP_STRETCH);
-		expect(launchStretch(0.5)).toBeCloseTo(DRIP_STRETCH / 2 + LAUNCH_STRETCH);
-		expect(launchStretch(0.3)).toBeGreaterThan(launchStretch(0));
+		for (let l = 0.1; l <= 1; l += 0.1) {
+			expect(launchStretch(l)).toBeLessThan(launchStretch(l - 0.1));
+		}
 		expect(launchStretch(1)).toBe(0);
 	});
 

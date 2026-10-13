@@ -18,7 +18,7 @@ export const SMALL_DOT_CREATE_INTERVAL = 120;
  * that point the walls drip from several places at once instead (see SpawnSystem)
  */
 export const SMALL_DOT_MIN_GROW_TICKS = 6;
-/** Ticks a launched drip is still tearing from its wall and drawn stretched along its heading */
+/** Ticks a launched drip is still tearing from its wall, rounding up as it lets go */
 export const DRIP_LAUNCH_TICKS = 4;
 /**
  * How far a drip's centre hangs from its wall, as a fraction of its radius: a bulge on the

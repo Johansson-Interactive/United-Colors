@@ -2,7 +2,7 @@
  * How dots meet the walls, as pure curves and a little geometry (see renderScene.ts):
  *
  * - A forming drip is drawn out along the heading it grows toward (DRIP_STRETCH), and once
- *   it has shot off its wall, further still as it tears free (launchStretch).
+ *   it has let go of its wall it rounds up as it tears free (launchStretch).
  * - The player pushed into a wall presses into it as hard as they push (pressDepth); the
  *   press follows the push with a short lag (stepPress), so a trembling tilt never flickers.
  * - A body pressed into a wall keeps its area, so it widens along the wall (pressedRadius).
@@ -12,8 +12,6 @@
 
 /** How far a forming drip is drawn out along its heading, as a fraction of its radius */
 export const DRIP_STRETCH = 0.15;
-/** How much further a launched drip is drawn out halfway through its launch */
-export const LAUNCH_STRETCH = 0.25;
 /** Width of the fillet joining a drip to its wall, as a fraction of its full radius */
 export const DRIP_NECK = 1;
 /** The deepest the player presses into a wall, as a fraction of its radius */
@@ -32,12 +30,12 @@ function clamp01(value: number): number {
 
 /**
  * How far a launched drip is drawn out along its heading at progress 0..1 of its launch, as
- * a fraction of its radius: as long as it was forming as it leaves the wall, longer through
- * the tear, round again by the end
+ * a fraction of its radius: as long as it was forming as it leaves the wall, then rounding up
+ * as it lets go, like a drop falling free, never drawn out further
  */
 export function launchStretch(progress: number): number {
-	const l = clamp01(progress);
-	return DRIP_STRETCH * (1 - l) + LAUNCH_STRETCH * 4 * l * (1 - l);
+	const l = 1 - clamp01(progress);
+	return DRIP_STRETCH * l * l;
 }
 
 /** How far (px) a player of radius `radius` presses into a wall holding back `push` px/s */
