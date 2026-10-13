@@ -5,9 +5,12 @@ import {
 	SCENE_X,
 	SCENE_Y,
 } from "../../application/renderScene";
+import { POINT_DOT_VALUE } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
+import type { Dot } from "../../domain/entities/Dot";
+import { PointDot } from "../../domain/entities/PointDot";
 import { SmallDot } from "../../domain/entities/SmallDot";
-import type { RenderFrame } from "../../domain/types";
+import type { Circle, RenderFrame } from "../../domain/types";
 
 const ALPHA = 0.5;
 /** How far either side of the drawn edge the player is set to probe the catch, px */
@@ -80,32 +83,67 @@ describe("a drip between ticks", () => {
 	});
 });
 
-describe("a drip's collision circle", () => {
-	it("is the circle drawn, centre and radius, at a mid-tick alpha", () => {
-		const heading = { vx: 0.6, vy: 0.8 };
+/**
+ * The circle `dot` is drawn at `alpha` of a tick on, and the one it is caught at, with the
+ * player far away so nothing leans toward them. Its view is built as the engine builds it.
+ */
+function drawnAndCaught(dot: Dot, alpha: number) {
+	const view = {
+		id: dot.id,
+		x: dot.x,
+		y: dot.y,
+		radius: dot.size / 2,
+		prevRadius: dot.prevSize / 2,
+		color: dot.color,
+		kind: dot.kind,
+		vx: dot.vx * dot.velocity,
+		vy: dot.vy * dot.velocity,
+		...(dot instanceof SmallDot ? dot.contact() : {}),
+	};
+	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots: [view], events: [] };
+	const scene = createSceneBuilder()(frame, alpha, { x: 5000, y: 5000 });
+	const drawn = { x: scene[SCENE_X], y: scene[SCENE_Y], radius: scene[SCENE_RADIUS] };
+	return { drawn, caught: dot.circleAt(alpha, { x: 0, y: 0, radius: 0 }) };
+}
+
+function expectSameCircle(drawn: Circle, caught: Circle) {
+	expect(drawn.x).toBeCloseTo(caught.x, 4);
+	expect(drawn.y).toBeCloseTo(caught.y, 4);
+	expect(drawn.radius).toBeCloseTo(caught.radius, 4);
+}
+
+describe("a dot's collision circle at a mid-tick alpha", () => {
+	const heading = { vx: 0.6, vy: 0.8 };
+
+	it("is the circle a forming drip is drawn at", () => {
 		const dot = new SmallDot("d", 1, 0, { x: 0, y: 300 }, heading, "#E91E63", 40, 2, 10);
 		// Its first tick, where its size changes most
 		dot.beginTick();
 		dot.update(1);
-		const caught = dot.circleAt(ALPHA, { x: 0, y: 0, radius: 0 });
-		const view = {
-			id: dot.id,
-			x: dot.x,
-			y: dot.y,
-			radius: dot.size / 2,
-			prevRadius: dot.prevSize / 2,
-			color: dot.color,
-			kind: dot.kind,
-			vx: 0,
-			vy: 0,
-			...dot.contact(),
-		};
-		const frame: RenderFrame = { phase: "RUNNING", score: 0, dots: [view], events: [] };
-		const scene = createSceneBuilder()(frame, ALPHA, { x: 200, y: 200 });
+		const { drawn, caught } = drawnAndCaught(dot, ALPHA);
 		// Well apart from where it is at the tick, so a match is not by chance
 		expect(dot.size / 2 - caught.radius).toBeGreaterThan(1);
-		expect(scene[SCENE_X]).toBeCloseTo(caught.x, 4);
-		expect(scene[SCENE_Y]).toBeCloseTo(caught.y, 4);
-		expect(scene[SCENE_RADIUS]).toBeCloseTo(caught.radius, 4);
+		expectSameCircle(drawn, caught);
+	});
+
+	it("is the circle a drip is drawn at on the tick it grows full and shoots off", () => {
+		const dot = new SmallDot("d", 1, 0, { x: 0, y: 300 }, heading, "#E91E63", 40, 2, 3);
+		for (let t = 1; t <= 3; t++) {
+			dot.beginTick();
+			dot.update(t);
+		}
+		expect(dot.isDrifting).toBe(true);
+		const { drawn, caught } = drawnAndCaught(dot, ALPHA);
+		expect(dot.size / 2 - caught.radius).toBeGreaterThan(1);
+		expectSameCircle(drawn, caught);
+	});
+
+	it("is the circle a point dot is drawn at while it changes size", () => {
+		const dot = new PointDot("p", 0, 300, 300, "#E91E63", 40, POINT_DOT_VALUE);
+		dot.beginTick();
+		dot.update(1);
+		const { drawn, caught } = drawnAndCaught(dot, ALPHA);
+		expect(dot.size / 2 - caught.radius).toBeGreaterThan(0.1);
+		expectSameCircle(drawn, caught);
 	});
 });

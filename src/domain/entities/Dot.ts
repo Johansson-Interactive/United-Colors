@@ -69,12 +69,14 @@ export class Dot {
 
 	/**
 	 * Where the dot is `alpha` (0..1) of a tick after the last one, for catching it between
-	 * ticks: carried on along its velocity. Written to `out`, so it allocates nothing.
+	 * ticks: carried on along its velocity, its size eased from the last tick's as it is drawn.
+	 * Written to `out`, so it allocates nothing.
 	 */
 	circleAt(alpha: number, out: Circle): Circle {
 		out.x = this.x + this.vx * this.velocity * alpha;
 		out.y = this.y + this.vy * this.velocity * alpha;
-		out.radius = this._size / 2;
+		const prevRadius = this.prevSize / 2;
+		out.radius = prevRadius + (this._size / 2 - prevRadius) * alpha;
 		return out;
 	}
 
