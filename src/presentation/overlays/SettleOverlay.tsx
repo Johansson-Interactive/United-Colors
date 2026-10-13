@@ -10,14 +10,23 @@ import Animated, {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import type { TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { DotButton } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettleBowl } from "../components/SettleBowl";
 import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
-import { INITIAL_SETTLE, type SettlePhase, stepSettle, WAITING_SETTLE } from "../tilt/settle";
+import {
+	type SettleOutcome,
+	type SettlePhase,
+	type SettleState,
+	setSettleNow,
+	settleOutcome,
+	startSettle,
+	stepSettle,
+	WAITING_SETTLE,
+} from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
@@ -58,6 +67,10 @@ const CAPTIONS: Record<SettlePhase, string> = {
  * comfortably and the bowl levels itself to your hand; the rest is done the moment the dot
  * comes to rest. Tapping anywhere then sets it from the pose just before the finger landed,
  * for the impatient. Without a tilt sensor, START sets a flat pose straight away.
+ *
+ * The rules live in the settle stepper; every step, start and tap goes through it on the UI
+ * thread, where the tilt is, so the pose and its side are read together and the settled state
+ * is reached once. The overlay passes the outcome on after the snap.
  */
 export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	color,
@@ -72,13 +85,10 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	// 1 while waiting to be started: the bowl is dimmed and START shows over it
 	const waiting = useSharedValue(1);
 	const bowlRef = useRef<View>(null);
-	const doneRef = useRef(false);
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const finish = useCallback(
-		(zero: TiltZero) => {
-			if (doneRef.current) return;
-			doneRef.current = true;
+		({ zero, facingDown }: SettleOutcome) => {
 			setPhase("settled");
 			onSnap?.();
 			snapTimerRef.current = setTimeout(() => {
@@ -86,11 +96,11 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 				const bowl = bowlRef.current;
 				if (!bowl) return;
 				bowl.measureInWindow((x, y, width, height) => {
-					onSettled(zero, tilt.raw.facingDown.get(), { x: x + width / 2, y: y + height / 2 });
+					onSettled(zero, facingDown, { x: x + width / 2, y: y + height / 2 });
 				});
 			}, SNAP_MS);
 		},
-		[onSettled, onSnap, tilt],
+		[onSettled, onSnap],
 	);
 
 	useEffect(
@@ -100,42 +110,45 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 		[],
 	);
 
+	// UI thread only: settled is final in the stepper, so `finish` runs once
+	const advance = useCallback(
+		(next: SettleState) => {
+			"worklet";
+			const prev = state.get();
+			if (next === prev) return;
+			state.set(next);
+			if (next.phase === prev.phase) return;
+			// A started hold lifts START; without a sensor it stays up through the snap
+			if (next.phase === "moving") waiting.set(withTiming(0, { duration: START_FADE_MS }));
+			const outcome = settleOutcome(next);
+			if (outcome) scheduleOnRN(finish, outcome);
+			else scheduleOnRN(setPhase, next.phase);
+		},
+		[state, waiting, finish],
+	);
+
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const prev = state.get();
-		const next = stepSettle(prev, tilt.raw.x.get(), tilt.raw.y.get(), dt);
-		if (next === prev) return;
-		state.set(next);
-		if (next.phase !== prev.phase) {
-			if (next.phase === "settled") {
-				scheduleOnRN(finish, { x: next.meanX, y: next.meanY });
-			} else {
-				scheduleOnRN(setPhase, next.phase);
-			}
-		}
+		advance(
+			stepSettle(state.get(), tilt.raw.x.get(), tilt.raw.y.get(), tilt.raw.facingDown.get(), dt),
+		);
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
 	const handleSetNow = useCallback(() => {
-		if (doneRef.current) return;
-		const current = state.get();
-		if (current.phase === "waiting" && tiltAvailable) return;
-		const measured = tiltAvailable && current.elapsedMs > 0;
-		state.set({ ...current, phase: "settled", progress: 1 });
-		finish(measured ? { x: current.meanX, y: current.meanY } : { x: 0, y: 0 });
-	}, [state, tiltAvailable, finish]);
+		scheduleOnUI(() => {
+			"worklet";
+			advance(setSettleNow(state.get(), tilt.raw.facingDown.get()));
+		});
+	}, [advance, state, tilt]);
 
 	const handleStart = useCallback(() => {
-		if (state.get().phase !== "waiting") return;
-		if (!tiltAvailable) {
-			handleSetNow();
-			return;
-		}
-		state.set(INITIAL_SETTLE);
-		setPhase("moving");
-		waiting.set(withTiming(0, { duration: START_FADE_MS }));
-	}, [state, tiltAvailable, handleSetNow, waiting]);
+		scheduleOnUI(() => {
+			"worklet";
+			advance(startSettle(state.get(), tilt.available.get()));
+		});
+	}, [advance, state, tilt]);
 
 	const startStyle = useAnimatedStyle(() => ({ opacity: waiting.get() }));
 	const dim = useDerivedValue(() => waiting.get() * WAITING_DIM);
