@@ -1,4 +1,5 @@
 import { GameEngine } from "../domain/engine/GameEngine";
+import type { Spawner } from "../domain/engine/Spawner";
 import type { ScreenSize, TiltZero } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { Clock, ClockFactory, SensorSample } from "./ports";
@@ -10,6 +11,8 @@ export interface GameSessionOptions {
 	/** Pixel density the dot sizes scale with */
 	density?: number;
 	random?: () => number;
+	/** What the game spawns; by default the game's own spawning, drawing on `random` */
+	spawner?: Spawner;
 }
 
 /** Screen the engine assumes until the canvas reports its layout */
@@ -141,6 +144,7 @@ export class GameSession {
 				density: this.options.density ?? DEFAULT_DENSITY,
 				screen: this.screen,
 				random: this.options.random,
+				spawner: this.options.spawner,
 			});
 			this.engine.setTiltZero(this.tiltZero, this.tiltZeroDown);
 			this.engine.setSensitivity(this.sensitivity);

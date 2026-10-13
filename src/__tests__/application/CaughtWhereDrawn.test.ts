@@ -1,38 +1,47 @@
 import { createSceneBuilder } from "../../application/renderScene";
 import { readDot, sceneDot } from "../../application/sceneRecord";
-import { POINT_DOT_VALUE } from "../../domain/constants";
+import {
+	GAME_COLORS,
+	POINT_DOT_VALUE,
+	SMALL_DOT_CREATE_INTERVAL,
+	SMALL_DOT_SIZE_RATIO,
+} from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import type { Dot } from "../../domain/entities/Dot";
 import { PointDot } from "../../domain/entities/PointDot";
 import { SmallDot } from "../../domain/entities/SmallDot";
 import type { Circle, RenderFrame } from "../../domain/types";
+import { dripAt, scriptedSpawner } from "../domain/stage";
 
 const ALPHA = 0.5;
 /** How far either side of the drawn edge the player is set to probe the catch, px */
 const GAP = 0.01;
 
 /**
- * A game run to the first tick of a drip of the player's colour, where its size changes most
- * from one tick to the next
+ * A game at the first tick of a drip of the player's colour, where its size changes most from
+ * one tick to the next
  */
 function engineAtDrip() {
-	let n = 0;
+	const { spawner, small } = scriptedSpawner();
 	const engine = new GameEngine({
 		density: 100,
 		screen: { width: 4000, height: 8000 },
-		random: () => ((++n * 9301 + 49297) % 233280) / 233280,
+		random: () => 0.5,
+		spawner,
 	});
-	engine.startGame();
-	for (let i = 0; i < 5000; i++) {
-		const frame = engine.getFrame();
-		const player = frame.dots.find((d) => d.kind === "player");
-		const drip = frame.dots.find(
-			(d) => d.drip && d.color === player?.color && d.drip.prev === 0 && d.drip.progress > 0,
-		);
-		if (drip && player && frame.phase === "RUNNING") return { engine, frame, drip, player };
-		engine.tick();
-	}
-	throw new Error("no drip");
+	engine.startGame(GAME_COLORS[0]);
+	small.push(
+		dripAt({ x: 0, y: 4000 }, GAME_COLORS[0], {
+			growTicks: SMALL_DOT_CREATE_INTERVAL,
+			size: SMALL_DOT_SIZE_RATIO * 100,
+		}),
+	);
+	engine.tick();
+	const frame = engine.getFrame();
+	const player = frame.dots.find((d) => d.kind === "player");
+	const drip = frame.dots.find((d) => d.drip);
+	if (!player || !drip) throw new Error("not staged");
+	return { engine, frame, drip, player };
 }
 
 describe("a drip between ticks", () => {

@@ -3,6 +3,7 @@ import { createGameStore } from "../../application/GameStore";
 import type { ClockFactory } from "../../application/ports";
 import { dotCount, findPlayer, readDot, sceneDot } from "../../application/sceneRecord";
 import { GAME_COLORS } from "../../domain/constants";
+import { scriptedSpawner, smallDotAt } from "../domain/stage";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
 function manualClock() {
@@ -37,16 +38,23 @@ function manualClock() {
 
 const SCREEN = { width: 300, height: 600 };
 
-function setup() {
+/** A session on a hand-cranked clock; `staged` spawns only the dots a test queues on `small` */
+function setup({ staged = false } = {}) {
 	const store = createGameStore();
 	const clock = manualClock();
-	const session = new GameSession({ store, createClock: clock.factory, random: () => 0.5 });
+	const { spawner, small } = scriptedSpawner();
+	const session = new GameSession({
+		store,
+		createClock: clock.factory,
+		random: () => 0.5,
+		spawner: staged ? spawner : undefined,
+	});
 	const scenes: Float32Array[] = [];
 	session.present((scene) => scenes.push(scene));
 	session.setScreen(SCREEN);
 	const player = () => store.getState().frame.dots.find((d) => d.kind === "player");
 	const phase = () => store.getState().frame.phase;
-	return { store, clock, session, scenes, player, phase };
+	return { store, clock, session, scenes, player, phase, small };
 }
 
 describe("GameSession", () => {
@@ -235,19 +243,14 @@ describe("GameSession", () => {
 	});
 
 	it("halts itself when the game is over", () => {
-		const { store, session, clock, phase } = setup();
+		const { session, clock, phase, small } = setup({ staged: true });
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
-		// Drive the run until a wrong-colour dot is hit, then let the refusal play out
-		for (let i = 0; i < 20000 && phase() === "RUNNING"; i++) {
-			const frame = store.getState().frame;
-			const player = frame.dots.find((d) => d.kind === "player");
-			const wrong = frame.dots.find((d) => d.kind === "small" && d.color !== player?.color);
-			if (player && wrong) session.feedDelta(wrong.x - player.x, wrong.y - player.y);
-			clock.frame(16, 0);
-			clock.tick();
-		}
+		// A wrong-colour dot forms on the player, then the refusal plays out
+		small.push(smallDotAt({ x: SCREEN.width / 2, y: SCREEN.height / 2 }, GAME_COLORS[1]));
+		clock.tick();
 		expect(phase()).toBe("REJECTING");
+		expect(clock.running).toBe(true);
 		for (let i = 0; i < 100 && phase() === "REJECTING"; i++) clock.tick();
 		expect(phase()).toBe("GAME_OVER");
 		expect(clock.running).toBe(false);

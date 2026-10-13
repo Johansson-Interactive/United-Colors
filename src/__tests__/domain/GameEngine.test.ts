@@ -16,7 +16,9 @@ import {
 	TILT_SENSITIVITY_MIN,
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
+import { PointDot } from "../../domain/entities/PointDot";
 import type { GameEvent } from "../../domain/types";
+import { dripAt, STAGED_SMALL_DOT_SIZE, scriptedSpawner, smallDotAt } from "./stage";
 
 const DEGREE = Math.PI / 180;
 
@@ -33,6 +35,29 @@ function createEngine(seed = 0.5) {
 		screen: { width: 400, height: 800 },
 		random: seededRandom,
 	});
+}
+
+const OWN = GAME_COLORS[0];
+const OTHER = GAME_COLORS[1];
+const SCREEN = { width: 400, height: 800 };
+/** Where the player starts */
+const CENTRE = { x: SCREEN.width / 2, y: SCREEN.height / 2 };
+
+/**
+ * A run with the player in `playerColor` at the centre, where nothing spawns but the dots the
+ * test queues on `small` and `point`
+ */
+function stagedEngine(playerColor = OWN, kiosk = false) {
+	const script = scriptedSpawner();
+	const engine = new GameEngine({
+		density: 100,
+		screen: SCREEN,
+		random: () => 0.5,
+		spawner: script.spawner,
+	});
+	if (kiosk) engine.startKiosk();
+	else engine.startGame(playerColor);
+	return { engine, ...script };
 }
 
 /** A large screen, so small dots rarely reach the stationary player */
@@ -120,41 +145,67 @@ describe("GameEngine", () => {
 	});
 
 	describe("collision outcomes", () => {
-		it("matching color small dot gives +1 score", () => {
-			const engine = createEngine();
-			engine.startGame();
-
-			// Tick many times to spawn dots and check scoring
-			// Engine starts in RUNNING phase
-			expect(engine.stateMachine.phase).toBe("RUNNING");
-
+		it("a small dot of the player's colour is caught: it scores once, merges and is removed", () => {
+			const { engine, small, dotCounts } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "caught" }));
+			engine.tick();
 			const frame = engine.getFrame();
 			expect(frame.phase).toBe("RUNNING");
-			expect(frame.score).toBe(0);
-		});
+			expect(frame.score).toBe(1);
+			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			// It stays in the frame right away as merging, frozen where it was
+			expect(frame.dots.find((d) => d.id === "caught")).toMatchObject({
+				absorb: 0,
+				prevAbsorb: 0,
+				vx: 0,
+				vy: 0,
+			});
 
-		it("point dot collision gives +5 and switches color", () => {
-			// This tests the constant value
-			expect(POINT_DOT_VALUE).toBe(5);
-		});
-
-		it("mismatched color triggers game over", () => {
-			const engine = createEngine();
-			engine.startGame();
-
-			// Run many ticks to eventually trigger game over naturally
-			// (dots spawn and player doesn't move)
-			let gameOver = false;
-			for (let i = 0; i < 5000; i++) {
+			// Still overlapping the player every frame and tick, but never scores again
+			for (let t = 1; t < ABSORB_TICKS; t++) {
+				expect(engine.advancePlayer(16, 0)).toBe(false);
 				engine.tick();
-				if (engine.stateMachine.phase === "GAME_OVER") {
-					gameOver = true;
-					break;
-				}
+				const caught = engine.getFrame().dots.find((d) => d.id === "caught");
+				expect(caught?.absorb).toBeCloseTo(t / ABSORB_TICKS);
+				expect(caught?.prevAbsorb).toBeCloseTo((t - 1) / ABSORB_TICKS);
+				expect(engine.getScore()).toBe(1);
 			}
+			engine.tick();
+			const after = engine.getFrame();
+			expect(after.dots.find((d) => d.id === "caught")).toBeUndefined();
+			expect(after.score).toBe(1);
+			expect(after.events).toEqual([]);
+			// The engine's dot list is compacted: the next tick counts the player alone
+			engine.tick();
+			expect(dotCounts).toEqual([1, ...Array(ABSORB_TICKS).fill(2), 1]);
+		});
 
-			// With a static player, eventually a wrong-color dot hits
-			expect(gameOver).toBe(true);
+		it("a small dot of another colour is refused and ends the run, scoring nothing", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OTHER, { id: "wrong" }));
+			engine.tick();
+			const frame = engine.getFrame();
+			expect(frame.phase).toBe("REJECTING");
+			expect(frame.score).toBe(0);
+			expect(frame.events).toEqual([]);
+			expect(frame.dots.find((d) => d.id === "wrong")).toMatchObject({ reject: 0 });
+			for (let t = 0; t < REJECT_TICKS; t++) engine.tick();
+			expect(engine.getFrame()).toMatchObject({ phase: "GAME_OVER", score: 0 });
+		});
+
+		it("a point dot is caught for POINT_DOT_VALUE and recolours the player", () => {
+			const { engine, point } = stagedEngine(OWN);
+			point.push(new PointDot("point", 0, CENTRE.x, CENTRE.y, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
+			const frame = engine.getFrame();
+			expect(frame.phase).toBe("RUNNING");
+			expect(frame.score).toBe(POINT_DOT_VALUE);
+			expect(frame.events).toEqual([
+				{ type: "pointSpawn" },
+				{ type: "collectPoint", value: POINT_DOT_VALUE },
+			]);
+			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(OTHER);
+			expect(frame.dots.find((d) => d.id === "point")?.absorb).toBe(0);
 		});
 	});
 
@@ -281,45 +332,31 @@ describe("GameEngine", () => {
 			expect(drips()[0].id).not.toBe("dot-0");
 		});
 
-		/** Run until a drip of the player's colour (or not) is forming, and move the player onto it */
-		function playerOntoDrip(engine: GameEngine, ownColour: boolean) {
-			for (let i = 0; i < 5000; i++) {
-				const frame = engine.getFrame();
-				const player = frame.dots.find((d) => d.kind === "player");
-				const drip = frame.dots.find(
-					(d) => d.drip && (d.color === player?.color) === ownColour && d.drip.progress > 0.2,
-				);
-				if (drip && player && frame.phase === "RUNNING") {
-					engine.onMovementDelta(drip.x - player.x, drip.y - player.y);
-					return { frame: engine.getFrame(), drip, changed: engine.advancePlayer(0, 0) };
-				}
-				engine.tick();
-			}
-			throw new Error("no drip");
-		}
-
 		it("a drip of the player's colour can be plucked off its wall for a point", () => {
-			const engine = largeScreenEngine();
-			engine.startGame();
-			const { drip, changed } = playerOntoDrip(engine, true);
-			expect(changed).toBe(true);
+			const { engine, small } = stagedEngine(OWN);
+			small.push(dripAt(CENTRE, OWN));
+			engine.tick();
 			const frame = engine.getFrame();
 			expect(frame.score).toBe(1);
 			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
-			const plucked = frame.dots.find((d) => d.id === drip.id);
+			const plucked = frame.dots.find((d) => d.id === "drip");
 			expect(plucked?.absorb).toBe(0);
 			expect(plucked?.drip).toBeUndefined();
-			// The wall starts the next drip right away
-			engine.tick();
-			expect(engine.getFrame().dots.some((d) => d.drip && d.id !== drip.id)).toBe(true);
 		});
 
 		it("a drip of another colour is harmless until it has left the wall", () => {
-			const engine = largeScreenEngine();
-			engine.startGame();
-			const { changed } = playerOntoDrip(engine, false);
-			expect(changed).toBe(false);
-			expect(engine.getFrame().phase).toBe("RUNNING");
+			const growTicks = 10;
+			const { engine, small } = stagedEngine(OWN);
+			small.push(dripAt(CENTRE, OTHER, { growTicks }));
+			for (let t = 1; t < growTicks; t++) {
+				engine.tick();
+				expect(engine.advancePlayer(16, 0.5)).toBe(false);
+				expect(engine.getFrame().dots.find((d) => d.id === "drip")?.drip).toBeDefined();
+			}
+			expect(engine.getFrame()).toMatchObject({ phase: "RUNNING", score: 0 });
+			// It shoots off still touching the player, and is refused
+			engine.tick();
+			expect(engine.getFrame().phase).toBe("REJECTING");
 		});
 	});
 
@@ -379,24 +416,20 @@ describe("GameEngine", () => {
 
 	describe("events", () => {
 		it("reports a point dot spawning with the frame it first shows in", () => {
-			const engine = largeScreenEngine();
-			engine.startGame();
-			for (let i = 0; i < 1000; i++) {
-				engine.tick();
-				const frame = engine.getFrame();
-				if (frame.dots.some((d) => d.kind === "point")) {
-					expect(frame.events).toEqual([{ type: "pointSpawn" }]);
-					return;
-				}
-				expect(frame.events).toEqual([]);
-			}
-			throw new Error("no point dot spawned");
+			const { engine, point } = stagedEngine(OWN);
+			engine.tick();
+			expect(engine.getFrame().events).toEqual([]);
+			point.push(new PointDot("point", 1, 100, 100, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
+			const frame = engine.getFrame();
+			expect(frame.dots.some((d) => d.id === "point")).toBe(true);
+			expect(frame.events).toEqual([{ type: "pointSpawn" }]);
 		});
 
 		it("a new game or kiosk starts with nothing to report", () => {
-			const engine = largeScreenEngine();
-			engine.startGame();
-			for (let i = 0; i < 1000 && !engine.getFrame().events.length; i++) engine.tick();
+			const { engine, point } = stagedEngine(OWN);
+			point.push(new PointDot("point", 0, 100, 100, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
 			engine.startKiosk();
 			expect(engine.getFrame().events).toEqual([]);
 		});
@@ -529,21 +562,17 @@ describe("GameEngine", () => {
 
 	describe("render frame", () => {
 		it("small dot views carry per-tick displacement that matches the next tick", () => {
-			const engine = createEngine();
-			engine.startKiosk();
-			// A dot that has just shot off its wall, heading in: nothing stops it next tick
-			let small = engine.getFrame().dots.find((d) => d.kind === "small" && d.launch);
-			for (let i = 0; i < 500 && !small; i++) {
-				engine.tick();
-				small = engine.getFrame().dots.find((d) => d.kind === "small" && d.launch);
-			}
-			expect(small).toBeDefined();
-			if (!small) return;
-			const before = small;
+			const { engine, small } = stagedEngine(OWN, true);
+			small.push(
+				smallDotAt({ x: 100, y: 100 }, OTHER, { heading: { vx: 0.6, vy: 0.8 }, speed: 2 }),
+			);
 			engine.tick();
-			const after = engine.getFrame().dots.find((d) => d.id === before.id);
-			expect(after?.x).toBeCloseTo(before.x + before.vx);
-			expect(after?.y).toBeCloseTo(before.y + before.vy);
+			const before = engine.getFrame().dots.find((d) => d.id === "staged");
+			expect(before).toMatchObject({ vx: 1.2, vy: 1.6 });
+			engine.tick();
+			const after = engine.getFrame().dots.find((d) => d.id === "staged");
+			expect(after?.x).toBeCloseTo((before?.x ?? 0) + 1.2);
+			expect(after?.y).toBeCloseTo((before?.y ?? 0) + 1.6);
 		});
 
 		it("a drip's view says which wall it is on and how far it has formed", () => {
@@ -572,19 +601,11 @@ describe("GameEngine", () => {
 			expect(player).toMatchObject({ vx: 0, vy: 0 });
 		});
 		it("a pulsing point dot's prevRadius is its radius at the previous tick", () => {
-			const engine = new GameEngine({
-				density: 100,
-				// Large screen so small dots rarely reach the stationary player
-				screen: { width: 4000, height: 8000 },
-				random: (() => {
-					let n = 0;
-					return () => ((++n * 9301 + 49297) % 233280) / 233280;
-				})(),
-			});
-			engine.startGame();
+			const staged = stagedEngine(OWN);
+			const engine = staged.engine;
+			staged.point.push(new PointDot("point", 1, 100, 100, OTHER, 40, POINT_DOT_VALUE));
+			engine.tick();
 			const point = () => engine.getFrame().dots.find((d) => d.kind === "point");
-
-			for (let i = 0; i < 1000 && !point(); i++) engine.tick();
 			const spawned = point();
 			expect(spawned).toBeDefined();
 			// A dot spawned this tick starts at its drawn size, with nothing to grow from
@@ -618,97 +639,47 @@ describe("GameEngine", () => {
 	});
 
 	describe("per-frame collisions", () => {
-		/** A game with a small dot that has left its wall and drifts */
-		function startWithSmallDot() {
-			const engine = createEngine();
-			engine.startGame();
-			for (let i = 0; i < 2000; i++) {
-				const small = engine.getFrame().dots.find((d) => d.kind === "small" && !d.drip);
-				if (small) return { engine, small };
-				engine.tick();
-			}
-			throw new Error("no small dot spawned");
-		}
+		/** How far apart the player and a staged small dot touch */
+		const TOUCHING = (PLAYER_DOT_SIZE_RATIO * 100) / 2 + STAGED_SMALL_DOT_SIZE / 2;
 
-		it("collides with a dot at its between-tick position and reports the change", () => {
-			const { engine, small } = startWithSmallDot();
-			const alpha = 0.5;
-			const player = engine.getPlayerPosition();
-			// Move the player exactly onto where the dot is drawn mid-tick
-			engine.onMovementDelta(
-				small.x + small.vx * alpha - player.x,
-				small.y + small.vy * alpha - player.y,
+		it("catches a dot where it is drawn between ticks, and reports it with the next frame only", () => {
+			const { engine, small } = stagedEngine(OWN);
+			// Heading for the player at 4 px a tick, 1 px clear of it at the tick
+			small.push(
+				smallDotAt({ x: CENTRE.x + TOUCHING + 1, y: CENTRE.y }, OWN, {
+					id: "near",
+					heading: { vx: -1, vy: 0 },
+					speed: 4,
+				}),
 			);
-			expect(engine.advancePlayer(0, alpha)).toBe(true);
-
-			const frame = engine.getFrame();
-			if (frame.phase === "RUNNING") {
-				expect(frame.score).toBe(1);
-				// The caught dot stays in the frame right away as merging, frozen where it was
-				const caught = frame.dots.find((d) => d.id === small.id);
-				expect(caught).toMatchObject({ absorb: 0, prevAbsorb: 0, vx: 0, vy: 0 });
-			} else {
-				expect(frame.phase).toBe("REJECTING");
-			}
-		});
-
-		it("a caught dot scores once, merges over ABSORB_TICKS and then leaves the frame", () => {
-			const { engine, small } = startWithSmallDot();
-			const player = engine.getPlayerPosition();
-			engine.onMovementDelta(small.x - player.x, small.y - player.y);
-			engine.advancePlayer(0, 0);
-			if (engine.getFrame().phase !== "RUNNING") return;
-			expect(engine.getScore()).toBe(1);
-
-			// Still overlapping the player every frame, but never scores again
-			for (let t = 1; t < ABSORB_TICKS; t++) {
-				engine.advancePlayer(0, 0);
-				engine.tick();
-				if (engine.getFrame().phase !== "RUNNING") return;
-				const caught = engine.getFrame().dots.find((d) => d.id === small.id);
-				expect(caught?.absorb).toBeCloseTo(t / ABSORB_TICKS);
-				expect(caught?.prevAbsorb).toBeCloseTo((t - 1) / ABSORB_TICKS);
-				expect(engine.getScore()).toBe(1);
-			}
 			engine.tick();
-			expect(engine.getFrame().dots.find((d) => d.id === small.id)).toBeUndefined();
-		});
-
-		it("catching a small dot reports a collect worth one, handed over with the next frame only", () => {
-			const { engine, small } = startWithSmallDot();
-			const alpha = 0.5;
-			const player = engine.getPlayerPosition();
-			engine.onMovementDelta(
-				small.x + small.vx * alpha - player.x,
-				small.y + small.vy * alpha - player.y,
-			);
-			engine.advancePlayer(0, alpha);
-
+			expect(engine.getFrame().events).toEqual([]);
+			expect(engine.advancePlayer(0, 0)).toBe(false);
+			// Half a tick on it is drawn 1 px into the player
+			expect(engine.advancePlayer(0, 0.5)).toBe(true);
 			const frame = engine.getFrame();
-			// A wrong-colour small dot is refused instead, which reports nothing yet
-			expect(frame.events).toEqual(
-				frame.phase === "RUNNING" ? [{ type: "collect", value: 1 }] : [],
-			);
+			expect(frame.score).toBe(1);
+			expect(frame.events).toEqual([{ type: "collect", value: 1 }]);
+			expect(frame.dots.find((d) => d.id === "near")).toMatchObject({
+				absorb: 0,
+				prevAbsorb: 0,
+				vx: 0,
+				vy: 0,
+			});
 			expect(engine.getFrame().events).toEqual([]);
 		});
 
-		it("catching a point dot reports a collect worth POINT_DOT_VALUE", () => {
-			const engine = largeScreenEngine();
-			engine.startGame();
-			const point = () => engine.getFrame().dots.find((d) => d.kind === "point");
-			for (let i = 0; i < 1000 && !point(); i++) engine.tick();
-			// Let it zoom in before catching it
-			for (let i = 0; i < POINT_DOT_SIZE_ANIMATION_TIME; i++) engine.tick();
-			const target = point();
-			expect(target).toBeDefined();
-			if (!target) return;
-			const player = engine.getPlayerPosition();
-			engine.onMovementDelta(target.x - player.x, target.y - player.y);
+		it("catches a point dot the player moves onto, for POINT_DOT_VALUE", () => {
+			const { engine, point } = stagedEngine(OWN);
+			point.push(new PointDot("point", 0, CENTRE.x + 40, CENTRE.y, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
+			expect(engine.getFrame().events).toEqual([{ type: "pointSpawn" }]);
+			engine.onMovementDelta(40, 0);
 			expect(engine.advancePlayer(0, 0)).toBe(true);
 			const frame = engine.getFrame();
 			expect(frame.score).toBe(POINT_DOT_VALUE);
 			expect(frame.events).toEqual([{ type: "collectPoint", value: POINT_DOT_VALUE }]);
-			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(target.color);
+			expect(frame.dots.find((d) => d.kind === "player")?.color).toBe(OTHER);
 		});
 
 		it("reports no change when nothing is hit", () => {
@@ -719,37 +690,33 @@ describe("GameEngine", () => {
 	});
 
 	describe("rejecting a wrong-colour dot", () => {
+		/** A run where a wrong-colour dot has just touched the player, with another drifting by */
 		function hitWrongDot() {
-			const engine = createEngine();
-			engine.startGame();
-			for (let i = 0; i < 5000; i++) {
-				const frame = engine.getFrame();
-				const player = frame.dots.find((d) => d.kind === "player");
-				const wrong = frame.dots.find(
-					(d) => d.kind === "small" && !d.drip && d.color !== player?.color,
-				);
-				if (wrong && frame.phase === "RUNNING") {
-					const pos = engine.getPlayerPosition();
-					engine.onMovementDelta(wrong.x - pos.x, wrong.y - pos.y);
-					expect(engine.advancePlayer(0, 0)).toBe(true);
-					return { engine, wrong };
-				}
-				engine.tick();
-			}
-			throw new Error("no wrong-colour dot spawned");
+			const { engine, small } = stagedEngine(OWN);
+			small.push(
+				smallDotAt({ x: 100, y: 100 }, OTHER, {
+					id: "drifter",
+					heading: { vx: 0.6, vy: 0.8 },
+					speed: 2,
+				}),
+				smallDotAt(CENTRE, OTHER, { id: "wrong" }),
+			);
+			engine.tick();
+			engine.tick();
+			return { engine, wrongId: "wrong" };
 		}
 
 		it("refuses the dot for REJECT_TICKS before the game is over", () => {
-			const { engine, wrong } = hitWrongDot();
+			const { engine, wrongId } = hitWrongDot();
 			expect(engine.getFrame().phase).toBe("REJECTING");
-			expect(engine.getFrame().dots.find((d) => d.id === wrong.id)).toMatchObject({
+			expect(engine.getFrame().dots.find((d) => d.id === wrongId)).toMatchObject({
 				reject: 0,
 				prevReject: 0,
 			});
 			for (let t = 1; t < REJECT_TICKS; t++) {
 				engine.tick();
 				expect(engine.getFrame().phase).toBe("REJECTING");
-				const refused = engine.getFrame().dots.find((d) => d.id === wrong.id);
+				const refused = engine.getFrame().dots.find((d) => d.id === wrongId);
 				expect(refused?.reject).toBeCloseTo(t / REJECT_TICKS);
 				expect(refused?.prevReject).toBeCloseTo((t - 1) / REJECT_TICKS);
 			}
@@ -757,7 +724,7 @@ describe("GameEngine", () => {
 			const frame = engine.getFrame();
 			expect(frame.phase).toBe("GAME_OVER");
 			// The refused dot stays, fully spat out, for the game over screen
-			expect(frame.dots.find((d) => d.id === wrong.id)?.reject).toBe(1);
+			expect(frame.dots.find((d) => d.id === wrongId)?.reject).toBe(1);
 		});
 
 		it("reports the spit as the refusal crosses REJECT_SPIT_AT, and the game over at the end", () => {

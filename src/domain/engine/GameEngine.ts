@@ -12,6 +12,7 @@ import { PlayerDot } from "../entities/PlayerDot";
 import { SmallDot } from "../entities/SmallDot";
 import type { Circle, DotView, GameEvent, RenderFrame, ScreenSize, TiltZero } from "../types";
 import { circlesOverlap } from "./Collision";
+import type { Spawner } from "./Spawner";
 import { SpawnSystem } from "./SpawnSystem";
 import { StateMachine } from "./StateMachine";
 
@@ -21,6 +22,8 @@ export interface GameEngineOptions {
 	density: number;
 	screen: ScreenSize;
 	random?: () => number;
+	/** What the engine spawns; by default the game's SpawnSystem, drawing on `random` */
+	spawner?: Spawner;
 }
 
 /**
@@ -29,7 +32,7 @@ export interface GameEngineOptions {
  */
 export class GameEngine {
 	readonly stateMachine: StateMachine;
-	private spawnSystem: SpawnSystem;
+	private spawner: Spawner;
 	private player!: PlayerDot;
 	private dots: Dot[] = [];
 	private score = 0;
@@ -58,7 +61,7 @@ export class GameEngine {
 		this.random = options.random ?? Math.random;
 		this.playerSpeed = PLAYER_SPEED_PER_DEGREE / DEG_TO_RAD;
 		this.stateMachine = new StateMachine("KIOSK");
-		this.spawnSystem = new SpawnSystem(this.random);
+		this.spawner = options.spawner ?? new SpawnSystem(this.random);
 		this.initPlayer();
 	}
 
@@ -75,7 +78,7 @@ export class GameEngine {
 		this.timeStep = 0;
 		this.rejected = null;
 		this.events = [];
-		this.spawnSystem.reset();
+		this.spawner.reset();
 		this.initPlayer(color);
 		this.dots.push(this.player);
 	}
@@ -88,7 +91,7 @@ export class GameEngine {
 		this.timeStep = 0;
 		this.rejected = null;
 		this.events = [];
-		this.spawnSystem.reset();
+		this.spawner.reset();
 		this.initPlayer();
 	}
 
@@ -186,7 +189,7 @@ export class GameEngine {
 		const spawnedFrom = this.dots.length;
 
 		// Start the next small dot forming on a wall
-		const newDot = this.spawnSystem.trySpawnSmallDot(
+		const newDot = this.spawner.trySpawnSmallDot(
 			this.timeStep,
 			this.dots.length,
 			this.screen,
@@ -197,7 +200,7 @@ export class GameEngine {
 
 		// Spawn point dots (not in kiosk)
 		if (!isKiosk) {
-			const newPoint = this.spawnSystem.trySpawnPointDot(
+			const newPoint = this.spawner.trySpawnPointDot(
 				this.timeStep,
 				this.player,
 				this.screen,

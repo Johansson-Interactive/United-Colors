@@ -17,6 +17,7 @@ import type { ScreenSize } from "../types";
 import { circlesOverlap } from "./Collision";
 import { ColorPicker } from "./ColorPicker";
 import { edgeHeading } from "./Heading";
+import type { Spawner } from "./Spawner";
 
 /** Upper bound on random re-rolls when placing a point dot away from the player */
 const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
@@ -34,7 +35,7 @@ const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
  * Small and point dots pick colors from separate weighted pickers; point dots never
  * spawn in the player's current color. Replicates legacy GameManager spawn logic.
  */
-export class SpawnSystem {
+export class SpawnSystem implements Spawner {
 	/** Ids run from 0 in each game, so the same seed spawns the same dots */
 	private nextId = 0;
 	/** The drips forming on the walls now */
