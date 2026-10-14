@@ -1,13 +1,14 @@
 import type React from "react";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { BowlStage } from "../components/BowlStage";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { LevelGate } from "../components/LevelGate";
 import { SoundMenu } from "../components/SoundMenu";
-import { BOWL_SIZE, CAPTION, CORNER_DOT_SIZE, CORNER_INSET, WHITE } from "../theme/theme";
+import { BOWL_SIZE, CORNER_DOT_SIZE, CORNER_INSET, WHITE } from "../theme/theme";
 import type { LevelGatePhase } from "../tilt/levelGate";
 import { sensitivityChoice } from "../tilt/sensitivity";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
@@ -68,7 +69,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />
 			</View>
 
-			<View style={styles.centre}>
+			<BowlStage caption={caption}>
 				<LevelGate
 					size={BOWL_SIZE}
 					color={color}
@@ -77,8 +78,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 					onPhaseChange={setGatePhase}
 					sensitivity={sensitivity}
 				/>
-				<Text style={styles.caption}>{caption}</Text>
-			</View>
+			</BowlStage>
 
 			<View style={styles.footer}>
 				<DotButton
@@ -131,17 +131,11 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		paddingTop: 52,
 	},
-	centre: {
-		flex: 1,
-		alignItems: "center",
-		justifyContent: "center",
-		gap: 28,
-	},
-	caption: {
-		...CAPTION,
-		lineHeight: 20,
-	},
 	footer: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
 		alignItems: "center",
 		paddingBottom: 44,
 		gap: 20,

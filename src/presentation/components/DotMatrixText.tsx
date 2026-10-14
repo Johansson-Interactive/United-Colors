@@ -20,7 +20,13 @@ import {
 	withRepeat,
 	withTiming,
 } from "react-native-reanimated";
-import { type ColorBy, layoutDotMatrix, matrixSize, paletteIndex } from "../dotmatrix/layout";
+import {
+	type ColorBy,
+	layoutDotMatrix,
+	matrixBox,
+	PARALLAX_GAIN,
+	paletteIndex,
+} from "../dotmatrix/layout";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface DotMatrixTextProps {
@@ -49,8 +55,6 @@ interface DotMatrixTextProps {
 
 const WAVE_PERIOD_MS = 3600;
 const WAVE_AMPLITUDE = 0.22;
-/** Pixels of drift per radian of tilt for the deepest layer */
-const PARALLAX_GAIN = 26;
 const LAYER_DEPTH = [1, 0.55, 0.2] as const;
 const WORD_DEPTH = 0.6;
 const GLOW_SCALE = 2.6;
@@ -114,11 +118,10 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 			})),
 		[layout, colors, colorBy],
 	);
-	const base = useMemo(() => matrixSize(layout, pitch), [layout, pitch]);
-	// Room for parallax drift and glow so nothing clips at the canvas edge
-	const pad = Math.ceil((parallax ? PARALLAX_GAIN * 0.8 : 0) + pitch * (glow ? 1.2 : 0.5));
-	const width = base.width + pad * 2;
-	const height = base.height + pad * 2;
+	const { width, height, pad } = useMemo(
+		() => matrixBox(layout, pitch, glow, parallax),
+		[layout, pitch, glow, parallax],
+	);
 
 	// A palette, or a single colour string, is known up front; only a shared value is not
 	const staticPalette = useMemo(

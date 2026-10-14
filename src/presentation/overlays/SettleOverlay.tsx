@@ -1,6 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
 	FadeIn,
 	FadeOut,
@@ -12,11 +12,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import type { TiltZero } from "../../domain/types";
+import { BowlStage } from "../components/BowlStage";
 import type { PressPoint } from "../components/DotButton";
 import { DotButton } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettleBowl } from "../components/SettleBowl";
-import { BOWL_SIZE, CAPTION, WHITE } from "../theme/theme";
+import { BOWL_SIZE, WHITE } from "../theme/theme";
 import {
 	type SettleOutcome,
 	type SettlePhase,
@@ -43,7 +44,6 @@ interface SettleOverlayProps {
 	onSnap?: () => void;
 }
 
-const CAPTION_LINE_HEIGHT = 20;
 /** Time for the ring to snap and pulse before the dot swells into the next screen */
 const SNAP_MS = 300;
 
@@ -55,18 +55,18 @@ const START_FADE_MS = 250;
 const HOLD_CAPTION = "keep still\nor tap to set now";
 
 const CAPTIONS: Record<SettlePhase, string> = {
-	waiting: "hold it the way you like to play\nthen tap start and keep still",
+	waiting: "hold it the way you like to play\nthen tap ready and keep still",
 	moving: HOLD_CAPTION,
 	settling: HOLD_CAPTION,
 	settled: "that’s level",
 };
 
 /**
- * Setting the level pose. The bowl opens dimmed under START, its dot already rolling with the
+ * Setting the level pose. The bowl opens dimmed under READY, its dot already rolling with the
  * hand, so there is time to read what to do. Once started there is no timer: hold the phone
  * comfortably and the bowl levels itself to your hand; the rest is done the moment the dot
  * comes to rest. Tapping anywhere then sets it from the pose just before the finger landed,
- * for the impatient. Without a tilt sensor, START sets a flat pose straight away.
+ * for the impatient. Without a tilt sensor, READY sets a flat pose straight away.
  *
  * The rules live in the settle stepper; every step, start and tap goes through it on the UI
  * thread, where the tilt is, so the pose and its side are read together and the settled state
@@ -82,7 +82,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const tiltAvailable = useTiltAvailable();
 	const [phase, setPhase] = useState<SettlePhase>("waiting");
 	const state = useSharedValue(WAITING_SETTLE);
-	// 1 while waiting to be started: the bowl is dimmed and START shows over it
+	// 1 while waiting to be started: the bowl is dimmed and READY shows over it
 	const waiting = useSharedValue(1);
 	const bowlRef = useRef<View>(null);
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,7 +118,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 			if (next === prev) return;
 			state.set(next);
 			if (next.phase === prev.phase) return;
-			// A started hold lifts START; without a sensor it stays up through the snap
+			// A started hold lifts READY; without a sensor it stays up through the snap
 			if (next.phase === "moving") waiting.set(withTiming(0, { duration: START_FADE_MS }));
 			const outcome = settleOutcome(next);
 			if (outcome) scheduleOnRN(finish, outcome);
@@ -153,7 +153,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const startStyle = useAnimatedStyle(() => ({ opacity: waiting.get() }));
 	const dim = useDerivedValue(() => waiting.get() * WAITING_DIM);
 
-	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap start to continue";
+	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap ready to continue";
 	const isWaiting = phase === "waiting";
 
 	return (
@@ -174,25 +174,22 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 				<DotMatrixText text="CALIBRATE" pitch={6} color={WHITE} glow />
 			</View>
 
-			<View style={styles.centre} pointerEvents="box-none">
+			<BowlStage caption={caption}>
 				<Pressable
 					ref={bowlRef}
 					collapsable={false}
 					onPress={handleStart}
 					pointerEvents={isWaiting ? "auto" : "none"}
 					accessibilityRole="button"
-					accessibilityLabel="Start calibrating"
+					accessibilityLabel="Ready to calibrate"
 					accessibilityElementsHidden={!isWaiting}
 				>
 					<SettleBowl size={BOWL_SIZE} color={color} state={state} dim={dim} />
 					<Animated.View style={[styles.start, startStyle]} pointerEvents="none">
-						<DotMatrixText text="START" pitch={6} color={WHITE} glow />
+						<DotMatrixText text="READY" pitch={6} color={WHITE} glow />
 					</Animated.View>
 				</Pressable>
-				<Text style={styles.caption} pointerEvents="none">
-					{caption}
-				</Text>
-			</View>
+			</BowlStage>
 
 			<View style={styles.footer}>
 				<DotButton
@@ -217,24 +214,16 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		paddingTop: 52,
 	},
-	centre: {
-		flex: 1,
-		alignItems: "center",
-		justifyContent: "center",
-		gap: 28,
-	},
 	start: {
 		...StyleSheet.absoluteFill,
 		alignItems: "center",
 		justifyContent: "center",
 	},
-	caption: {
-		...CAPTION,
-		lineHeight: CAPTION_LINE_HEIGHT,
-		// Always reserve two lines so a one-line caption doesn't shift the bowl
-		minHeight: CAPTION_LINE_HEIGHT * 2,
-	},
 	footer: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
 		alignItems: "center",
 		paddingBottom: 44,
 	},

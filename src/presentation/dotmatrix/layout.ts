@@ -63,6 +63,24 @@ export function matrixSize(layout: MatrixLayout, pitch: number): { width: number
 	return { width: layout.cols * pitch, height: layout.rows * pitch };
 }
 
+/** Pixels of parallax drift per radian of tilt for the deepest layer */
+export const PARALLAX_GAIN = 26;
+
+/**
+ * The canvas a text needs at a given pitch: its dots plus a margin on every side for glow and
+ * parallax drift, so nothing clips at the edge. `pad` is that margin.
+ */
+export function matrixBox(
+	layout: MatrixLayout,
+	pitch: number,
+	glow: boolean,
+	parallax: boolean,
+): { width: number; height: number; pad: number } {
+	const base = matrixSize(layout, pitch);
+	const pad = Math.ceil((parallax ? PARALLAX_GAIN * 0.8 : 0) + pitch * (glow ? 1.2 : 0.5));
+	return { width: base.width + pad * 2, height: base.height + pad * 2, pad };
+}
+
 /** Deterministic colour index for a dot so multi-colour text is stable across renders */
 export function trioIndex(dot: MatrixDot): number {
 	return (dot.col * 7 + dot.row * 3 + dot.charIndex) % 3;

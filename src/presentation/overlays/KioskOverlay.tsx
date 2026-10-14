@@ -1,6 +1,6 @@
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
 	cancelAnimation,
 	Easing,
@@ -12,13 +12,14 @@ import Animated, {
 	withRepeat,
 	withTiming,
 } from "react-native-reanimated";
+import { BowlStage } from "../components/BowlStage";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
-import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
-import { BOWL_SIZE, CAPTION, TRIO } from "../theme/theme";
+import { TITLE, TITLE_FOOTER_HEIGHT, titlePitch } from "../layout/bowlStage";
+import { BOWL_SIZE, TRIO } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 import { playColourAt } from "./playColour";
 
@@ -35,12 +36,6 @@ interface KioskOverlayProps {
 	sensitivity: number;
 }
 
-const TITLE = "TILTLING";
-/** Share of the screen width the title's dots span, and its pitch bounds */
-const TITLE_WIDTH = 0.86;
-const TITLE_PITCH = { min: 6, max: 11 };
-/** Share of the screen height the title group sits above centre, so the top isn't left empty */
-const GROUP_LIFT = 0.03;
 const PLAY_SIZE = 128;
 const COLOR_CYCLE_MS = 2600;
 
@@ -65,13 +60,8 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	onToggleMusic,
 	sensitivity,
 }) => {
-	const { width, height } = useWindowDimensions();
+	const { width } = useWindowDimensions();
 	const tiltAvailable = useTiltAvailable();
-	const titleLayout = useMemo(() => layoutDotMatrix(TITLE), []);
-	const titlePitch = Math.max(
-		TITLE_PITCH.min,
-		pitchToFit(titleLayout, width * TITLE_WIDTH, TITLE_PITCH.max),
-	);
 
 	// The play dot takes each of the three colours in turn: held, then a quick blend over.
 	// It opens on a random one, each equally likely.
@@ -94,20 +84,21 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 			exiting={FadeOut.duration(250)}
 			pointerEvents="box-none"
 		>
-			<View
-				style={[styles.centre, { paddingBottom: height * GROUP_LIFT * 2 }]}
-				pointerEvents="box-none"
+			<BowlStage
+				above={
+					<DotMatrixText
+						text={TITLE}
+						pitch={titlePitch(width)}
+						dotScale={0.42}
+						colors={TRIO}
+						colorBy="letter"
+						glow
+						parallax
+						wave
+					/>
+				}
+				caption={tiltAvailable ? "tilt to roll  ·  tap to play" : "tap to play"}
 			>
-				<DotMatrixText
-					text={TITLE}
-					pitch={titlePitch}
-					dotScale={0.42}
-					colors={TRIO}
-					colorBy="letter"
-					glow
-					parallax
-					wave
-				/>
 				<TiltBowl size={BOWL_SIZE} dotSize={PLAY_SIZE} sensitivity={sensitivity}>
 					<DotButton
 						size={PLAY_SIZE}
@@ -119,10 +110,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 						accessibilityLabel="Play"
 					/>
 				</TiltBowl>
-				<Text style={styles.caption}>
-					{tiltAvailable ? "tilt to roll  ·  tap to play" : "tap to play"}
-				</Text>
-			</View>
+			</BowlStage>
 
 			<View style={styles.footer} pointerEvents="box-none">
 				<View style={styles.best} pointerEvents="none">
@@ -153,17 +141,12 @@ const styles = StyleSheet.create({
 	container: {
 		...StyleSheet.absoluteFill,
 	},
-	centre: {
-		flex: 1,
-		alignItems: "center",
-		justifyContent: "center",
-		gap: 26,
-	},
-	caption: {
-		...CAPTION,
-	},
 	footer: {
-		height: 96,
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
+		height: TITLE_FOOTER_HEIGHT,
 		alignItems: "center",
 		justifyContent: "center",
 	},

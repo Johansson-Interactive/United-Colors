@@ -3,6 +3,7 @@ import {
 	LETTER_GAP,
 	LINE_GAP,
 	layoutDotMatrix,
+	matrixBox,
 	matrixSize,
 	paletteIndex,
 	pitchToFit,
@@ -113,5 +114,16 @@ describe("pitchToFit", () => {
 
 	it("returns the preferred pitch for empty text", () => {
 		expect(pitchToFit(layoutDotMatrix(""), 10, 3)).toBe(3);
+	});
+});
+
+describe("dot-matrix box", () => {
+	it("pads the dots on every side, more for glow and parallax", () => {
+		const layout = layoutDotMatrix("HI");
+		const plain = matrixBox(layout, 6, false, false);
+		const lit = matrixBox(layout, 6, true, true);
+		expect(plain.width).toBe(matrixSize(layout, 6).width + plain.pad * 2);
+		expect(plain.height).toBe(matrixSize(layout, 6).height + plain.pad * 2);
+		expect(lit.pad).toBeGreaterThan(plain.pad);
 	});
 });

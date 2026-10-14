@@ -1,11 +1,12 @@
 import type React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { BowlStage } from "../components/BowlStage";
 import { DotButton } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { IconDot } from "../components/IconDot";
 import { TiltBowl } from "../components/TiltBowl";
-import { BOWL_SIZE, CAPTION, DIM, WHITE } from "../theme/theme";
+import { BOWL_SIZE, DIM, WHITE } from "../theme/theme";
 import { SENSITIVITY_CHOICES, sensitivityChoice } from "../tilt/sensitivity";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
@@ -21,11 +22,10 @@ interface SpeedOverlayProps {
 /** About the player dot's size, so the bowl rolls what will be played */
 const DOT_SIZE = 56;
 const CHOICE_SIZE = 52;
-const CAPTION_LINE_HEIGHT = 20;
 
 /**
  * Choosing the tilt speed. The player's dot rolls in the bowl as fast as it will in the game,
- * and the three speeds sit in a row beneath it, slow to fast, each a comet whose tail grows
+ * and the three speeds sit in a row under its caption, slow to fast, each a comet whose tail grows
  * with the speed. Tapping one takes it at once, so the next tilt already feels the change.
  */
 export const SpeedOverlay: React.FC<SpeedOverlayProps> = ({
@@ -50,7 +50,26 @@ export const SpeedOverlay: React.FC<SpeedOverlayProps> = ({
 				<DotMatrixText text="SPEED" pitch={6} color={WHITE} glow />
 			</View>
 
-			<View style={styles.centre} pointerEvents="box-none">
+			<BowlStage
+				caption={caption}
+				below={
+					<View style={styles.choices}>
+						{SENSITIVITY_CHOICES.map((choice) => {
+							const chosen = choice.key === current.key;
+							return (
+								<IconDot
+									key={choice.key}
+									size={CHOICE_SIZE}
+									icon={`speed-${choice.key}`}
+									onPress={() => onSelect(choice.value)}
+									accessibilityLabel={`${choice.label} tilt speed${chosen ? ", chosen" : ""}`}
+									color={chosen ? color : DIM}
+								/>
+							);
+						})}
+					</View>
+				}
+			>
 				<View pointerEvents="none">
 					<TiltBowl size={BOWL_SIZE} dotSize={DOT_SIZE} sensitivity={current.value}>
 						<DotButton
@@ -63,25 +82,7 @@ export const SpeedOverlay: React.FC<SpeedOverlayProps> = ({
 						/>
 					</TiltBowl>
 				</View>
-				<View style={styles.choices}>
-					{SENSITIVITY_CHOICES.map((choice) => {
-						const chosen = choice.key === current.key;
-						return (
-							<IconDot
-								key={choice.key}
-								size={CHOICE_SIZE}
-								icon={`speed-${choice.key}`}
-								onPress={() => onSelect(choice.value)}
-								accessibilityLabel={`${choice.label} tilt speed${chosen ? ", chosen" : ""}`}
-								color={chosen ? color : DIM}
-							/>
-						);
-					})}
-				</View>
-				<Text style={styles.caption} pointerEvents="none">
-					{caption}
-				</Text>
-			</View>
+			</BowlStage>
 
 			<View style={styles.footer}>
 				<DotButton
@@ -106,22 +107,15 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		paddingTop: 52,
 	},
-	centre: {
-		flex: 1,
-		alignItems: "center",
-		justifyContent: "center",
-		gap: 28,
-	},
 	choices: {
 		flexDirection: "row",
 		gap: 28,
 	},
-	caption: {
-		...CAPTION,
-		lineHeight: CAPTION_LINE_HEIGHT,
-		minHeight: CAPTION_LINE_HEIGHT * 2,
-	},
 	footer: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
 		alignItems: "center",
 		paddingBottom: 44,
 	},
