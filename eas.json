@@ -7,6 +7,9 @@
 		"development": {
 			"developmentClient": true,
 			"distribution": "internal",
+			"android": {
+				"gradleCommand": ":app:assembleDebugOptimized"
+			},
 			"ios": {
 				"simulator": true
 			}
