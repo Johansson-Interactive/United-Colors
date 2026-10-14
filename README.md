@@ -79,6 +79,28 @@ pnpm install
 
 Biome is the only linter and formatter. Do not add ESLint or Prettier.
 
+Android development uses Expo's `debugOptimized` variant, both through `pnpm android` and
+the EAS `development` profile. It keeps Metro, Fast Refresh and the debugger while enabling
+native C++ optimizations. The ordinary `debug` variant can make the Skia/Reanimated game
+unplayably slow even on a recent phone. See [Expo's build-variant guide](https://github.com/expo/fyi/blob/main/use-debug-optimized-variant.md).
+
+If an existing Android development build is slow, rebuild and reinstall it with
+`pnpm android --device`, or rebuild the EAS `development` profile. Restarting Metro or Fast
+Refresh cannot change the native build variant. For native C++ debugging without
+optimizations, run `pnpm exec expo run:android --variant debug` explicitly.
+
+Android tilt also needs `android.permission.HIGH_SAMPLING_RATE_SENSORS`, declared in
+`app.json`. In the pinned Expo Sensors version, Android 12+ uses `SENSOR_DELAY_NORMAL`
+without it, even with `DeviceMotion.setUpdateInterval(0)`. That requests sensor readings
+only about every 200 ms, so tilt can trail the phone while rendering stays smooth.
+The permission enables fast native sampling; iOS uses Core Motion independently.
+
+After changing this permission, regenerate an existing Android project with
+`pnpm exec expo prebuild --platform android --no-install`, then rebuild and reinstall with
+`pnpm android --device` (or rebuild the relevant EAS profile). Fast Refresh and JavaScript
+updates cannot apply a manifest permission. Check quick tilt reversals on a physical
+Android device after reinstalling.
+
 ## Project structure
 
 ```
