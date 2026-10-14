@@ -1,3 +1,4 @@
+import { DeviceMotion } from "expo-sensors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type MotionListener = (data: { rotation?: { beta: number; gamma: number } }) => void;
@@ -25,6 +26,19 @@ function emit(beta: number, gamma: number) {
 describe("DeviceMotionAdapter", () => {
 	beforeEach(() => {
 		motion.listeners.clear();
+		vi.clearAllMocks();
+	});
+
+	it("requests every available motion update on each start", () => {
+		const sensor = new DeviceMotionAdapter();
+		sensor.start();
+		expect(DeviceMotion.setUpdateInterval).toHaveBeenCalledExactlyOnceWith(0);
+		sensor.stop();
+
+		vi.clearAllMocks();
+		sensor.start();
+		expect(DeviceMotion.setUpdateInterval).toHaveBeenCalledExactlyOnceWith(0);
+		sensor.stop();
 	});
 
 	it("feeds every listener from one native subscription", () => {

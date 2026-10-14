@@ -16,6 +16,8 @@ export class DeviceMotionAdapter implements SensorPort {
 	 * 0 = as fast as the platform allows. iOS clamps to Core Motion's max (~100 Hz);
 	 * Android dispatches every display frame. A non-zero value on Android (strict `>` vs
 	 * integer ms) skips frames: 16 ms yields ~30-40 Hz on 60/120 Hz displays.
+	 * Android 12+ also needs HIGH_SAMPLING_RATE_SENSORS in app.json: without it, Expo
+	 * requests SENSOR_DELAY_NORMAL natively, even when this dispatch interval is zero.
 	 */
 	private updateIntervalMs = 0;
 	/** Which way the screen faced at the last sample */
