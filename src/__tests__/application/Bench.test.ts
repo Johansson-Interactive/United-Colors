@@ -1,4 +1,4 @@
-import { benchSessionOptions, benchTilt } from "../../application/bench";
+import { type BenchRun, benchSessionOptions, benchTilt } from "../../application/bench";
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { Clock } from "../../application/ports";
@@ -21,13 +21,13 @@ function manualClock() {
 	};
 }
 
-function benchRun(seconds: number) {
+function benchRun(seconds: number, run: BenchRun = "steady") {
 	const store = createGameStore();
 	const clock = manualClock();
 	const session = new GameSession({
 		store,
 		createClock: clock.createClock,
-		...benchSessionOptions(),
+		...benchSessionOptions(run),
 	});
 	session.setScreen({ width: 400, height: 800 });
 	session.start("#E91E63");
@@ -46,6 +46,16 @@ describe("bench run", () => {
 		const last = frames[frames.length - 1];
 		expect(last.phase).toBe("RUNNING");
 		expect(last.dots.length).toBeGreaterThan(30);
+	});
+
+	it("keeps a drip on the walls in every frame the drips run is traced", () => {
+		// android-bench.sh traces from 35 s to 50 s
+		const traced = benchRun(50, "drips").slice(35 * 30);
+		const drips = traced.map((f) => f.dots.filter((d) => d.drip || d.launch).length);
+		expect(Math.min(...drips)).toBeGreaterThanOrEqual(1);
+		const steady = benchRun(50).slice(35 * 30);
+		const without = steady.filter((f) => !f.dots.some((d) => d.drip || d.launch)).length;
+		expect(without).toBeGreaterThan(steady.length / 2);
 	});
 
 	it("plays the same run every time", () => {

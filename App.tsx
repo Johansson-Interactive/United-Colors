@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { benchSessionOptions, benchTilt } from "./src/application/bench";
+import { type BenchRun, benchSessionOptions, benchTilt } from "./src/application/bench";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
 import { bindScreenAwake } from "./src/application/useCases/BindScreenAwake";
@@ -22,10 +22,13 @@ import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
 
 /**
- * A bench build (built with EXPO_PUBLIC_BENCH=1) plays the bench run by itself on launch, for
- * performance traces of play (see src/application/bench.ts); shipped builds never set it
+ * A bench build (built with EXPO_PUBLIC_BENCH=1, or =drips for the run that keeps drips on the
+ * walls) plays the bench run by itself on launch, for performance traces of play (see
+ * src/application/bench.ts); shipped builds never set it
  */
-const BENCH = process.env.EXPO_PUBLIC_BENCH === "1";
+const BENCH_FLAG = process.env.EXPO_PUBLIC_BENCH;
+const BENCH = BENCH_FLAG === "1" || BENCH_FLAG === "drips";
+const BENCH_RUN: BenchRun = BENCH_FLAG === "drips" ? "drips" : "steady";
 const BENCH_COLOR = "#E91E63";
 
 const store = createGameStore();
@@ -35,7 +38,7 @@ const storage = new AsyncStorageRepository();
 const session = new GameSession({
 	store,
 	createClock: (onTick, onFrame) => new FrameClock(onTick, onFrame),
-	...(BENCH ? benchSessionOptions() : {}),
+	...(BENCH ? benchSessionOptions(BENCH_RUN) : {}),
 });
 
 /**

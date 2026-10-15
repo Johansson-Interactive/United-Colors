@@ -10,6 +10,8 @@
 #
 #     EXPO_PUBLIC_BENCH=1 pnpm exec expo run:android --variant release --device
 #
+# (EXPO_PUBLIC_BENCH=drips builds the run that keeps a drip forming on the walls instead.)
+#
 # It replaces the installed app with one that starts the run by itself and never ends it; a
 # normal build (`pnpm android`) puts the game back. Play Protect may ask about uploading the
 # app for a scan the first time: answer on the phone, then rerun.
@@ -28,12 +30,21 @@ adb logcat -c
 adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 echo "filling the screen (35 s)..."
 sleep 35
+# A bench build logs "[bench]" every few seconds once its run has started
+if ! adb logcat -d | grep -q '\[bench\]'; then
+	echo "no [bench] log: the installed app is not a bench build (was EXPO_PUBLIC_BENCH set when it was built?)" >&2
+	exit 1
+fi
 "$ROOT/scripts/android-perf-trace.sh" "$LABEL" 15 | grep -E '^(device|display|thermal|trace):'
 
 echo "UI runtime (last reports):"
 adb logcat -d | grep -o '\[bench\].*' | tail -3 | sed 's/^/  /'
 
 TP=${TRACE_PROCESSOR:-$(command -v trace_processor || true)}
+if [ -n "$TP" ] && [ ! -x "$TP" ]; then
+	echo "TRACE_PROCESSOR is not an executable: $TP" >&2
+	exit 1
+fi
 if [ -z "$TP" ]; then
 	echo "trace_processor not found; open the trace at https://ui.perfetto.dev" >&2
 	exit 0
