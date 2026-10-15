@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
+import { bindScreenAwake } from "./src/application/useCases/BindScreenAwake";
 import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
@@ -11,6 +12,7 @@ import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
 import { loadDisplayCorners } from "./src/infrastructure/displayCorners";
 import { FrameClock } from "./src/infrastructure/FrameClock";
 import { HapticsService } from "./src/infrastructure/HapticsService";
+import { KeepAwakeService } from "./src/infrastructure/KeepAwakeService";
 import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
@@ -43,6 +45,9 @@ const audio = new AudioService(
 );
 
 const haptics = new HapticsService();
+
+/** Tilting is no touch, so keep the screen from dimming mid-run; bound for the app's lifetime */
+bindScreenAwake(store, new KeepAwakeService());
 
 /** How the glass rounds its corners, asked for once at launch */
 const displayCorners = loadDisplayCorners(Platform.OS);

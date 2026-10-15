@@ -63,6 +63,11 @@ export interface GameHaptics {
 	spit(): void;
 }
 
+/** Holds off the display's idle dimming and sleep; tilting is no touch, so a run looks idle */
+export interface ScreenAwake {
+	setAwake(awake: boolean): void;
+}
+
 /** Report whether the app is in the foreground; returns the unsubscribe */
 export type WatchAppActive = (listener: (active: boolean) => void) => () => void;
 
