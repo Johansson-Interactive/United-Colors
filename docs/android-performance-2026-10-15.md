@@ -405,6 +405,19 @@ The probe above, benched back to back on the drips bench (release, 60 Hz, therma
 
 **Visual check:** pending on the device. The stage fade under the settle bowl, the game-over shake, the pause frost, flood transitions, the corner caps, and no flash of ink or transparency when play starts.
 
+### Where the main thread's frame goes now (2026-10-16)
+
+Read from the TextureView traces (tv-A, tv-B) with `scripts/perf/main-thread-cores.sql`, which the bench now runs too. A frame on the main thread is about 10.6 ms: 9.4 ms of `animation` and 1.1 ms of window redraw (`traversal`).
+
+- **Atrace names almost none of `animation`.** The swap is 0.66 ms and Choreographer's own work about 0.2 ms. The other 8.5 ms are worklets and Skia, with no trace slices.
+- **The main thread does not wait any more.** It sleeps for under 0.1 ms per frame, and Hermes's collector wakes it 2–4 times per 15 s.
+- **It runs on the little cores, flat out.** 91–92 % of `animation`, 8.55 ms per frame, runs on CPUs 0–3 (Cortex-A55) at 1.75 GHz, against their 1.8 GHz maximum. Under 0.8 ms runs on the big cores. The SurfaceView traces show the same (10 of 15 s on the little cores). The big cores (A78 at up to 2.42 GHz, and the X1 at 2.84 GHz) do several times the work per clock.
+- **Why it stays there:** the scheduler's choice, as found on 2026-10-15. All cores are allowed (`top-app`), a tilt game never triggers Android's input boost, and this phone's power HAL refuses hint sessions.
+
+**What follows:**
+- **Moving the main thread to the big cores is now the largest lever on this phone**, if the scheduler can be made to. An app may set its own threads' CPU affinity (`sched_setaffinity`) with no permission. A probe can do it from the shell on a debuggable build, with `run-as` and `taskset`, so no code is needed to measure it. If it pays, the fix is a small native call in a local module during runs, with a thermal check over a multi-minute run.
+- **The 8.5 ms needs a fresh CPU profile to split.** The 2026-10-15 profile predates the atlas, the sync props, the bursts and the TextureView. The same debuggable build can take one with `simpleperf`.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
