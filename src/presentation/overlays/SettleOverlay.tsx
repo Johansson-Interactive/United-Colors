@@ -130,16 +130,15 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		advance(
-			stepSettle(state.get(), tilt.raw.x.get(), tilt.raw.y.get(), tilt.raw.facingDown.get(), dt),
-		);
+		const raw = tilt.raw.get();
+		advance(stepSettle(state.get(), raw.x, raw.y, raw.facingDown, dt));
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
 	const handleSetNow = useCallback(() => {
 		scheduleOnUI(() => {
 			"worklet";
-			advance(setSettleNow(state.get(), tilt.raw.facingDown.get()));
+			advance(setSettleNow(state.get(), tilt.raw.get().facingDown));
 		});
 	}, [advance, state, tilt]);
 
