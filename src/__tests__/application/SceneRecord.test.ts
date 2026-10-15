@@ -1,10 +1,12 @@
 import {
 	dotCount,
 	dotKind,
+	FIELD,
 	findDent,
 	findPlayer,
 	HAS_WALL_SKSL,
 	hasWall,
+	KIND_CODE,
 	readDot,
 	readScene,
 	type SceneKind,
@@ -28,6 +30,28 @@ function sceneOf(kinds: SceneKind[]): Float32Array {
 }
 
 describe("the scene record", () => {
+	it("gives the drawer the same fields readDot reads", () => {
+		const scene = sceneOf(["small", "point", "player", "merging", "rejected"]);
+		setMerge(scene, 3, 0.4);
+		setStretch(scene, 1, 0.2, -0.1);
+		setWall(scene, 0, 0, { x: 0, y: 30, nx: 0, ny: 1 });
+		for (let i = 0; i < dotCount(scene); i++) {
+			const dot = readDot(scene, i, sceneDot());
+			const o = i * FIELD.STRIDE;
+			expect(scene[o + FIELD.X]).toBe(dot.x);
+			expect(scene[o + FIELD.Y]).toBe(dot.y);
+			expect(scene[o + FIELD.RADIUS]).toBe(dot.radius);
+			expect(scene[o + FIELD.COLOR]).toBe(dot.color);
+			expect(scene[o + FIELD.KIND]).toBe(KIND_CODE[dot.kind]);
+			expect(scene[o + FIELD.MERGE]).toBeCloseTo(dot.merge);
+			expect(scene[o + FIELD.STRETCH_X]).toBeCloseTo(dot.stretchX);
+			expect(scene[o + FIELD.STRETCH_Y]).toBeCloseTo(dot.stretchY);
+			expect(scene[o + FIELD.WALL_X]).toBe(dot.wallX);
+			expect(scene[o + FIELD.WALL_Y]).toBe(dot.wallY);
+		}
+		expect(sceneLength(1)).toBe(FIELD.STRIDE);
+	});
+
 	it("reads back each dot as it was written, by index", () => {
 		const scene = sceneOf(["small", "point", "player", "merging", "rejected"]);
 		expect(dotCount(scene)).toBe(5);

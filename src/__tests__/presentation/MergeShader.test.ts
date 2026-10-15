@@ -20,7 +20,9 @@ import {
 	DENT_SOFTNESS,
 	MERGE_BLEND,
 	MERGE_MAX_BLOBS,
+	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
+	mergeUniformsByName,
 	packMergeUniforms,
 } from "../../presentation/mergeShader";
 
@@ -153,5 +155,46 @@ describe("packMergeUniforms", () => {
 		expect(values.slice(0, 6)).toEqual([50, 60, 20, 70, 60, 5]);
 		const dent = values.slice(MERGE_MAX_BLOBS * 3 + 5, MERGE_MAX_BLOBS * 3 + 9);
 		expect(dent.slice(0, 3)).toEqual([75, 60, 10 * (1 + DENT_GAP)]);
+	});
+});
+
+describe("merge uniforms by name", () => {
+	/** Each uniform MERGE_SKSL declares, in order, with the floats it takes */
+	function declared(): Array<[string, number]> {
+		const found: Array<[string, number]> = [];
+		for (const m of MERGE_SKSL.matchAll(/uniform float(\d?) (\w+)(?:\[(\d+)\])?;/g)) {
+			found.push([m[2], Number(m[1] || 1) * Number(m[3] ?? 1)]);
+		}
+		return found;
+	}
+
+	it("names every uniform the shader declares, in order, with its size", () => {
+		const values = Array.from({ length: MERGE_PACKED_LENGTH }, (_, i) => i);
+		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1]);
+		expect(Object.keys(named)).toEqual(declared().map(([name]) => name));
+		for (const [name, size] of declared()) {
+			const value = named[name];
+			expect(Array.isArray(value) ? value.length : 1).toBe(size);
+		}
+	});
+
+	it("keeps the packed values in declaration order", () => {
+		const scene = createSceneBuilder()(
+			{
+				phase: "RUNNING",
+				score: 0,
+				dots: [dot({ kind: "player", color: "#E91E63" })],
+				events: [],
+			} as RenderFrame,
+			0,
+			{ x: 100, y: 100 },
+		);
+		const packed = packMergeUniforms(scene);
+		expect(packed?.values.length).toBe(MERGE_PACKED_LENGTH);
+		const named = mergeUniformsByName(packed?.values ?? [], [0, 0, 0, 1]);
+		const flat = declared()
+			.slice(0, -1)
+			.flatMap(([name]) => named[name]);
+		expect(flat).toEqual(packed?.values);
 	});
 });

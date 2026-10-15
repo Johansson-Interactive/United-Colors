@@ -46,7 +46,37 @@ const KINDS: readonly SceneKind[] = ["small", "point", "player", "merging", "rej
  * A wall normal shorter than this (in the L1 norm) is no wall. A real one is a unit normal,
  * so this tells the two apart without comparing floats to zero.
  */
-const WALL_NORMAL_MIN = 0.5;
+export const WALL_NORMAL_MIN = 0.5;
+
+/**
+ * Where each field sits in a dot's record (offsets from the record's start), and the record's
+ * length. For the drawer's per-dot loops on the UI thread: there, calling a worklet such as
+ * readDot allocates on every call, enough at sixty dots to set off a garbage collection
+ * nearly every frame, while indexing the array directly allocates nothing. Everywhere else,
+ * use readDot.
+ */
+export const FIELD = {
+	X,
+	Y,
+	RADIUS,
+	COLOR,
+	KIND,
+	MERGE,
+	STRETCH_X,
+	STRETCH_Y,
+	WALL_X,
+	WALL_Y,
+	STRIDE,
+} as const;
+
+/** The code each kind is stored as in the record's KIND field (see FIELD) */
+export const KIND_CODE: Readonly<Record<SceneKind, number>> = {
+	small: KINDS.indexOf("small"),
+	point: KINDS.indexOf("point"),
+	player: KINDS.indexOf("player"),
+	merging: KINDS.indexOf("merging"),
+	rejected: KINDS.indexOf("rejected"),
+};
 
 /** The kind whose code is `code` in the record */
 function kindOf(code: number): SceneKind {

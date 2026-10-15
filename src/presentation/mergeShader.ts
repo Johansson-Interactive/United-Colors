@@ -2,9 +2,10 @@ import { JELLY_MAX_STRETCH } from "../application/jelly";
 import { MERGE_MAX_DOTS } from "../application/renderScene";
 import {
 	dotCount,
-	dotKind,
+	FIELD,
 	findDent,
 	findPlayer,
+	KIND_CODE,
 	readDot,
 	sceneDot,
 } from "../application/sceneRecord";
@@ -74,6 +75,67 @@ half4 main(float2 p) {
 }
 `;
 
+/**
+ * The merge shader's uniforms by name, as Skia's declarative <Shader> takes them: the packed
+ * values (see packMergeUniforms) cut at the declarations in MERGE_SKSL, with `color` added
+ */
+export interface MergeUniformsByName {
+	[name: string]: number | number[];
+	blobs: number[];
+	count: number;
+	blend: number;
+	jelly: number[];
+	dent: number[];
+	walls: number[];
+	neck: number;
+	color: number[];
+}
+
+/** Floats each uniform takes, in declaration order (see MERGE_SKSL) */
+const UNIFORM_SIZES = [
+	["blobs", 3 * MERGE_MAX_BLOBS],
+	["count", 1],
+	["blend", 1],
+	["jelly", 3],
+	["dent", 4],
+	["walls", 6],
+	["neck", 1],
+] as const;
+
+/** Cut packed values (without `color`) into named uniforms, with `color` (RGBA) added */
+export function mergeUniformsByName(
+	values: number[],
+	color: ArrayLike<number>,
+): MergeUniformsByName {
+	"worklet";
+	let at = 0;
+	const take = (size: number) => {
+		const part = values.slice(at, at + size);
+		at += size;
+		return part;
+	};
+	const blobs = take(UNIFORM_SIZES[0][1]);
+	const count = take(1)[0];
+	const blend = take(1)[0];
+	const jelly = take(3);
+	const dent = take(4);
+	const walls = take(6);
+	const neck = take(1)[0];
+	return {
+		blobs,
+		count,
+		blend,
+		jelly,
+		dent,
+		walls,
+		neck,
+		color: [color[0], color[1], color[2], color[3]],
+	};
+}
+
+/** Floats of packed values packMergeUniforms produces, `color` aside */
+export const MERGE_PACKED_LENGTH = UNIFORM_SIZES.reduce((sum, [, size]) => sum + size, 0);
+
 export interface MergeUniforms {
 	/** Flat uniform values in declaration order, minus `color` (appended by the caller) */
 	values: number[];
@@ -115,7 +177,8 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 	const count = dotCount(scene);
 	const body = sceneDot();
 	for (let i = 0; i < count && blobs.length < MERGE_MAX_BLOBS * 3; i++) {
-		if (dotKind(scene, i) !== "merging") continue;
+		// Indexed directly: a worklet call per dot would allocate every frame (see FIELD)
+		if (scene[i * FIELD.STRIDE + FIELD.KIND] !== KIND_CODE.merging) continue;
 		readDot(scene, i, body);
 		add(body.x, body.y, body.radius);
 	}
