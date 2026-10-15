@@ -110,6 +110,69 @@ Recorded with `scripts/android-perf-trace.sh` and read with Perfetto's trace pro
 - **Play runs could not be compared fairly.** They were driven blind with taps while the phone lay at an angle. Some ended in a game over, and one opened the calibration screen. The same baseline build gave 5.4 ms and 10.2 ms animation phases in back-to-back runs. A repeatable scene (task 6) is needed before any play A/B.
 - **New: the main thread runs on the slow cores.** On the Snapdragon 888, CPUs 0–3 are Cortex-A55, 4–6 A78 and 7 X1. In every trace, most of the main thread's time was on CPUs 0–3 at about 1.6 GHz. All cores are allowed (`top-app` cpuset, 0–7), so this is the scheduler's choice. A tilt game sends no touch input, so Android's input boost never fires. iOS runs this work on performance cores. Fixed performance mode (`cmd power set-fixed-performance-mode-enabled`) did not move it. The standard fix is a performance hint session (`PerformanceHintManager`, Android 12+) for the main and JS threads, targeting the frame time. That needs a small native module and is now the most promising lever.
 
+### Performance hint session and garbage collection (2026-10-15, later)
+
+- **Hint sessions do nothing on the OnePlus 9.** `modules/performance-hint` opens a session for the main thread, the JS thread and Hermes's collectors. It reports main-thread CPU time per frame against half the frame interval. But `dumpsys performance_hint` reports `HAL Support: false` with no active sessions, so `createHintSession` returns null on this phone. The module can only help on devices whose power HAL supports hints; that is unverified until it is measured on one (a Pixel 6 or later, for example). The one run where the main thread sat on the big cores after the module landed was noise.
+- **What actually stalls the title screen is Hermes's garbage collector.** Inside frames, the main thread sleeps about a third of the time (3.8 s of 12 s). Almost all of those sleeps end when `hades`, the UI runtime's GC thread, wakes it: 255 to 331 waits per 15 s, about 8.3 ms each, 2.1–2.7 s in total. That collector thread runs on the little cores. So the main thread isn't slow so much as waiting for a slow collector, which is why moving it to a big core changed nothing.
+- **Disposing per-frame pictures was tried and reverted.** Skia reports each picture's size to Hermes as external memory, so disposing each replaced picture (and the per-frame merge and drip shaders) looked promising. It cut waits from 281 to 255 per 15 s, which is within noise, so it was reverted.
+- **Next lever: allocate less on the UI runtime per frame**, starting with the title screen, which allocates the most. Likely sources:
+  - `KioskOverlay`'s colour cycle builds a new colour string every frame; `DotButton` then parses it again (`convertToRGBA`).
+  - `stepJelly` returns a new object every frame for the liquid PLAY button.
+  - `dropUniforms` and `glareCentre` build fresh objects and arrays every frame.
+  - The kiosk scene's per-frame decode objects and closures in `drawScene`.
+
+  Measure each with `scripts/android-perf-trace.sh` and the GC-wait query (thread state of the main thread inside `animation`, grouped by waker thread).
+- **Play is still unmeasured.** GC waits in play ranged from 2 to 211 per run, depending on what happened in the run. A repeatable play scene (task 6) is still needed.
+
+### Bench run: a repeatable late run (2026-10-15)
+
+A bench build plays a late run by itself, the same way every time (`src/application/bench.ts`).
+
+**What the bench build does differently:**
+- It starts the run two seconds after launch.
+- Small dots arrive at the rate of a run 20 minutes in, from a fixed seed, and hold at 60 in play.
+- Wrong-colour dots pass over the player instead of ending the run (`GameEngine`'s `refusals: false`).
+- A scripted tilt path (`ScriptedTiltSensor`) steers the player through the dots and into the walls, and moves the room's light, as real play does.
+
+**Using it:**
+- Build: `EXPO_PUBLIC_BENCH=1 pnpm exec expo run:android --variant release --device`. Shipped builds never set the flag.
+- Measure: `scripts/android-bench.sh <label>`. It launches the app, lets the screen fill for 35 s, records 15 s, and summarizes with `scripts/perf/frames.sql` and `scripts/perf/gc-waits.sql`.
+
+**Baseline on the OnePlus 9** (release, display at 60 Hz, three runs, at commit `b8a92ac` plus the bench):
+
+| Run | Frames/s | p50 | p95 | p99 | Frames over 16.7 ms | GC waits |
+|---|---|---|---|---|---|---|
+| A | 58.1 | 12.1 ms | 27.2 ms | 31.2 ms | 32.3 % | 359, 1.9 s |
+| B | 56.2 | 12.3 ms | 29.3 ms | 33.6 ms | 32.5 % | 353, 2.1 s |
+| C | 55.4 | 12.2 ms | 30.0 ms | 33.9 ms | 33.9 % | 334, 2.1 s |
+
+In a late run, a third of the game's frames are late. The UI runtime's garbage collector accounts for about 2.1 s of main-thread waiting per 15 s (14 %). Next step: cut per-frame allocation on the UI runtime in the game's own pipeline (`drawScene`, the canvas mappers, bursts), measuring every change with this bench.
+
+### Garbage collection on the UI runtime: found and cut (2026-10-15)
+
+**Cause.** Hermes reports showed the UI runtime collecting garbage about once per frame. The collector runs on the little cores, and the main thread waits for it mid-frame. What set the collections off was native memory that Skia's JS objects report to Hermes, not JS allocation:
+
+- Skia reports a fixed **1 MB** for every shader made from JS (`JsiSkShader`) and for every picture recorder (`JsiSkPictureRecorder`), whatever they really hold.
+- `createPicture` makes a new recorder every call.
+- A full-screen gradient picture reports hundreds of KB.
+
+Per frame, the game made a new recorder for the scene, one for the room picture, and a new shader for the liquid player, so it reported several MB of new native memory to Hermes each frame.
+
+**Fixes, each measured with the bench:**
+
+| Change | Frames over 16.7 ms | GC waits / 15 s | GCs / 300 frames |
+|---|---|---|---|
+| Baseline | 32–34 % | 2.1 s | ~300 |
+| `drawScene` indexes the record directly; no worklet call per dot (each allocated 24–90 B; 88 KB/frame → 7 KB) | 33 % (no change) | 2.1 s | ~300 |
+| Room drawn as Skia nodes (`Fill` + `RadialGradient`), not a picture recorded per frame | 18 % | 1.0 s | ~185 |
+| Scene recorded into one recorder kept for the canvas's life (`recordPicture.ts`) | 6.6 % | below the binder waits | ~90 |
+| Liquid player drawn as a `<Rect>` + `<Shader>` node between two scene layers (`liquidBody`), not a JS shader per frame | 4.0–8.4 % | 46 ms | 6–21 |
+
+**Not yet done:**
+- A forming wall drip still makes a JS shader each frame (1 MB reported per drip per frame). The bench rarely has drips, because it holds at 60 dots and only starts one after a catch. A real late run nearly always has one forming, so real play will collect more often than the bench shows. Fix: a few fixed drip slots drawn as shader nodes, like the liquid body.
+- `DotMatrixText` and `Confetti` still use `createPicture`. That's fine during play, but the title text's wave re-records every frame on the title screen.
+- iOS has not been checked on a device since these changes. They are platform-neutral, but the room, the liquid body and the layering should get a visual check there.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
