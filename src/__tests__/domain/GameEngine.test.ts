@@ -1,3 +1,4 @@
+import { holdInside } from "../../domain/arena";
 import {
 	ABSORB_TICKS,
 	COMBO_WINDOW_TICKS,
@@ -388,6 +389,60 @@ describe("GameEngine", () => {
 					expect(dot.y + dot.radius).toBeLessThanOrEqual(screen.height + 1e-6);
 				}
 			}
+		});
+	});
+
+	describe("in rounded corners", () => {
+		const rounded = {
+			width: 400,
+			height: 800,
+			corners: { radius: 60, curve: "continuous" as const },
+		};
+
+		it("a dot running into a corner glances off the curve, where a square corner would only send it back", () => {
+			const { engine, small } = stagedEngine();
+			engine.setScreen(rounded);
+			// Heading straight left, low enough in the corner to meet the curve
+			small.push(smallDotAt({ x: 150, y: 20 }, OTHER, { heading: { vx: -1, vy: 0 }, speed: 4 }));
+			const dot = () => engine.getFrame().dots.find((d) => d.kind === "small");
+			engine.tick();
+			expect(dot()?.vx).toBeLessThan(0);
+			let ticks = 0;
+			while ((dot()?.vx ?? 0) < 0 && ticks++ < 200) engine.tick();
+			const leaving = dot();
+			expect(leaving?.vy).toBeGreaterThan(0);
+			expect(Math.hypot(leaving?.vx ?? 0, leaving?.vy ?? 0)).toBeCloseTo(4);
+		});
+
+		it("every drifting dot stays inside the curves through many bounces", () => {
+			const engine = largeScreenEngine();
+			engine.startKiosk();
+			engine.setScreen(rounded);
+			for (let i = 0; i < 3000; i++) {
+				engine.tick();
+				for (const dot of engine.getFrame().dots) {
+					if (dot.drip || dot.kind !== "small") continue;
+					const held = holdInside(rounded, dot.x, dot.y, dot.radius - 1e-3);
+					expect(held.x).toBeCloseTo(dot.x, 3);
+					expect(held.y).toBeCloseTo(dot.y, 3);
+				}
+			}
+		});
+
+		it("the player tilted into a corner settles against the curve, still pushing into it", () => {
+			const engine = createEngine();
+			engine.setScreen(rounded);
+			engine.startGame();
+			engine.onSensorInput(-1, -1);
+			for (let i = 0; i < 300; i++) engine.advancePlayer(16);
+			const { x, y } = engine.getPlayerPosition();
+			const r = (PLAYER_DOT_SIZE_RATIO * 100) / 2;
+			expect(x).toBeCloseTo(y, 1);
+			// Well clear of where a square corner would hold it, (r, r)
+			expect(x).toBeGreaterThan(r + 10);
+			const push = engine.getPlayerPush();
+			expect(push.x).toBeLessThan(0);
+			expect(push.y).toBeLessThan(0);
 		});
 	});
 

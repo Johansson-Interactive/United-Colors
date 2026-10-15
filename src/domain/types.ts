@@ -130,8 +130,18 @@ export interface RenderFrame {
 	events: GameEvent[];
 }
 
-/** Screen dimensions fed back from the presentation layer */
+/**
+ * How the screen's corners are rounded (see arena.ts): `radius` as the platform states it,
+ * and the curve it is drawn with, iOS's continuous corner or a plain circular arc
+ */
+export interface Corners {
+	radius: number;
+	curve: "continuous" | "circular";
+}
+
+/** Screen dimensions fed back from the presentation layer, and its rounded corners if any */
 export interface ScreenSize {
 	width: number;
 	height: number;
+	corners?: Corners;
 }

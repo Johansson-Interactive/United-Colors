@@ -1,3 +1,4 @@
+import { cornerExtent } from "../../domain/arena";
 import {
 	DOT_LIMIT,
 	GAME_COLORS,
@@ -174,6 +175,41 @@ describe("SpawnSystem", () => {
 				expect(alongAxis).toBeGreaterThanOrEqual(size / 2);
 				expect(alongAxis).toBeLessThanOrEqual(span - size / 2);
 			}
+		});
+	});
+
+	describe("with rounded corners", () => {
+		const rounded = {
+			width: 400,
+			height: 800,
+			corners: { radius: 50, curve: "continuous" as const },
+		};
+		const extent = cornerExtent(rounded);
+
+		it("drips form only on the straight part of each edge, clear of the curves", () => {
+			const size = SMALL_DOT_SIZE_RATIO * 100;
+			for (const side of [0, 1, 2, 3]) {
+				for (const along of [0, 1]) {
+					const rolls = [side / 4, along, 0.5, 0.5];
+					const system = new SpawnSystem(() => rolls.shift() ?? 0.5);
+					const wall = system.trySpawnSmallDot(1, 0, rounded, 100, false)?.contact().drip?.wall;
+					if (!wall) throw new Error("no drip");
+					const alongAxis = wall.nx !== 0 ? wall.y : wall.x;
+					const span = wall.nx !== 0 ? rounded.height : rounded.width;
+					expect(alongAxis).toBeCloseTo(along === 0 ? extent + size / 2 : span - extent - size / 2);
+				}
+			}
+		});
+
+		it("a point dot that would land in a corner is placed again", () => {
+			// Draws: timing, color, then (0, 0) for the first candidate, in the top-left corner
+			const rolls = [0.5, 0.5, 0, 0, 0.5, 0.5];
+			const scripted = new SpawnSystem(() => rolls.shift() ?? 0.5);
+			scripted.reset();
+			const centred = new PlayerDot(390, 790, "#E91E63", 12.5, 0);
+			const dot = scripted.trySpawnPointDot(POINT_DOT_TIME_BETWEEN + 1, centred, rounded, 100);
+			expect(dot?.x).toBe(199.5);
+			expect(dot?.y).toBe(399.5);
 		});
 	});
 

@@ -1,14 +1,15 @@
+import { holdInside } from "../arena";
 import type { ScreenSize } from "../types";
 import { Dot } from "./Dot";
 
 /**
  * The player-controlled dot. Movement via gyro (orientation) or direct touch (pixel delta).
- * Bounds-clamped so it cannot leave the screen.
+ * Held inside the arena so it cannot leave the screen.
  */
 export class PlayerDot extends Dot {
 	private tiltX = 0;
 	private tiltY = 0;
-	/** Speed (px/s) the walls held the player back by on the last advance, signed toward the wall */
+	/** Velocity (px/s) the walls held the player back by on the last advance, pointing into them */
 	private pushX = 0;
 	private pushY = 0;
 
@@ -23,11 +24,15 @@ export class PlayerDot extends Dot {
 		this.tiltY = y;
 	}
 
-	/** Apply a one-shot movement in pixels (e.g. touch drag). Clamped to screen bounds. */
+	/**
+	 * Apply a one-shot movement in pixels (e.g. touch drag), held inside the arena: against a
+	 * wall the player keeps the part of the movement along it, so it slides round a rounded
+	 * corner (see arena.ts)
+	 */
 	applyMovementDelta(dx: number, dy: number, screen: ScreenSize): void {
-		const halfSize = this.size / 2;
-		this.x = Math.max(halfSize, Math.min(screen.width - halfSize, this.x + dx));
-		this.y = Math.max(halfSize, Math.min(screen.height - halfSize, this.y + dy));
+		const held = holdInside(screen, this.x + dx, this.y + dy, this.size / 2);
+		this.x = held.x;
+		this.y = held.y;
 	}
 
 	/**
@@ -48,7 +53,7 @@ export class PlayerDot extends Dot {
 
 	/**
 	 * How hard the player is pushing into the walls (px/s of movement they are holding back),
-	 * signed toward the wall: negative x pushes into the left wall, positive y into the bottom
+	 * pointing into them: negative x pushes into the left wall, positive y into the bottom
 	 */
 	get push(): { x: number; y: number } {
 		return { x: this.pushX, y: this.pushY };

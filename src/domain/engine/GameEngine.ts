@@ -1,3 +1,4 @@
+import { arenaContacts } from "../arena";
 import {
 	COMBO_WINDOW_TICKS,
 	GAME_COLORS,
@@ -172,9 +173,9 @@ export class GameEngine {
 	}
 
 	/**
-	 * How hard the player is pushing into the walls as of the last frame: the speed (px/s)
-	 * the walls are holding back on each axis, signed toward the wall (negative x is the
-	 * left wall, positive y the bottom). Zero on both while free, or not RUNNING.
+	 * How hard the player is pushing into the walls as of the last frame: the velocity (px/s)
+	 * the walls are holding back, pointing into them (negative x is the left wall, positive
+	 * y the bottom, both out through a corner). Zero while free, or not RUNNING.
 	 */
 	getPlayerPush(): { x: number; y: number } {
 		return this.player.push;
@@ -308,18 +309,16 @@ export class GameEngine {
 	}
 
 	/**
-	 * A drifting dot that has reached an edge is set flush against it and bounces straight
-	 * back in (see SmallDot.bounce); in a corner, off both walls. A drip still forming on its
-	 * wall is left alone.
+	 * A drifting dot that has reached a wall is set flush against it and bounces back in
+	 * (see SmallDot.bounce): off a straight edge, off both in a square corner, and off a
+	 * rounded corner at the curve's slant where it meets it (see arena.ts). A drip still
+	 * forming on its wall is left alone.
 	 */
 	private holdAtEdges(dot: SmallDot): void {
 		if (!dot.isDrifting) return;
-		const radius = dot.size / 2;
-		const { width, height } = this.screen;
-		if (dot.x - radius < 0) dot.bounce(1, 0, { x: 0, y: dot.y });
-		else if (dot.x + radius > width) dot.bounce(-1, 0, { x: width, y: dot.y });
-		if (dot.y - radius < 0) dot.bounce(0, 1, { x: dot.x, y: 0 });
-		else if (dot.y + radius > height) dot.bounce(0, -1, { x: dot.x, y: height });
+		for (const wall of arenaContacts(this.screen, dot.x, dot.y, dot.size / 2)) {
+			dot.bounce(wall.nx, wall.ny, wall);
+		}
 	}
 
 	/**

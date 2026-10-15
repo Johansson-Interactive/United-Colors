@@ -1,3 +1,4 @@
+import { arenaContacts, cornerExtent } from "../arena";
 import {
 	DOT_LIMIT,
 	GAME_HERTZ,
@@ -177,13 +178,15 @@ export class SpawnSystem implements Spawner {
 	}
 
 	/**
-	 * A drip on a random edge, far enough from the corners to fit on it fully grown, that
+	 * A drip on a random edge, on its straight part and far enough from the corners to fit on
+	 * it fully grown (a rounded corner's curve is no place to hang from, see arena.ts), that
 	 * will head inward on a diagonal (see edgeHeading)
 	 */
 	private createDrip(screen: ScreenSize, density: number, growTicks: number): SmallDot {
 		const size = SMALL_DOT_SIZE_RATIO * density;
-		const spanX = screen.width - size;
-		const spanY = screen.height - size;
+		const margin = cornerExtent(screen) + size / 2;
+		const spanX = Math.max(0, screen.width - margin * 2);
+		const spanY = Math.max(0, screen.height - margin * 2);
 
 		// Which edge, how far along it (0..1, from the top or the left), and the heading off it
 		const side = Math.floor(this.random() * 4);
@@ -198,25 +201,25 @@ export class SpawnSystem implements Spawner {
 		switch (side) {
 			case 0: // Left
 				nx = 1;
-				foot = { x: 0, y: size / 2 + along * spanY };
+				foot = { x: 0, y: margin + along * spanY };
 				vx = heading.normal;
 				vy = heading.tangent;
 				break;
 			case 1: // Right
 				nx = -1;
-				foot = { x: screen.width, y: size / 2 + along * spanY };
+				foot = { x: screen.width, y: margin + along * spanY };
 				vx = -heading.normal;
 				vy = heading.tangent;
 				break;
 			case 2: // Top
 				ny = 1;
-				foot = { x: size / 2 + along * spanX, y: 0 };
+				foot = { x: margin + along * spanX, y: 0 };
 				vx = heading.tangent;
 				vy = heading.normal;
 				break;
 			default: // Bottom
 				ny = -1;
-				foot = { x: size / 2 + along * spanX, y: screen.height };
+				foot = { x: margin + along * spanX, y: screen.height };
 				vx = heading.tangent;
 				vy = -heading.normal;
 				break;
@@ -246,12 +249,14 @@ export class SpawnSystem implements Spawner {
 		const size = POINT_DOT_SIZE_RATIO * density;
 		let x = 0;
 		let y = 0;
-		// Re-roll while the candidate would land on the player. After the last attempt the
-		// final candidate is used even if it overlaps, so placement always terminates.
+		// Re-roll while the candidate would land on the player, or as near a rounded corner as
+		// it is kept from the edges. After the last attempt the final candidate is used even if
+		// it overlaps, so placement always terminates.
 		for (let attempt = 0; attempt < MAX_POINT_DOT_PLACEMENT_ATTEMPTS; attempt++) {
 			x = Math.floor(this.random() * (screen.width - size * 2)) + size;
 			y = Math.floor(this.random() * (screen.height - size * 2)) + size;
-			if (!circlesOverlap(player.x, player.y, player.size, x, y, size * 2)) break;
+			const clear = arenaContacts(screen, x, y, size).length === 0;
+			if (clear && !circlesOverlap(player.x, player.y, player.size, x, y, size * 2)) break;
 		}
 
 		return new PointDot(this.newId(), timeStep, x, y, color, size, POINT_DOT_VALUE);
