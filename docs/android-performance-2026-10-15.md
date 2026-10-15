@@ -191,7 +191,35 @@ Per frame, the game made a new recorder for the scene, one for the room picture,
 
 - **Collections:** they fell by about 90 %, to below the steady bench's 12–21.
 - **Frames over budget:** these didn't move. Most of those ~94 collections didn't stall the main thread, and the GC waits were already small. Fixing the drips mainly removes a risk; it doesn't make frames faster here.
-- **Where the time goes:** what remains at this load is mostly not garbage collection. The main thread spends about 1 s per 15 s waiting on binder calls to `surfaceflinger` (about 900 waits of about 1.1 ms each). The steady bench showed the same. That is the next thing to look into for play.
+- **Where the time goes:** what remains at this load is mostly not garbage collection. The main thread spends about 1 s per 15 s waiting on binder calls to `surfaceflinger` (about 900 waits of about 1.1 ms each). That is the SurfaceView handing each finished frame to the compositor (`BLASTBufferQueue`, inside `eglSwapBuffers`): the normal cost of presenting from the main thread, about 1.6 ms a frame, and not a separate problem.
+
+### CPU profile of the main thread (2026-10-15)
+
+Taken with `simpleperf` on the drips bench, after the drip slots. It sampled the main thread at 4 kHz for 10 s, about 595 frames. The build had `<profileable android:shell="true"/>` added to the generated manifest. The native libraries were symbolized from `android/app/build/intermediates/merged_native_libs`.
+
+```
+adb shell simpleperf record --app com.johanssoninteractive.tiltling -t <main tid> -e cpu-clock -f 4000 --call-graph fp --duration 10 -o /data/local/tmp/perf.data
+```
+
+The main thread was busy 74 % of the time, about 12.4 ms of CPU per frame:
+
+| Where | Share of main thread | Per frame |
+|---|---|---|
+| **Skia drawing on the GPU** (`RNSkPictureRenderer::performDraw`) | 27 % | 4.6 ms |
+| – replaying the pictures into Ganesh, almost all `drawCircle` (each halo and glare gradient is rebuilt as a fragment processor per draw) | 12 % | 2.0 ms |
+| – flushing the ops to GL | 12 % | 2.1 ms |
+| – `eglSwapBuffers` | 3 % | 0.5 ms |
+| **Worklets on the UI runtime** (Hermes, every mapper and recording) | 28 % | 4.7 ms |
+| – Skia calls through JSI (host functions, property lookups, and a mutex locked on every call) | 13 % | 2.2 ms |
+| – declarative Skia nodes taking new values (`JsiRecorder::applyUpdates`, uniform conversion) | 3 % | 0.5 ms |
+| – the JS itself (`drawScene`'s loops, the uniform packing, the mappers) | 12 % | 2 ms |
+| **Reanimated committing view props** (`performOperations` → `ShadowTree::commit`) | 6 % | 1.0 ms |
+| **`Process.getProcessGroup`**, called by Android itself every frame, not by any code in the APK (likely OnePlus's frame-quality monitor) | 6 % | 1.0 ms |
+
+**What follows from this:**
+- **Something commits view props every frame.** Reanimated's commit costs about 1.0 ms. Fabric's mount and the window redraw after it cost about another 1.5 ms (`mountViews` 0.66 ms and `traversal` 0.86 ms per frame in the Perfetto traces). It happens in about 870 of 890 frames, with no gap over about 50 ms, even when no dot is being caught. So it isn't the catch effects, and it isn't `DotButton`, whose tilt-driven values go to Skia, not to view props. Finding it is the cheapest win, at up to about 2.5 ms a frame.
+- **Drawing the free dots costs about 4 ms on both sides of the JSI bridge.** About 12 Skia calls per dot cost about 2.2 ms through JSI. Skia then spends about 1.6 ms turning those circles into GPU ops. Batching them with `drawAtlas` (R6) would hit both. It is now backed by measurement, not just a guess.
+- **`getProcessGroup` is out of our hands.** It comes from the phone's own system code.
 
 ## 3. Findings
 
