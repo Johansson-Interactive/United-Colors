@@ -1,77 +1,137 @@
 # Tiltling — store listing copy
 
-Draft for the current game. Both names and short descriptions fit Google's 30/80-character limits; full descriptions are below 4,000 characters. Choose the default language and add the other as a localization. These listing translations do not imply that the game UI is localized.
+Copy and graphics for the main store listing, in the voice of the landing page (johanssoninteractive.com). Both names and short descriptions fit Google's 30/80-character limits and avoid ranking or rating words such as "best", "top" or "record", which Play rejects in short descriptions; full descriptions are about 1,150 of 4,000 characters. Choose the default language and add the other as a localization. These listing translations do not imply that the game UI is localized.
+
+The rules paragraphs follow the landing page's "table manners": each opens with the word the game would say (Gulp, Ptoo, Switch, Combo), and the screenshots use the same words.
 
 ## English
 
 App name: **Tiltling**
 
-Short description:
+Short description (75 characters):
 
-> Tilt, catch matching colours, and chase your best score
+> Tilt your phone to steer a hungry dot. It only eats dots of its own colour.
 
 Full description:
 
-> Tilt your phone to steer your dot through a world of colour.
+> Meet Tiltling, a small, hungry dot that goes where your phone tilts. It only eats dots of its own colour.
 >
-> Catch small dots that match your colour and avoid the others. Catch a large, pulsing point dot to change colour and earn extra score—then adapt to your new colour before the next catch.
+> Tiltling is a picky eater. Here is how dinner goes:
 >
-> Make catches in quick succession to build a combo. As more dots enter the playfield, every movement matters. How far can you push your best score?
+> GULP. Small dots drip from the walls and bounce across the playfield. Steer Tiltling into the ones that match its colour.
 >
-> • Tilt controls with adjustable sensitivity and calibration.
-> • Colourful, fluid animation and a dot-matrix interface.
-> • Original music, sound effects and haptic feedback.
-> • Separate music and sound controls.
-> • Your best score and settings saved on your device.
-> • Offline, single-player gameplay with no account, ads or in-app purchases.
+> PTOO! Touch a dot of any other colour and Tiltling spits it out. That is the end of the run.
+>
+> SWITCH. Now and then a large, pulsing point dot appears. Tiltling eats any of those, but takes on the colour of what it ate. Rethink your next move at once.
+>
+> COMBO. Feed it in quick succession and the combo grows, with every catch paying more than the last.
+>
+> As the playfield fills up, every tilt counts. How far can you take Tiltling?
+>
+> Everything is a dot: every control, every letter, every score.
+>
+> • Tilt controls in three speeds, calibrated to however you like to hold your phone
+> • Colourful, fluid animation in a dot-matrix style
+> • Original music, sound effects and haptic feedback
+> • Separate music and sound settings
+> • Your best score and settings saved on your device
+> • Offline single-player game: no account, no ads, no in-app purchases
 >
 > Designed for portrait play on a phone with motion sensors.
+
+Release notes (What's new): `The first release of Tiltling.`
 
 ## Svenska
 
 Appnamn: **Tiltling**
 
-Kort beskrivning:
+Kort beskrivning (78 tecken):
 
-> Luta mobilen, fånga prickar i rätt färg och slå ditt rekord
+> Luta mobilen och styr en hungrig prick. Den äter bara prickar i sin egen färg.
 
 Fullständig beskrivning:
 
-> Luta mobilen och styr din prick genom en värld av färg.
+> Möt Tiltling, en liten, hungrig prick som åker dit du lutar mobilen. Den äter bara prickar i sin egen färg.
 >
-> Fånga små prickar som har samma färg som din egen och undvik de andra. Fånga en stor, pulserande poängprick för att byta färg och få extra poäng. Anpassa dig sedan till din nya färg inför nästa fångst.
+> Tiltling är kräsen. Så här går middagen till:
 >
-> Fånga flera prickar i snabb följd för att bygga en kombo. När fler prickar kommer in på spelplanen blir varje rörelse viktig. Hur långt kan du höja ditt rekord?
+> SMASK. Små prickar droppar från väggarna och studsar över spelplanen. Styr Tiltling till dem som har samma färg.
 >
-> • Lutningsstyrning med justerbar känslighet och kalibrering.
-> • Färgstarka, mjuka animationer och ett gränssnitt byggt av prickar.
-> • Egen musik, ljudeffekter och haptisk återkoppling.
-> • Separata reglage för musik och ljud.
-> • Rekord och inställningar sparas på din enhet.
-> • Spela offline på egen hand, utan konto, annonser eller köp i appen.
+> PTOO! Nuddar den en prick i någon annan färg spottar Tiltling ut den. Då är rundan över.
+>
+> NY FÄRG. Då och då dyker en stor, pulserande poängprick upp. Den äter Tiltling oavsett färg, men tar då färgen av det den åt. Tänk om direkt.
+>
+> KOMBO. Mata den i snabb följd så växer kombon, och varje fångst ger mer än den förra.
+>
+> När spelplanen fylls blir varje lutning viktig. Hur långt kan du ta Tiltling?
+>
+> Allt är prickar: varje knapp, varje bokstav, varje poäng.
+>
+> • Lutningsstyrning i tre hastigheter, kalibrerad efter hur du vill hålla mobilen
+> • Färgstarka, mjuka animationer i prickmatrisstil
+> • Egen musik, ljudeffekter och haptisk återkoppling
+> • Separata inställningar för musik och ljud
+> • Rekord och inställningar sparas på din enhet
+> • Offlinespel för en spelare: inget konto, inga annonser, inga köp i appen
 >
 > Utformat för stående spel på en mobil med rörelsesensorer.
+
+Versionsinformation (Nyheter): `Första versionen av Tiltling.`
 
 ## Contact fields
 
 - Developer display name: **Fredrik Johansson**, brand **Johansson Interactive**; match the public name actually configured in your personal Play developer profile.
 - Public support email: **support@johanssoninteractive.com**. Proposed mailbox: create and monitor it before publishing.
-- Website: proposed `https://johanssoninteractive.com/tiltling/support.html` on Vercel.
-- Privacy policy: proposed `https://johanssoninteractive.com/tiltling/privacy.html` on Vercel.
+- Website: `https://johanssoninteractive.com/` (the Tiltling landing page).
+- Privacy policy: `https://johanssoninteractive.com/tiltling/privacy` (Vercel serves the pages without `.html`).
 
-## Visual assets to prepare
+## Graphics
 
-Store listing assets are distinct from the launcher adaptive icon.
+All files are in `assets/google-play/`, generated by `python3 scripts/store-assets.py` (Pillow only) from the app icon, the captures in `captures/` and the game's dot-matrix alphabet. Rerun it after replacing or adding a capture. Store listing assets are distinct from the launcher adaptive icon.
 
-| Asset | Specification / proposed content | Location |
-| --- | --- | --- |
-| Store icon | 512 × 512 PNG, 32-bit, at most 1,024 KB. Export from existing 1024 × 1024 artwork; follow Play's icon rules. | Source: `assets/icon.png`; proposed export: `assets/google-play/icon.png` |
-| Feature graphic | 1024 × 500 JPEG or 24-bit PNG without alpha. Use existing dot artwork and Tiltling branding, with no prices, ratings or award claims. | Proposed: `assets/google-play/feature-graphic.png` |
-| Phone screenshots | At least 2; propose 4 real Android captures at 1080 × 1920 portrait. JPEG or 24-bit PNG without alpha. General permitted dimensions: 320–3840 px, longest side no more than twice the shortest. | Proposed: `assets/google-play/screenshots/` |
-| Preview video | Optional. Capture actual tilt gameplay if produced. | Public/unlisted eligible YouTube URL after upload. |
+| Console field | File | Format | Play requirement |
+| --- | --- | --- | --- |
+| App icon (Appikon) | `icon.png` | 512 × 512, 32-bit PNG, 243 KB | 512 × 512 32-bit PNG, at most 1,024 KB |
+| Feature graphic (Funktionsbild) | `feature-graphic.png` (en-US), `feature-graphic-sv-SE.png` | 1024 × 500, 24-bit PNG, no alpha | PNG or JPEG, 1024 × 500, at most 15 MB |
+| Phone screenshots (Skärmbilder för mobiler) | `screenshots/en-US/01–05`, `screenshots/sv-SE/01–05` | 1080 × 1920 (9:16), 24-bit PNG, under 650 KB each | 2–8; PNG or JPEG at most 8 MB; 16:9 or 9:16; each side 320–3,840 px |
 
-Screenshot sequence: (1) title with tilt bowl, (2) active gameplay showing colour matching, (3) a point-dot catch or combo, (4) game-over best score or sensitivity settings. Use representative real game states, no simulated ratings or fake gameplay. Capture tablet images only if you distribute and test on tablets; follow any additional form-factor requirements Console displays.
+Promotion: Play shows games in its screenshot-based recommendations only with at least four screenshots, three of them 9:16 and at least 1080 × 1920 showing the game. All five are 9:16 at 1080 × 1920 and show the game.
 
-No new graphics or screenshots are included in this preparation. The existing app icon is available; these export paths are proposals.
+The feature graphic sets the name in the game's alphabet, one game colour per letter, over a deep blue-violet with the three colours glowing in from the edges. Play's own background is dark, so the game's near-black ink would make it disappear there. Everything that matters sits in the middle, away from cropped edges. It has no price, ranking or call to action, and it doesn't repeat the icon. The previous version was on near-black ink, had a transparency channel and was off-centre; a copy is still at `public/og-tiltling.png` in the website repository.
 
-Requirements: [Google Play preview assets](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en) and [store listing fields](https://support.google.com/googleplay/android-developer/answer/9859152?hl=en).
+Each screenshot is a real, unedited capture of play, shown whole under a caption band covering 18% of the height (Play allows up to 20%). The band holds the game's word in its dot-matrix alphabet and one plain line in Roboto, the font of the game's own captions on Android. There are no device frames, badges or calls to action. Captions are localised; the captures themselves show the English game UI.
+
+| # | Capture | en-US caption | sv-SE caption |
+| --- | --- | --- | --- |
+| 1 | Gameplay, score 147 | GULP · Steer Tiltling into dots of its own colour | SMASK · Styr Tiltling till prickar i sin egen färg |
+| 2 | Title, best 180 | TILT · A small, hungry dot that goes where you tilt | LUTA · En liten, hungrig prick som åker dit du lutar |
+| 3 | Game over, 152 | AGAIN? · How far can you take Tiltling? | IGEN? · Hur långt kan du ta Tiltling? |
+| 4 | Speed | YOUR SPEED · Slow, normal or fast. Tilt to feel each one. | DITT TEMPO · Långsam, normal eller snabb. Luta och känn efter. |
+| 5 | Calibrate | YOUR GRIP · Level is however you like to hold your phone | DITT GREPP · Kalibrera efter hur du vill hålla mobilen |
+
+The captures are 1260 × 2736 iPhone screenshots of human play (the same ones as on the landing page). The script crops each to 9:16 around what is on screen; the game draws no system bars, so nothing else changes. The game UI is identical on Android.
+
+### Three more shots to capture
+
+The script also has captions for three moments: `switch.png` (a point dot about to be eaten, or just eaten), `combo.png` (a combo pop during quick catches) and `ptoo.png` (Tiltling spitting out a wrong dot). It inserts them as screenshots 2–4 as soon as the files exist in `captures/`. Busy fields like these come only after a minute or two of real play, so take them by hand on a phone, in portrait, with any 9:16 or taller resolution. An Android emulator can't stand in: on API 34 it doesn't draw the play canvas, and a scripted player doesn't survive long enough for the field to fill.
+
+### Alt text
+
+Feature graphic (140 characters at most):
+
+- en-US: The name Tiltling in pink, blue and green dots, with a hungry pink dot about to catch a smaller pink one
+- sv-SE: Namnet Tiltling i rosa, blå och gröna prickar, med en hungrig rosa prick som ska fånga en mindre rosa prick
+
+Screenshots, if Console asks:
+
+1. A round in progress: a pink Tiltling among pink, blue and green dots, with the score 147 in pink dots / En runda pågår: en rosa Tiltling bland rosa, blå och gröna prickar, med poängen 147 i rosa prickar
+2. The title screen: Tiltling in pink, blue and green dots above a bowl holding a blue play button / Startskärmen: Tiltling i rosa, blå och gröna prickar ovanför en skål med en blå spelknapp
+3. Game over with a score of 152 in blue dots, best 180, and buttons to play again or go to the menu / Game over med 152 poäng i blå prickar, rekord 180, och knappar för att spela igen eller gå till menyn
+4. The speed setting: Tiltling in a bowl above three buttons for slow, normal and fast / Hastighetsinställningen: Tiltling i en skål ovanför tre knappar för långsam, normal och snabb
+5. Calibration: a green Tiltling settling in a ring, with the words keep still or tap to set now / Kalibrering: en grön Tiltling som lägger sig till rätta i en ring, med orden keep still or tap to set now
+
+### Preview video
+
+Optional, but Google recommends one for games, and some game placements need one. Use a public or unlisted YouTube video with ads off and no age restriction. Show real tilt gameplay within the first 10 seconds, keep it short (only the first 30 seconds autoplay), and don't add black side bars. Without a video, the feature graphic shows with nothing on top of it.
+
+Requirements: [Google Play preview assets](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en), [store listing fields](https://support.google.com/googleplay/android-developer/answer/9859152?hl=en) and [metadata policy](https://support.google.com/googleplay/android-developer/answer/9898842?hl=en).
