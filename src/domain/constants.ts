@@ -11,7 +11,17 @@ export const GAME_HERTZ = 30.0;
 /** Small dot rules */
 export const SMALL_DOT_SPEED_RATIO = 0.02;
 export const SMALL_DOT_SIZE_RATIO = 0.0625;
+/** Ticks between small dots at the start of a game (4 s: 15 a minute), and always in kiosk */
 export const SMALL_DOT_CREATE_INTERVAL = 120;
+/**
+ * Difficulty ramp: small dots arrive this many more per minute with every minute played,
+ * without limit (15 a minute at the start, 25 after a minute, 60 at 4:30). The rate rises in a
+ * straight line rather than the interval falling in one: the legacy interval ran down to 0 at
+ * 4:00, which held the rate nearly flat for two minutes and then sent it to infinity, so every
+ * run ended by about 3:55 however well it was played. A steadily rising rate asks a steadily
+ * rising number of catches a second of the player, so a better player lasts longer in step
+ */
+export const SMALL_DOT_RATE_GROWTH = 10;
 /**
  * A small dot begins as a drip forming on a wall over the spawn wait, then shoots off it. A
  * drip never forms faster than this many ticks, so it still reads as a drop swelling; past
@@ -72,9 +82,6 @@ export const PLAYER_SPEED_PER_DEGREE = 40;
 /** The range the tilt sensitivity (a multiple of the default speed) is kept within */
 export const TILT_SENSITIVITY_MIN = 0.25;
 export const TILT_SENSITIVITY_MAX = 4;
-
-/** Difficulty ramp -- spawn interval reaches minimum at this step count */
-export const MAX_TIME_DIFFICULTY = 7200;
 
 /** Maximum dots in the world simultaneously */
 export const DOT_LIMIT = 200;

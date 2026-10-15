@@ -1,17 +1,23 @@
 import {
 	DOT_LIMIT,
 	GAME_COLORS,
+	GAME_HERTZ,
 	KIOSK_DOT_LIMIT,
-	MAX_TIME_DIFFICULTY,
 	POINT_DOT_TIME_BETWEEN,
 	SMALL_DOT_CREATE_INTERVAL,
 	SMALL_DOT_HEADING_SPREAD,
 	SMALL_DOT_MIN_GROW_TICKS,
+	SMALL_DOT_RATE_GROWTH,
 	SMALL_DOT_SIZE_RATIO,
 } from "../../domain/constants";
 import { SpawnSystem } from "../../domain/engine/SpawnSystem";
 import { PlayerDot } from "../../domain/entities/PlayerDot";
 import type { SmallDot } from "../../domain/entities/SmallDot";
+
+/** Ticks in a minute. One minute in, dots come 25 a minute: one every 72 ticks */
+const MINUTE = GAME_HERTZ * 60;
+/** So far into a run (200 minutes) that the spawn interval is under a tick */
+const LATE = 200 * MINUTE;
 
 /** Run a drip until it has shot off its wall */
 function launched(dot: SmallDot): SmallDot {
@@ -28,25 +34,43 @@ describe("SpawnSystem", () => {
 	});
 
 	describe("spawn wait time", () => {
-		it("returns full interval at time step 0", () => {
+		/** Dots a minute at this time step */
+		const rate = (timeStep: number) => MINUTE / spawn.getSpawnWaitTime(timeStep, false);
+
+		it("returns the full interval at time step 0", () => {
 			expect(spawn.getSpawnWaitTime(0, false)).toBe(SMALL_DOT_CREATE_INTERVAL);
+			expect(rate(0)).toBeCloseTo(15);
 		});
 
-		it("returns half interval at midpoint", () => {
-			const mid = MAX_TIME_DIFFICULTY / 2;
-			expect(spawn.getSpawnWaitTime(mid, false)).toBe(SMALL_DOT_CREATE_INTERVAL * 0.5);
+		it("adds the same number of dots a minute with every minute played", () => {
+			expect(rate(MINUTE)).toBeCloseTo(15 + SMALL_DOT_RATE_GROWTH);
+			expect(spawn.getSpawnWaitTime(MINUTE, false)).toBeCloseTo(72);
+			expect(rate(4.5 * MINUTE)).toBeCloseTo(60);
+			for (let minute = 0; minute < 30; minute++) {
+				expect(rate((minute + 1) * MINUTE) - rate(minute * MINUTE)).toBeCloseTo(
+					SMALL_DOT_RATE_GROWTH,
+				);
+			}
 		});
 
-		it("returns 0 at max difficulty", () => {
-			expect(spawn.getSpawnWaitTime(MAX_TIME_DIFFICULTY, false)).toBe(0);
+		it("has no wall at four minutes, where the legacy interval ran down to 0", () => {
+			expect(spawn.getSpawnWaitTime(4 * MINUTE, false)).toBeGreaterThan(30);
+			expect(rate(5 * MINUTE)).toBeCloseTo(65);
 		});
 
-		it("caps at 0 beyond max difficulty", () => {
-			expect(spawn.getSpawnWaitTime(MAX_TIME_DIFFICULTY + 1000, false)).toBe(0);
+		it("keeps shortening without limit", () => {
+			let previous = spawn.getSpawnWaitTime(0, false);
+			for (let step = MINUTE; step <= LATE; step += MINUTE) {
+				const wait = spawn.getSpawnWaitTime(step, false);
+				expect(wait).toBeLessThan(previous);
+				expect(wait).toBeGreaterThan(0);
+				previous = wait;
+			}
+			expect(spawn.getSpawnWaitTime(LATE, false)).toBeLessThan(1);
 		});
 
-		it("always returns full interval in kiosk mode", () => {
-			expect(spawn.getSpawnWaitTime(MAX_TIME_DIFFICULTY, true)).toBe(SMALL_DOT_CREATE_INTERVAL);
+		it("always returns the full interval in kiosk mode", () => {
+			expect(spawn.getSpawnWaitTime(LATE, true)).toBe(SMALL_DOT_CREATE_INTERVAL);
 		});
 	});
 
@@ -88,37 +112,35 @@ describe("SpawnSystem", () => {
 
 		it("forms faster as the difficulty rises, never faster than the floor", () => {
 			expect(spawn.getDripGrowTicks(0, false)).toBe(SMALL_DOT_CREATE_INTERVAL + 1);
-			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY / 2, false)).toBe(
-				SMALL_DOT_CREATE_INTERVAL / 2 + 1,
-			);
-			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
-			expect(spawn.getDripGrowTicks(MAX_TIME_DIFFICULTY, true)).toBe(SMALL_DOT_CREATE_INTERVAL + 1);
-			const drip = spawn.trySpawnSmallDot(MAX_TIME_DIFFICULTY, 0, screen, 100, false);
+			expect(spawn.getDripGrowTicks(MINUTE, false)).toBe(72 + 1);
+			expect(spawn.getDripGrowTicks(LATE, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
+			expect(spawn.getDripGrowTicks(LATE, true)).toBe(SMALL_DOT_CREATE_INTERVAL + 1);
+			const drip = spawn.trySpawnSmallDot(LATE, 0, screen, 100, false);
 			let ticks = 0;
 			while (drip?.isForming && ticks < 1000) drip.update(++ticks);
 			expect(ticks).toBe(SMALL_DOT_MIN_GROW_TICKS);
 		});
 
-		it("past the floor the walls drip from more places at once, keeping the legacy rate", () => {
+		it("past the floor the walls drip from more places at once, keeping the spawn rate", () => {
 			expect(spawn.getDripCount(0, false)).toBe(1);
-			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY / 2, false)).toBe(1);
-			// The legacy let one dot through per tick at the end; the floor alone would let
-			// through one per SMALL_DOT_MIN_GROW_TICKS
-			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
-			expect(spawn.getDripCount(MAX_TIME_DIFFICULTY, true)).toBe(1);
-			for (let step = 0; step <= MAX_TIME_DIFFICULTY; step += 10) {
-				const legacyPeriod = Math.floor(spawn.getSpawnWaitTime(step, false)) + 1;
+			expect(spawn.getDripCount(MINUTE, false)).toBe(1);
+			// That late a dot is due every tick; the floor alone would let through one per
+			// SMALL_DOT_MIN_GROW_TICKS
+			expect(spawn.getDripCount(LATE, false)).toBe(SMALL_DOT_MIN_GROW_TICKS);
+			expect(spawn.getDripCount(LATE, true)).toBe(1);
+			for (let step = 0; step <= LATE; step += 100) {
+				const period = Math.floor(spawn.getSpawnWaitTime(step, false)) + 1;
 				const rate = spawn.getDripCount(step, false) / spawn.getDripGrowTicks(step, false);
-				expect(rate).toBeGreaterThanOrEqual(1 / legacyPeriod / 1.4);
-				expect(rate).toBeLessThanOrEqual((1 / legacyPeriod) * 1.4);
+				expect(rate).toBeGreaterThanOrEqual(1 / period / 1.4);
+				expect(rate).toBeLessThanOrEqual((1 / period) * 1.4);
 			}
 			const system = new SpawnSystem(() => 0.5);
 			let started = 0;
 			for (let tick = 0; tick < SMALL_DOT_MIN_GROW_TICKS; tick++) {
-				if (system.trySpawnSmallDot(MAX_TIME_DIFFICULTY, started, screen, 100, false)) started++;
+				if (system.trySpawnSmallDot(LATE, started, screen, 100, false)) started++;
 			}
 			expect(started).toBe(SMALL_DOT_MIN_GROW_TICKS);
-			expect(system.trySpawnSmallDot(MAX_TIME_DIFFICULTY, started, screen, 100, false)).toBeNull();
+			expect(system.trySpawnSmallDot(LATE, started, screen, 100, false)).toBeNull();
 		});
 
 		it("does not exceed the kiosk or the overall dot limit", () => {
@@ -202,7 +224,7 @@ describe("SpawnSystem", () => {
 				if (drip) launched(drip);
 			}
 			// random() = 0.5 with player [0] excluded -> [1] and [2] equal -> 0.5 picks [2]
-			const dot = spawn.trySpawnPointDot(MAX_TIME_DIFFICULTY, player, screen, 100);
+			const dot = spawn.trySpawnPointDot(POINT_DOT_TIME_BETWEEN * 2, player, screen, 100);
 			expect(dot?.color).toBe(GAME_COLORS[2]);
 		});
 

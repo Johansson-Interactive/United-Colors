@@ -398,7 +398,7 @@ describe("GameEngine", () => {
 			const small = () => engine.getFrame().dots.find((d) => d.kind === "small");
 			engine.tick();
 			const first = small();
-			// At tick 1 the legacy wait has just dipped under the full interval
+			// At tick 1 the spawn wait has just dipped under the full interval
 			expect(first?.drip).toMatchObject({ progress: 1 / SMALL_DOT_CREATE_INTERVAL });
 			expect(first?.drip?.radius).toBe((SMALL_DOT_SIZE_RATIO * 100) / 2);
 			expect(first).toMatchObject({ vx: 0, vy: 0 });
@@ -498,12 +498,7 @@ describe("GameEngine", () => {
 			const engine = createEngine();
 			engine.startGame();
 
-			// Access spawn system via tick counting
-			// At step 0, wait = SMALL_DOT_CREATE_INTERVAL * (1 - 0/7200) = 120
-			// At step 3600, wait = 120 * (1 - 3600/7200) = 60
-			// At step 7200, wait = 120 * (1 - 7200/7200) = 0
-
-			// We'll verify by counting dots spawned over different intervals
+			// The spawn rate itself is covered in SpawnSystem.test.ts; we'll verify by counting dots spawned over different intervals
 			let _dots1 = 0;
 			for (let i = 0; i < 500; i++) {
 				engine.tick();

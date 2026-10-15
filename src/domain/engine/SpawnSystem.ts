@@ -1,12 +1,13 @@
 import {
 	DOT_LIMIT,
+	GAME_HERTZ,
 	KIOSK_DOT_LIMIT,
-	MAX_TIME_DIFFICULTY,
 	POINT_DOT_SIZE_RATIO,
 	POINT_DOT_TIME_BETWEEN,
 	POINT_DOT_VALUE,
 	SMALL_DOT_CREATE_INTERVAL,
 	SMALL_DOT_MIN_GROW_TICKS,
+	SMALL_DOT_RATE_GROWTH,
 	SMALL_DOT_SIZE_RATIO,
 	SMALL_DOT_SPEED_RATIO,
 } from "../constants";
@@ -27,13 +28,14 @@ const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
  *
  * A small dot is a drip: it forms on a wall over the spawn wait and then shoots off, and the
  * moment it has left (or been plucked off by the player) the next drip starts forming. So
- * the legacy's spawn interval is now how long a drip takes to form, which shortens as the
- * difficulty rises. A drip never forms faster than SMALL_DOT_MIN_GROW_TICKS, though: past
- * the point where the legacy interval would be shorter, enough drips form at once to keep
- * the dots arriving at the legacy's rate.
+ * the spawn interval is how long a drip takes to form, which shortens as the difficulty
+ * rises. A drip never forms faster than SMALL_DOT_MIN_GROW_TICKS, though: past the point
+ * where the interval would be shorter, enough drips form at once to keep the dots arriving
+ * at the interval's rate.
  *
  * Small and point dots pick colors from separate weighted pickers; point dots never
- * spawn in the player's current color. Replicates legacy GameManager spawn logic.
+ * spawn in the player's current color. Replicates legacy GameManager spawn logic, apart from
+ * the difficulty ramp (see SMALL_DOT_RATE_GROWTH).
  */
 export class SpawnSystem implements Spawner {
 	/** Ids run from 0 in each game, so the same seed spawns the same dots */
@@ -62,19 +64,22 @@ export class SpawnSystem implements Spawner {
 	}
 
 	/**
-	 * Calculate spawn wait time based on difficulty curve.
-	 * Spawn interval decreases linearly from SMALL_DOT_CREATE_INTERVAL to 0.
+	 * Ticks between small dots: one over the spawn rate, which starts at one per
+	 * SMALL_DOT_CREATE_INTERVAL and rises by SMALL_DOT_RATE_GROWTH a minute every minute
 	 */
 	getSpawnWaitTime(timeStep: number, isKiosk: boolean): number {
 		if (isKiosk) return SMALL_DOT_CREATE_INTERVAL;
 
-		const percent = Math.min(timeStep / MAX_TIME_DIFFICULTY, 1);
-		return SMALL_DOT_CREATE_INTERVAL * (1 - percent);
+		const ticksPerMinute = GAME_HERTZ * 60;
+		const perMinute =
+			ticksPerMinute / SMALL_DOT_CREATE_INTERVAL +
+			(SMALL_DOT_RATE_GROWTH * timeStep) / ticksPerMinute;
+		return ticksPerMinute / perMinute;
 	}
 
 	/**
-	 * Ticks a drip started now takes to form: the legacy spawn interval (over which the
-	 * legacy let one dot through), floored at SMALL_DOT_MIN_GROW_TICKS
+	 * Ticks a drip started now takes to form: the spawn interval (over which one dot comes
+	 * through, as the legacy counted it), floored at SMALL_DOT_MIN_GROW_TICKS
 	 */
 	getDripGrowTicks(timeStep: number, isKiosk: boolean): number {
 		const period = Math.floor(this.getSpawnWaitTime(timeStep, isKiosk)) + 1;
@@ -83,7 +88,7 @@ export class SpawnSystem implements Spawner {
 
 	/**
 	 * How many drips form at once: one, until the floor on the forming time would let fewer
-	 * dots through than the legacy interval did; then as many as keep that rate
+	 * dots through than the spawn interval calls for; then as many as keep that rate
 	 */
 	getDripCount(timeStep: number, isKiosk: boolean): number {
 		const period = Math.floor(this.getSpawnWaitTime(timeStep, isKiosk)) + 1;
