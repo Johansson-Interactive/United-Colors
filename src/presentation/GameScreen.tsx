@@ -76,9 +76,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
-	// Subscribe to phase/score only: dot positions never go through React
+	// Phase only, and the score for the game over: the HUD reads its own, dots never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
-	const score = useStore(store, (s) => s.frame.score);
+	const gameOverScore = useStore(store, (s) => (s.frame.phase === "GAME_OVER" ? s.frame.score : 0));
 	const highScore = useStore(store, (s) => s.highScore);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
 	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
@@ -297,7 +297,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
 						{screen.kind === "hud" && (
-							<HUD score={score} color={playerColor} onPause={handlePause} corners={corners} />
+							<HUD store={store} color={playerColor} onPause={handlePause} corners={corners} />
 						)}
 
 						{screen.kind === "title" && (
@@ -348,7 +348,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 						{screen.kind === "gameOver" && (
 							<GameOverOverlay
-								score={score}
+								score={gameOverScore}
 								verdict={screen.verdict}
 								color={playerColor}
 								onRetry={handleRetryPress}

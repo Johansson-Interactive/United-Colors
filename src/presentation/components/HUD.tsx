@@ -7,6 +7,8 @@ import Animated, {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
+import { useStore } from "zustand";
+import type { GameStore } from "../../application/GameStore";
 import type { Corners } from "../../domain/types";
 import { SCORE_BUMP_MS, scoreBumpScale } from "../effects/scoreBump";
 import { cornerButton } from "../layout/cornerButton";
@@ -15,7 +17,8 @@ import { DotMatrixText } from "./DotMatrixText";
 import { IconDot } from "./IconDot";
 
 interface HUDProps {
-	score: number;
+	/** The score is read here, so a catch re-renders the HUD alone */
+	store: GameStore;
 	/** The player's current colour; the score wears it so a switch is always visible */
 	color: string;
 	onPause: () => void;
@@ -26,7 +29,8 @@ interface HUDProps {
 const PAUSE_SIZE = 44;
 const PAUSE_OFFSET = { top: 12, right: 16 };
 
-export const HUD: React.FC<HUDProps> = ({ score, color, onPause, corners }) => {
+export const HUD: React.FC<HUDProps> = ({ store, color, onPause, corners }) => {
+	const score = useStore(store, (s) => s.frame.score);
 	// Progress through the bump (see scoreBump.ts), at rest at 1 between catches
 	const bump = useSharedValue(1);
 	useEffect(() => {
