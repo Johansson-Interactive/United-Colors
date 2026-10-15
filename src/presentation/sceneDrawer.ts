@@ -1,6 +1,11 @@
 import {
+	BlendMode,
 	type SkCanvas,
+	type SkColor,
+	type SkImage,
 	Skia,
+	type SkRect,
+	type SkRSXform,
 	type SkRuntimeEffect,
 	TileMode,
 	vec,
@@ -18,6 +23,23 @@ import {
 } from "../application/sceneRecord";
 import { GAME_COLORS } from "../domain/constants";
 import {
+	BODY_CELL,
+	BODY_PX,
+	type DotSprites,
+	dotSprites,
+	GLARE_RADIUS,
+	GLARE_STEPS,
+	glareCell,
+	glareOffset,
+	glareStepDistance,
+	HALO_CELL,
+	HALO_PX,
+	packDotSprites,
+	SHEET_HEIGHT,
+	SHEET_WIDTH,
+	type SpriteBatch,
+} from "./dotSprites";
+import {
 	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
 	type MergeUniformsByName,
@@ -31,15 +53,6 @@ import {
 	type WallDropSlot,
 	wallDropSlots,
 } from "./wallDropShader";
-
-/** Glare centre offset and radius relative to a unit-radius dot, when the device is level */
-const GLARE_OFFSET = -0.28;
-const GLARE_RADIUS = 0.75;
-/** How far (unit radii per radian of tilt) the light slides across each dot */
-const GLARE_TILT_GAIN = 0.45;
-const GLARE_MAX_OFFSET = 0.55;
-/** Halo (soft glow behind each non-player dot) size relative to its radius */
-const HALO_SCALE = 1.9;
 
 // Paints and colours are built once on the JS thread and captured by the drawing worklet,
 // so a frame only sets the fill colour and draws.
@@ -88,26 +101,81 @@ export const WALL_DROP_EFFECT = compileEffect("wall drop", WALL_DROP_SKSL);
 const WALL_DROP_PAINT = Skia.Paint();
 WALL_DROP_PAINT.setAntiAlias(true);
 
-/** Unit-space soft glow per game colour, indexed like FILL_COLORS */
-const HALO_PAINTS = FILL_COLORS.map((color) => {
-	const paint = Skia.Paint();
-	paint.setAntiAlias(true);
-	const withAlpha = (alpha: number) => {
-		const c = Float32Array.from(color);
-		c[3] = alpha;
-		return c;
-	};
-	paint.setShader(
+/**
+ * The sprite sheet the free dots are drawn from (see dotSprites.ts), in white: the halo, the
+ * body, and the glare at each of its distances from the centre. Drawn once, into a raster
+ * image any thread can draw.
+ */
+const SPRITE_SHEET: SkImage = (() => {
+	const surface = Skia.Surface.Make(SHEET_WIDTH, SHEET_HEIGHT);
+	if (!surface) throw new Error("sprite sheet surface failed");
+	const canvas = surface.getCanvas();
+	const white = (alpha: number) => Float32Array.of(1, 1, 1, alpha);
+	const halo = Skia.Paint();
+	halo.setAntiAlias(true);
+	halo.setShader(
 		Skia.Shader.MakeRadialGradient(
-			vec(0, 0),
-			1,
-			[withAlpha(0.5), withAlpha(0.16), withAlpha(0)],
+			vec(HALO_CELL / 2, HALO_CELL / 2),
+			HALO_PX,
+			[white(0.5), white(0.16), white(0)],
 			[0.3, 0.6, 1],
 			TileMode.Clamp,
 		),
 	);
-	return paint;
-});
+	canvas.drawCircle(HALO_CELL / 2, HALO_CELL / 2, HALO_PX, halo);
+	const body = Skia.Paint();
+	body.setAntiAlias(true);
+	body.setColor(white(1));
+	canvas.drawCircle(HALO_CELL + BODY_CELL / 2, BODY_CELL / 2, BODY_PX, body);
+	// Each glare lies to the right of its cell's centre; drawing turns it toward the light
+	for (let step = 0; step < GLARE_STEPS; step++) {
+		const cell = glareCell(step);
+		const cx = cell.x + BODY_CELL / 2;
+		const cy = cell.y + BODY_CELL / 2;
+		const glare = Skia.Paint();
+		glare.setAntiAlias(true);
+		glare.setShader(
+			Skia.Shader.MakeRadialGradient(
+				vec(cx + glareStepDistance(step) * BODY_PX, cy),
+				GLARE_RADIUS * BODY_PX,
+				[white(0.55), white(0)],
+				null,
+				TileMode.Clamp,
+			),
+		);
+		canvas.drawCircle(cx, cy, BODY_PX, glare);
+	}
+	surface.flush();
+	return surface.makeImageSnapshot();
+})();
+
+const ATLAS_PAINT = Skia.Paint();
+
+/** The sprite buffers for the thread drawing the scene, made there on its first frame */
+function spriteBuffers(): DotSprites {
+	"worklet";
+	const g = globalThis as { __tiltlingDotSprites?: DotSprites };
+	if (g.__tiltlingDotSprites === undefined) g.__tiltlingDotSprites = dotSprites();
+	return g.__tiltlingDotSprites;
+}
+
+/** Draw a batch of sprites from the sheet, each tinted by its colour unless `tinted` is false */
+function drawSprites(canvas: SkCanvas, batch: SpriteBatch, tinted: boolean) {
+	"worklet";
+	const n = batch.count;
+	if (n === 0) return;
+	// Skia reads plain objects shaped as rects and RSXforms, and colours by index, so reused
+	// JS objects stand in for host objects that would be made per sprite per frame. It only
+	// reads the blend mode when a sixth argument is passed, so `undefined` stands for no colours
+	canvas.drawAtlas(
+		SPRITE_SHEET,
+		batch.cells[n] as unknown as SkRect[],
+		batch.placements[n] as unknown as SkRSXform[],
+		ATLAS_PAINT,
+		BlendMode.Modulate,
+		tinted ? (batch.colors[n] as SkColor[]) : undefined,
+	);
+}
 
 /**
  * The scene is drawn in layers around the shader nodes the canvas draws: below the wall drops
@@ -162,15 +230,6 @@ export function wallDrops(dots: Float32Array): WallDropSlot[] {
 	return wallDropSlots(dots, FILL_COLORS);
 }
 
-/** Where the glare sits on a unit dot for a light tilted by `light` radians, clamped on the dot */
-function glareOffset(light: number): number {
-	"worklet";
-	return Math.max(
-		-GLARE_MAX_OFFSET,
-		Math.min(GLARE_MAX_OFFSET, GLARE_OFFSET - light * GLARE_TILT_GAIN),
-	);
-}
-
 /**
  * Draw one frame of the scene (see sceneRecord.ts for the records) on the UI thread, lit from
  * a light tilted by (`lightX`, `lightY`) radians.
@@ -215,7 +274,7 @@ export function drawScene(
 	// needs more than its place, size and colour: calling a worklet allocates on every call,
 	// and four passes over every dot would set off a garbage collection nearly every frame
 	// (see FIELD in sceneRecord.ts)
-	const { X, Y, RADIUS, COLOR, KIND, MERGE, STRETCH_X, STRETCH_Y, WALL_X, WALL_Y, STRIDE } = FIELD;
+	const { X, Y, RADIUS, KIND, STRETCH_X, STRETCH_Y, WALL_X, WALL_Y, STRIDE } = FIELD;
 	const SMALL = KIND_CODE.small;
 	const POINT = KIND_CODE.point;
 	const PLAYER = KIND_CODE.player;
@@ -229,22 +288,14 @@ export function drawScene(
 		drawDropGlares();
 		return;
 	}
-	// Halos first so no glow sits on top of a neighbouring body; a merging dot's halo
-	// shrinks away as the dot slides into the player
-	for (let i = 0; i < count; i++) {
-		const o = i * STRIDE;
-		const radius = dots[o + RADIUS];
-		const kind = dots[o + KIND];
-		if (radius <= 0 || kind === PLAYER) continue;
-		const fade = kind === MERGING ? 1 - dots[o + MERGE] : 1;
-		const scale = radius * HALO_SCALE * fade;
-		if (scale <= 0) continue;
-		canvas.save();
-		canvas.translate(dots[o + X], dots[o + Y]);
-		canvas.scale(scale, scale);
-		canvas.drawCircle(0, 0, 1, HALO_PAINTS[dots[o + COLOR]]);
-		canvas.restore();
-	}
+	// Every halo first, so no glow sits on top of a neighbouring body (a merging dot's halo
+	// shrinks away as the dot slides into the player); then the plain small dots' bodies and
+	// glares, all as sprites (see dotSprites.ts)
+	const sprites = spriteBuffers();
+	packDotSprites(dots, gx, gy, FILL_COLORS, sprites);
+	drawSprites(canvas, sprites.halos, true);
+	drawSprites(canvas, sprites.bodies, true);
+	drawSprites(canvas, sprites.glares, false);
 	// A glass bead: body, the yolk of a point dot and glare, all stretched along its lean
 	function drawBead(bead: SceneDot) {
 		const { x, y, radius, stretchX: sx, stretchY: sy } = bead;
@@ -296,7 +347,8 @@ export function drawScene(
 		dropShader.dispose();
 		drawGlare(drop.x, drop.y, drop.radius);
 	}
-	// Free dots. The first WALL_DROP_SLOTS wall drops are the canvas's (see wallDrops)
+	// The other free dots, over the plain ones. The first WALL_DROP_SLOTS wall drops are the
+	// canvas's (see wallDrops)
 	let drops = 0;
 	for (let i = 0; i < count; i++) {
 		const o = i * STRIDE;
@@ -311,17 +363,6 @@ export function drawScene(
 			if (drops++ >= WALL_DROP_SLOTS) drawWallDrop(readDot(dots, i, dot));
 		} else if (kind === POINT || dots[o + STRETCH_X] !== 0 || dots[o + STRETCH_Y] !== 0) {
 			drawBead(readDot(dots, i, dot));
-		} else {
-			// A plain small dot, by far the most common: drawBead's body and glare, from the record
-			const x = dots[o + X];
-			const y = dots[o + Y];
-			FILL_PAINT.setColor(FILL_COLORS[dots[o + COLOR]]);
-			canvas.drawCircle(x, y, radius, FILL_PAINT);
-			canvas.save();
-			canvas.translate(x + gx * radius, y + gy * radius);
-			canvas.scale(radius, radius);
-			canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-			canvas.restore();
 		}
 	}
 	// The glare on each wall drop the canvas drew, over its body (see wallDrops)
