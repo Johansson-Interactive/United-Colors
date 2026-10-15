@@ -94,7 +94,7 @@ export function stepSettle(
 }
 
 /**
- * READY: the hold begins. Without a tilt sensor there is nothing to hold, so a flat pose,
+ * TAP: the hold begins. Without a tilt sensor there is nothing to hold, so a flat pose,
  * screen up, is set straight away.
  */
 export function startSettle(state: SettleState, tiltAvailable: boolean): SettleState {

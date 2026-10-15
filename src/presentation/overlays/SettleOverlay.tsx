@@ -55,18 +55,18 @@ const START_FADE_MS = 250;
 const HOLD_CAPTION = "keep still\nor tap to set now";
 
 const CAPTIONS: Record<SettlePhase, string> = {
-	waiting: "hold it the way you like to play\nthen tap ready and keep still",
+	waiting: "hold it the way you like to play\ntap, then keep still",
 	moving: HOLD_CAPTION,
 	settling: HOLD_CAPTION,
 	settled: "that’s level",
 };
 
 /**
- * Setting the level pose. The bowl opens dimmed under READY, its dot already rolling with the
+ * Setting the level pose. The bowl opens dimmed under TAP, its dot already rolling with the
  * hand, so there is time to read what to do. Once started there is no timer: hold the phone
  * comfortably and the bowl levels itself to your hand; the rest is done the moment the dot
  * comes to rest. Tapping anywhere then sets it from the pose just before the finger landed,
- * for the impatient. Without a tilt sensor, READY sets a flat pose straight away.
+ * for the impatient. Without a tilt sensor, TAP sets a flat pose straight away.
  *
  * The rules live in the settle stepper; every step, start and tap goes through it on the UI
  * thread, where the tilt is, so the pose and its side are read together and the settled state
@@ -82,7 +82,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const tiltAvailable = useTiltAvailable();
 	const [phase, setPhase] = useState<SettlePhase>("waiting");
 	const state = useSharedValue(WAITING_SETTLE);
-	// 1 while waiting to be started: the bowl is dimmed and READY shows over it
+	// 1 while waiting to be started: the bowl is dimmed and TAP shows over it
 	const waiting = useSharedValue(1);
 	const bowlRef = useRef<View>(null);
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,7 +118,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 			if (next === prev) return;
 			state.set(next);
 			if (next.phase === prev.phase) return;
-			// A started hold lifts READY; without a sensor it stays up through the snap
+			// A started hold lifts TAP; without a sensor it stays up through the snap
 			if (next.phase === "moving") waiting.set(withTiming(0, { duration: START_FADE_MS }));
 			const outcome = settleOutcome(next);
 			if (outcome) scheduleOnRN(finish, outcome);
@@ -152,7 +152,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const startStyle = useAnimatedStyle(() => ({ opacity: waiting.get() }));
 	const dim = useDerivedValue(() => waiting.get() * WAITING_DIM);
 
-	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap ready to continue";
+	const caption = tiltAvailable ? CAPTIONS[phase] : "no tilt sensor here\ntap to continue";
 	const isWaiting = phase === "waiting";
 
 	return (
@@ -180,12 +180,12 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 					onPress={handleStart}
 					pointerEvents={isWaiting ? "auto" : "none"}
 					accessibilityRole="button"
-					accessibilityLabel="Ready to calibrate"
+					accessibilityLabel="Start calibrating"
 					accessibilityElementsHidden={!isWaiting}
 				>
 					<SettleBowl size={BOWL_SIZE} color={color} state={state} dim={dim} />
 					<Animated.View style={[styles.start, startStyle]} pointerEvents="none">
-						<DotMatrixText text="READY" pitch={6} color={WHITE} glow />
+						<DotMatrixText text="TAP" pitch={6} color={WHITE} glow />
 					</Animated.View>
 				</Pressable>
 			</BowlStage>
