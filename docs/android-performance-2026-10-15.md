@@ -344,7 +344,44 @@ The garbage-collection stalls on the title are gone. The frames still over budge
 
   **The control settles it: the phone drifted.** The previous build (`883476e`), benched right after the bursts runs, came out the same: 3.8 / 4.4 % over budget, p95 16.5 / 16.6 ms, `queueBuffer` 2.66 / 3.26 ms per call. Bursts B and C (4.3 / 4.4 %, p95 16.5 ms) match it. Run A (7.9 %, 3.88 ms per `queueBuffer`) is the one outlier among the five. On frame time the change is neutral within the evening's drift; what it removes is the per-catch React renders, mounts and TextureViews.
 
+  **Correction (2026-10-16):** the `queueBuffer` totals above count two nested slices of one handoff, so they are twice the real time. The "drift" is the share of frames stuck in a late mode, not the phone; see "What the buffer handoff waits on".
+
 **Visual check:** pending on the device. Pops in place, rising, swelling and fading; amber from the second step of a combo; staggered on the same tick; the glow as before. Rings for a point catch and game over. Bursts shake with the final hit, stay sharp while the scene frosts, and fade with the stage under the settle bowl.
+
+### What the buffer handoff waits on (2026-10-16)
+
+Read from the existing traces (atlas, bursts and control runs) with `scripts/perf/buffer-queue.sql`, which `scripts/android-bench.sh` now runs too. No new build.
+
+**There is one handoff per frame, not two, and it goes to the game canvas.** A Skia render ends in `eglSwapBuffers`, which wraps `Surface::queueBuffer`, which wraps `BufferQueueProducer::queueBuffer`. The "two `queueBuffer` calls per frame" were these two nested slices, so summing them counted the same time twice. `onFrameAvailable` is not a TextureView either. It is the SurfaceView's BLAST consumer (`SurfaceView[…MainActivity]#1(BLAST Consumer)`), which on Android 12 runs inside the app, nested in that same `queueBuffer`. Its `processNextBufferLocked` sends the buffer to SurfaceFlinger with `setTransactionState`, a blocking binder call.
+
+- **Main-thread time:** the handoff takes 2.8–3.9 ms per frame, or 22–28 % of `animation`, not 35–45 %. Almost all of it is the binder call, which SurfaceFlinger's binder threads answer.
+- **TextureViews:** the long-lived ones swap 3–8 times per 15 s (the HUD score, on catches), at about 0.1 ms each.
+- **The pause button never redraws during play.** `IconDot` is a `ghost` `DotButton`, which reads a still tilt, so it has no glare to move. The bench feeds its scripted tilt to the whole app (`App.tsx`, `ScriptedTiltSensor`), so this holds while the tilt moves.
+- **P0-2 has nothing to remove:** no per-frame TextureView exists.
+
+**SurfaceFlinger holds the handoff until a fixed point in the frame.** On this phone (Android 12, OxygenOS `LE2123_11_C.62`), a buffer queued in the first half of SurfaceFlinger's period comes back from `setTransactionState` about 8.5 ms after the app's vsync alarm. A buffer queued later comes back in about 1 ms. SurfaceFlinger's binder thread sleeps until another of its binder threads wakes it, and that thread is woken by the vsync timer (`TimerDispatch`). The SurfaceFlinger internals behind this are not pinned down; the timing is.
+
+**That splits game frames into two steady modes:**
+- **On time:** the frame starts at vsync, swaps about 9 ms in, waits about 1 ms, and ends with time to spare.
+- **Late:** the frame starts right after an overrunning one, about 10 ms into the period. Its swap lands early in the next period, waits about 5 ms for the gate, and ends late, so the next frame starts late as well. A late frame escapes only if it swaps within about 6 ms of starting. Frames stay in this mode for long stretches.
+
+| Run | Handoff per call | Late frames | SF wait, on time / late | Frames over 16.7 ms |
+|---|---|---|---|---|
+| Atlas A | 2.82 ms | 37 % | 1.11 / 5.09 ms | 3.7 % |
+| Atlas B | 2.86 ms | 39 % | 0.93 / 5.24 ms | 3.4 % |
+| Bursts A | 3.94 ms | 64 % | 1.29 / 5.09 ms | 7.9 % |
+| Bursts B | 2.80 ms | 37 % | 1.07 / 5.11 ms | 4.3 % |
+| Bursts C | 3.82 ms | 58 % | 1.12 / 5.37 ms | 4.4 % |
+| Control A | 2.78 ms | 36 % | 1.16 / 5.01 ms | 3.8 % |
+| Control B | 3.39 ms | 50 % | 1.05 / 5.25 ms | 4.4 % |
+
+- **This explains the "drift" in `queueBuffer`.** The wait within each mode is the same in every run. What moves the mean per call is the share of frames stuck in the late mode, from 36 % to 64 %. So a mean `queueBuffer` per call is a poor A/B metric; compare the late share and the wait in each mode instead.
+- **Frames over budget:** they wait 5.6–6.7 ms on SurfaceFlinger, against 2.4–3.0 ms for the others (bursts B, control A and B). Without that wait, only 32–46 % of them would still be over 16.7 ms.
+- **Screen jank:** SurfaceFlinger's frame timeline marks most of the app's frames as "Buffer Stuffing" and "Late Present", with a handful of "App Deadline Missed". The app queues ahead of what SurfaceFlinger latches, so the extra wait shows mostly as latency, not as dropped frames.
+
+**Levers left:**
+- **Get frames back to on time.** Any main-thread work saved before the swap helps twice: the frame is shorter, and a late frame that swaps within about 6 ms of starting drops back to on time.
+- **A TextureView for the game canvas, as a probe** (drop `opaque` on the `<Canvas>` in `GameCanvas.tsx`, locally, not committed). A TextureView swap took about 0.1–0.8 ms on the main thread in every trace so far. The SurfaceFlinger transaction then happens on HWUI's RenderThread for the window, off the main thread. The cost comes back as a window redraw every frame (about 1.5–1.7 ms of `traversal` on the main thread in the R2 traces) and a blended composite. R2 measured that trade-off before the late mode was understood, on runs it could not compare. Only a back-to-back bench against the current build can decide it.
 
 ## 3. Findings
 
