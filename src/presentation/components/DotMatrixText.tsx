@@ -2,6 +2,7 @@ import {
 	Canvas,
 	createPicture,
 	Picture,
+	type SkCanvas,
 	Skia,
 	type SkPaint,
 	type SkShader,
@@ -9,7 +10,7 @@ import {
 	vec,
 } from "@shopify/react-native-skia";
 import type React from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import {
 	cancelAnimation,
@@ -27,6 +28,7 @@ import {
 	PARALLAX_GAIN,
 	paletteIndex,
 } from "../dotmatrix/layout";
+import { recordPicture } from "../recordPicture";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface DotMatrixTextProps {
@@ -161,8 +163,12 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 		animatedColor && glow ? glowShader(animatedColor.get(), opacity) : null,
 	);
 
-	const picture = useDerivedValue(() =>
-		createPicture((canvas) => {
+	// A picture that changes every frame (a wave, or parallax with the tilt) is recorded into one
+	// recorder kept for the text's life (see recordPicture.ts); any other is recorded afresh only
+	// when it changes
+	const [recorder] = useState(() => (wave || parallax ? Skia.PictureRecorder() : null));
+	const picture = useDerivedValue(() => {
+		const draw = (canvas: SkCanvas) => {
 			const { fills, glows } = paints;
 			const fill = liveFill.get();
 			if (fill) fills[0].setColor(fill);
@@ -199,8 +205,9 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 					}
 				}
 			}
-		}),
-	);
+		};
+		return recorder ? recordPicture(recorder, draw) : createPicture(draw);
+	});
 
 	return (
 		<Canvas style={[{ width, height }, style]} pointerEvents="none">

@@ -72,6 +72,16 @@ const LIQUID_MAX_FRAME_MS = 100;
 const DROP_EFFECT = Skia.RuntimeEffect.Make(DROP_SKSL);
 if (!DROP_EFFECT) throw new Error("drop shader failed to compile");
 
+/** The drop shader's uniforms for a dot that is not liquid, which never draws them */
+const NO_COLOR: [number, number, number, number] = [0, 0, 0, 0];
+const NO_DROP = {
+	center: vec(0, 0),
+	radius: 0,
+	jelly: [0, 0, 0],
+	color: NO_COLOR,
+	glare: [0, 0, 0],
+};
+
 /**
  * A button that is a dot. Solid dots look like the player's dot: lit glass with a glare
  * that follows the device tilt and a glow that brightens on touch. Ghost dots are thin
@@ -100,10 +110,14 @@ export const DotButton: React.FC<DotButtonProps> = ({
 	const glowRadius = useDerivedValue(() => radius * (1.08 + pressed.get() * 0.12));
 	const glowBlur = useDerivedValue(() => radius * (0.32 + pressed.get() * 0.1));
 	const glowOpacity = useDerivedValue(() => 0.55 + pressed.get() * 0.35);
+	// Only a solid dot has a glare; a ghost ring reads a still tilt, so it never re-runs this
+	const still = useSharedValue(0);
+	const glareTiltX = variant === "solid" ? tilt.x : still;
+	const glareTiltY = variant === "solid" ? tilt.y : still;
 	const glareCentre = useDerivedValue(() =>
 		vec(
-			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.x.get() * GLARE_TILT_GAIN)),
-			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - tilt.y.get() * GLARE_TILT_GAIN)),
+			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - glareTiltX.get() * GLARE_TILT_GAIN)),
+			centre + radius * Math.max(-0.5, Math.min(0.5, -0.28 - glareTiltY.get() * GLARE_TILT_GAIN)),
 		),
 	);
 
@@ -115,14 +129,17 @@ export const DotButton: React.FC<DotButtonProps> = ({
 		const at = bowl?.get() ?? { x: 0, y: 0 };
 		body.set(stepJelly(body.get(), at.x, at.y, radius, dt));
 	}, liquid);
+	// The liquid ripples every frame, but its colour only changes now and then: parse it then
+	const liquidColor = useDerivedValue(() => (liquid ? convertToRGBA(fill.get()) : NO_COLOR));
 	const dropUniforms = useDerivedValue(() => {
+		if (!liquid) return NO_DROP;
 		const shape = jellyShape(body.get(), radius);
 		const glare = glareCentre.get();
 		return {
 			center: vec(centre, centre),
 			radius,
 			jelly: [shape.stretchX, shape.stretchY, shape.wobble],
-			color: convertToRGBA(fill.get()),
+			color: liquidColor.get(),
 			glare: [glare.x, glare.y, radius * 0.8],
 		};
 	});

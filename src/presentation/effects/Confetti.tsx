@@ -1,6 +1,6 @@
-import { Canvas, createPicture, Picture, type SkColor, Skia } from "@shopify/react-native-skia";
+import { Canvas, Picture, type SkColor, Skia } from "@shopify/react-native-skia";
 import type React from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
 import {
 	cancelAnimation,
@@ -10,6 +10,7 @@ import {
 	withTiming,
 } from "react-native-reanimated";
 import { useStageBox } from "../layout/StageFrame";
+import { recordPicture } from "../recordPicture";
 import { TRIO } from "../theme/theme";
 
 const COUNT = 70;
@@ -65,12 +66,18 @@ export const Confetti: React.FC = () => {
 		return () => cancelAnimation(clock);
 	}, [clock]);
 
+	// Recorded every frame, so into one recorder and with one paint for the shower's life (see
+	// recordPicture.ts)
+	const [recorder] = useState(() => Skia.PictureRecorder());
+	const [paint] = useState(() => {
+		const made = Skia.Paint();
+		made.setAntiAlias(true);
+		return made;
+	});
 	const picture = useDerivedValue(() =>
-		createPicture((canvas) => {
+		recordPicture(recorder, (canvas) => {
 			const t = clock.get();
 			const fade = t > DURATION_MS - 900 ? (DURATION_MS - t) / 900 : 1;
-			const paint = Skia.Paint();
-			paint.setAntiAlias(true);
 			for (const p of particles) {
 				const y = p.y0 + t * p.speed;
 				if (y < -10 || y > height + 10) continue;
