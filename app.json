@@ -13,7 +13,9 @@
 			"infoPlist": {
 				"ITSAppUsesNonExemptEncryption": false,
 				"NSLocalNetworkUsageDescription": "Allow $(PRODUCT_NAME) to connect to the development server on your local network.",
-				"CADisableMinimumFrameDurationOnPhone": true
+				"CADisableMinimumFrameDurationOnPhone": true,
+				"LSApplicationCategoryType": "public.app-category.games",
+				"GCSupportsGameMode": true
 			}
 		},
 		"android": {
@@ -53,6 +55,7 @@
 			"expo-asset",
 			"./plugins/withDevLauncherStripPhaseAlwaysRuns.js",
 			"./plugins/withDevDisplayName.js",
+			"./plugins/withGameCategory.js",
 			[
 				"expo-splash-screen",
 				{
