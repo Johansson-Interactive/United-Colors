@@ -217,9 +217,34 @@ The main thread was busy 74 % of the time, about 12.4 ms of CPU per frame:
 | **`Process.getProcessGroup`**, called by Android itself every frame, not by any code in the APK (likely OnePlus's frame-quality monitor) | 6 % | 1.0 ms |
 
 **What follows from this:**
-- **Something commits view props every frame.** Reanimated's commit costs about 1.0 ms. Fabric's mount and the window redraw after it cost about another 1.5 ms (`mountViews` 0.66 ms and `traversal` 0.86 ms per frame in the Perfetto traces). It happens in about 870 of 890 frames, with no gap over about 50 ms, even when no dot is being caught. So it isn't the catch effects, and it isn't `DotButton`, whose tilt-driven values go to Skia, not to view props. Finding it is the cheapest win, at up to about 2.5 ms a frame.
+- **Something commits view props every frame.** Reanimated's commit costs about 1.0 ms. Fabric's mount and the window redraw after it cost about another 1.5 ms (`mountViews` 0.66 ms and `traversal` 0.86 ms per frame in the Perfetto traces). It happens in about 870 of 890 frames, with no gap over about 50 ms. It isn't `DotButton`, whose tilt-driven values go to Skia, not to view props. Finding it is the cheapest win, at up to about 2.5 ms a frame. (It turned out to be the catch effects after all; see the next section.)
 - **Drawing the free dots costs about 4 ms on both sides of the JSI bridge.** About 12 Skia calls per dot cost about 2.2 ms through JSI. Skia then spends about 1.6 ms turning those circles into GPU ops. Batching them with `drawAtlas` (R6) would hit both. It is now backed by measurement, not just a guess.
 - **`getProcessGroup` is out of our hands.** It comes from the phone's own system code.
+
+### View props committed every frame: the score bump and the pops (2026-10-15)
+
+**Cause.** A temporary probe in Reanimated's `updateProps` (drips bench) named the views:
+- **The HUD score bump** (`transform: scale`) updated in nearly every frame. Reanimated's spring only stops when its energy falls to 6e‑9 of its starting energy. With the bump's damping 9 and stiffness 260, that is about 2.1 s per catch, though it looks still after about 0.4 s. A catch every second or two kept it running all the time.
+- **The burst pops** (`opacity`, `transform`): one per catch, each animated for its 950 ms.
+
+The earlier conclusion that the catch effects were ruled out was wrong: catches are frequent enough in a late run that their animations overlap.
+
+**Fixes:**
+- **The bump is a finite curve** (`effects/scoreBump.ts`): the same swell to 1.22 and the same damped wobble, driven by a 650 ms timing and tapered to land exactly on rest. It now ends when it looks done.
+- **Reanimated's synchronous UI props on Android (R3):** `package.json` → `reanimated.staticFeatureFlags.ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS: true`. Opacity and transform now go straight to the native view, with no shadow-tree commit and no Fabric mount. Layout props such as the rings' `borderWidth` still commit.
+
+**Measured on the OnePlus 9** (drips bench, release, 60 Hz, per 15 s trace of about 885 frames):
+
+| Build | Frames with a mount | `mountViews` | `traversal` frames / time | Frames over 16.7 ms | p95 | p99 |
+|---|---|---|---|---|---|---|
+| Before (drip slots, A / B) | 872 / 869 | 508 / 495 ms | 875 / 869, 753 / 727 ms | 11.6 / 13.3 % | 17.7 / 17.7 ms | 23.6 / 27.5 ms |
+| Bump curve (A / B) | 304 / 386 | 212 / 275 ms | 310 / 387, 314 / 378 ms | 9.8 / 10.9 % | 17.6 / 18.2 ms | 24.3 / 24.5 ms |
+| Bump curve + sync props (A / B) | 22 / 20 | 42 / 42 ms | 384 / 374, 357 / 338 ms | 9.6 / 11.5 % | 17.7 / 18.1 ms | 24.1 / 22.3 ms |
+
+- **Mounts:** from 98 % of frames to 2 %.
+- **Window redraws (`traversal`):** halved by the bump curve. The rest come from the pops and the bump really animating, which sync props still invalidate. Drawing the bursts in the game canvas (R4) would remove them.
+- **Main-thread time saved:** about 1 ms a frame in mounts and redraws, plus Reanimated's own commits, which were about 1 ms a frame in the CPU profile.
+- **Frames over budget:** about 2 points better with the bump curve. Sync props held them within the run-to-run spread. Collections stayed at 4–10 per 300 frames.
 
 ## 3. Findings
 
@@ -230,7 +255,7 @@ The main thread was busy 74 % of the time, about 12.4 ms of CPU per frame:
 | P0 | Android has been judged on a development build | `dumpsys package`: DEBUGGABLE, dev launcher activity | Confirmed | High, size unknown | S | Baseline release builds on both platforms first (R1) |
 | P0 | Main thread saturated | gfxinfo: 1,797 of 1,807 janky frames are slow UI thread; animation phase p50 9.1 ms at 60 Hz | Confirmed, dev build | High | — | R2 to R4 below |
 | P0 | Two full-screen transparent TextureViews redraw every frame, each with a main-thread GL flush and swap, then HWUI recomposites the window | `SkiaBaseView.java:21` (TextureView default), `:35` (`opaque` → SurfaceView); `RNSkView.h:151`; `OpenGLWindowContext.cpp:54` | Likely | High, Android only | M | One opaque canvas for room and scene (R2) |
-| P1 | Every animated style on Android commits through the shadow tree | `staticFlags.json`: `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS: false`; `ReanimatedModuleProxy.cpp:68` | Likely | Medium, worst during combos | S | Turn the flag on (R3) |
+| P1 | Every animated style on Android commits through the shadow tree | `staticFlags.json`: `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS: false`; `ReanimatedModuleProxy.cpp:68` | Confirmed; fixed (flag on, see section 2) | Medium, worst during combos | S | Turn the flag on (R3) |
 | P1 | A new Skia canvas (TextureView plus EGL surface) per catch, plus a full `GameScreen` render to add and remove each burst, on the JS thread that runs the game loop | `Bursts.tsx:35` (`Pop` → `DotMatrixText` `<Canvas>`), `useStageEffects.ts:54` | Likely | Medium to high, hitches exactly during combos | M | Draw bursts in the game canvas (R4) |
 | P1 | Burst rings animate `borderWidth`, a layout prop, so every ring frame relays out | `Bursts.tsx:66` | Likely | Low to medium | S | Fixed stroke, or draw rings in Skia (R4) |
 | P1 | Display rate: whatever the device runs during play, both threads must finish inside that frame (8.3 ms at 120 Hz) | `peak_refresh_rate` 120; no frame-rate request in the app | Hypothesis: during tilt-only play the OnePlus may already sit at 60 | Medium | S to M | Measure the rate during play; if above 60, try a 60 Hz cap on Android (R5) |
