@@ -23,7 +23,7 @@ import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { type BestVerdict, handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
-import type { ScreenSize, TiltZero } from "../domain/types";
+import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
@@ -38,12 +38,13 @@ import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
+import { StageFrame } from "./layout/StageFrame";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
-import { INK, WHITE } from "./theme/theme";
+import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
 
@@ -56,6 +57,8 @@ interface GameScreenProps {
 	/** Shared with the interface tilt, which starts and stops it; the game only listens */
 	sensor: SensorPort;
 	watchAppActive: WatchAppActive;
+	/** How the phone's glass rounds its corners, once known; the arena follows (null: square) */
+	corners: Corners | null;
 }
 
 export const GameScreen: React.FC<GameScreenProps> = ({
@@ -66,6 +69,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	haptics,
 	sensor,
 	watchAppActive,
+	corners,
 }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
@@ -137,15 +141,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Samples arrive on every screen; the game only moves the player while a run is on
 	useEffect(() => sensor.onSample((sample) => handleSensorSample(sample)), [sensor]);
 
+	// The arena is the laid-out stage with the glass's corners, which may arrive after it
+	const stageSizeRef = useRef<ScreenSize | null>(null);
 	const handleLayout = useCallback(
 		(size: ScreenSize) => {
-			session.setScreen(size);
+			stageSizeRef.current = size;
+			session.setScreen({ ...size, corners: corners ?? undefined });
 			if (kioskInitializedRef.current) return;
 			kioskInitializedRef.current = true;
 			session.startKiosk();
 		},
-		[session],
+		[session, corners],
 	);
+	useEffect(() => {
+		const size = stageSizeRef.current;
+		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
+	}, [session, corners]);
 
 	// The stage fades out while the kiosk is halted under the settle bowl
 	const stageOpacity = useSharedValue(1);
@@ -256,96 +267,96 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const { handleToggleSound, handleToggleMusic } = useSoundToggles(store, storage);
 	const { sensitivity, setSensitivity } = useSensitivitySetting(store, storage, session);
 
-	// The playfield keeps clear of the top inset (notch / Dynamic Island) and side insets but
-	// runs under the home indicator, as before; the interface layer also respects the bottom
-	const stageInsets = {
-		paddingTop: insets.top,
-		paddingLeft: insets.left,
-		paddingRight: insets.right,
-	};
-	const uiInsets = { ...stageInsets, paddingBottom: insets.bottom };
+	// Everything lives in the stage frame, clear of the top inset (notch / Dynamic Island) and
+	// side insets, which stay black; the playfield runs under the home indicator, the
+	// interface layer keeps clear of it
+	const uiInsets = { paddingBottom: insets.bottom };
 
 	return (
 		<View style={styles.container}>
-			<AmbientBackground accent={accent} frost={frost} />
+			<StageFrame corners={corners}>
+				<AmbientBackground accent={accent} frost={frost} />
 
-			<Animated.View style={[styles.inset, stageInsets, stageFadeStyle]}>
-				<Animated.View style={[styles.stage, shakeStyle]}>
-					<GameCanvas
-						scene={scene}
-						frost={frost}
-						onLayout={handleLayout}
-						onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
-					/>
-					<Bursts bursts={bursts} />
+				<Animated.View style={[styles.inset, stageFadeStyle]}>
+					<Animated.View style={[styles.stage, shakeStyle]}>
+						<GameCanvas
+							scene={scene}
+							frost={frost}
+							onLayout={handleLayout}
+							onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
+						/>
+						<Bursts bursts={bursts} />
+					</Animated.View>
 				</Animated.View>
-			</Animated.View>
 
-			<FrostDim frost={frost} />
+				<FrostDim frost={frost} />
 
-			<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
-				<View style={styles.stage} pointerEvents="box-none">
-					{screen.kind === "hud" && <HUD score={score} color={playerColor} onPause={handlePause} />}
+				<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
+					<View style={styles.stage} pointerEvents="box-none">
+						{screen.kind === "hud" && (
+							<HUD score={score} color={playerColor} onPause={handlePause} />
+						)}
 
-					{screen.kind === "title" && (
-						<KioskOverlay
-							highScore={highScore}
-							soundEnabled={soundEnabled}
-							musicEnabled={musicEnabled}
-							onStart={handleStartPress}
-							onCalibrate={handleMenuCalibratePress}
-							onToggleSound={handleToggleSound}
-							onToggleMusic={handleToggleMusic}
-							sensitivity={sensitivity}
-						/>
-					)}
+						{screen.kind === "title" && (
+							<KioskOverlay
+								highScore={highScore}
+								soundEnabled={soundEnabled}
+								musicEnabled={musicEnabled}
+								onStart={handleStartPress}
+								onCalibrate={handleMenuCalibratePress}
+								onToggleSound={handleToggleSound}
+								onToggleMusic={handleToggleMusic}
+								sensitivity={sensitivity}
+							/>
+						)}
 
-					{screen.kind === "pause" && (
-						<PauseOverlay
-							color={playerColor}
-							onResume={handleResume}
-							onQuit={handleLeavePress}
-							onCalibrate={handleCalibratePress}
-							soundEnabled={soundEnabled}
-							musicEnabled={musicEnabled}
-							onToggleSound={handleToggleSound}
-							onToggleMusic={handleToggleMusic}
-							sensitivity={sensitivity}
-							onSpeed={handleSpeedPress}
-						/>
-					)}
+						{screen.kind === "pause" && (
+							<PauseOverlay
+								color={playerColor}
+								onResume={handleResume}
+								onQuit={handleLeavePress}
+								onCalibrate={handleCalibratePress}
+								soundEnabled={soundEnabled}
+								musicEnabled={musicEnabled}
+								onToggleSound={handleToggleSound}
+								onToggleMusic={handleToggleMusic}
+								sensitivity={sensitivity}
+								onSpeed={handleSpeedPress}
+							/>
+						)}
 
-					{screen.kind === "speed" && (
-						<SpeedOverlay
-							color={screen.color}
-							sensitivity={sensitivity}
-							onSelect={setSensitivity}
-							onBack={handleSpeedBack}
-						/>
-					)}
+						{screen.kind === "speed" && (
+							<SpeedOverlay
+								color={screen.color}
+								sensitivity={sensitivity}
+								onSelect={setSensitivity}
+								onBack={handleSpeedBack}
+							/>
+						)}
 
-					{screen.kind === "settle" && (
-						<SettleOverlay
-							color={screen.color}
-							onSettled={handleSettled}
-							onBack={handleSettleBack}
-							onSnap={handleSettleSnap}
-						/>
-					)}
+						{screen.kind === "settle" && (
+							<SettleOverlay
+								color={screen.color}
+								onSettled={handleSettled}
+								onBack={handleSettleBack}
+								onSnap={handleSettleSnap}
+							/>
+						)}
 
-					{screen.kind === "gameOver" && (
-						<GameOverOverlay
-							score={score}
-							verdict={screen.verdict}
-							color={playerColor}
-							onRetry={handleRetryPress}
-							onBack={handleLeavePress}
-						/>
-					)}
+						{screen.kind === "gameOver" && (
+							<GameOverOverlay
+								score={score}
+								verdict={screen.verdict}
+								color={playerColor}
+								onRetry={handleRetryPress}
+								onBack={handleLeavePress}
+							/>
+						)}
+					</View>
 				</View>
-			</View>
 
-			<FloodOverlay flood={flood} />
+				<FloodOverlay flood={flood} />
+			</StageFrame>
 		</View>
 	);
 };
@@ -353,7 +364,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: INK,
+		backgroundColor: BEZEL,
 	},
 	inset: {
 		...StyleSheet.absoluteFill,

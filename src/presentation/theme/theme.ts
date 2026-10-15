@@ -7,6 +7,8 @@ import { GAME_COLORS } from "../../domain/constants";
 export const INK = "#0B0E14";
 export const INK_LIFT = "#151B28";
 export const WHITE = "#F4F6FB";
+/** Pure black, matching the phone's glass, over the safe-area insets the playfield keeps clear of */
+export const BEZEL = "#000000";
 
 export const TRIO = GAME_COLORS;
 

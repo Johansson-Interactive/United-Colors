@@ -1,11 +1,14 @@
 import { StatusBar } from "expo-status-bar";
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
+import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
+import { loadDisplayCorners } from "./src/infrastructure/displayCorners";
 import { FrameClock } from "./src/infrastructure/FrameClock";
 import { HapticsService } from "./src/infrastructure/HapticsService";
 import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
@@ -41,7 +44,15 @@ const audio = new AudioService(
 
 const haptics = new HapticsService();
 
+/** How the glass rounds its corners, asked for once at launch */
+const displayCorners = loadDisplayCorners(Platform.OS);
+
 export default function App() {
+	const [corners, setCorners] = useState<Corners | null>(null);
+	useEffect(() => {
+		void displayCorners.then(setCorners);
+	}, []);
+
 	return (
 		<SafeAreaProvider>
 			<StatusBar style="light" hidden />
@@ -54,6 +65,7 @@ export default function App() {
 					haptics={haptics}
 					sensor={sensor}
 					watchAppActive={watchAppActive}
+					corners={corners}
 				/>
 			</TiltProvider>
 		</SafeAreaProvider>

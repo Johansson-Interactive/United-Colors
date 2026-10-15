@@ -1,6 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { StyleSheet } from "react-native";
 import Animated, {
 	Easing,
 	type SharedValue,
@@ -11,6 +11,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { useStageBox } from "../layout/StageFrame";
 import { createFloodSequence, tallySmoothFrames } from "./floodSequence";
 
 const BASE_DIAMETER = 100;
@@ -124,10 +125,11 @@ export function useFlood(): FloodController {
 }
 
 export const FloodOverlay: React.FC<{ flood: FloodController }> = ({ flood }) => {
-	const { width, height } = useWindowDimensions();
+	const { width, height, left, top } = useStageBox();
 	const style = useAnimatedStyle(() => {
-		const ox = flood.originX.get();
-		const oy = flood.originY.get();
+		// The origin is a press's window position; the flood fills the game's box
+		const ox = flood.originX.get() - left;
+		const oy = flood.originY.get() - top;
 		// Radius needed to reach the farthest corner from the origin
 		const reach = Math.hypot(Math.max(ox, width - ox), Math.max(oy, height - oy));
 		const scale = (flood.progress.get() * reach * 2.05) / BASE_DIAMETER;

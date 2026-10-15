@@ -1,7 +1,7 @@
 import { Canvas, createPicture, Picture, type SkColor, Skia } from "@shopify/react-native-skia";
 import type React from "react";
 import { useEffect, useMemo } from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { StyleSheet } from "react-native";
 import {
 	cancelAnimation,
 	Easing,
@@ -9,6 +9,7 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
+import { useStageBox } from "../layout/StageFrame";
 import { TRIO } from "../theme/theme";
 
 const COUNT = 70;
@@ -40,7 +41,7 @@ function mulberry32(seed: number) {
 
 /** A shower of game-coloured dots for a new best score, computed purely from a clock */
 export const Confetti: React.FC = () => {
-	const { width, height } = useWindowDimensions();
+	const { width, height } = useStageBox();
 	const particles = useMemo<Particle[]>(() => {
 		const rnd = mulberry32(7);
 		return Array.from({ length: COUNT }, () => {

@@ -1,13 +1,14 @@
 import { Canvas, createPicture, Picture, Skia, TileMode, vec } from "@shopify/react-native-skia";
 import type React from "react";
 import { useMemo } from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { StyleSheet } from "react-native";
 import {
 	type SharedValue,
 	useAnimatedReaction,
 	useDerivedValue,
 	useSharedValue,
 } from "react-native-reanimated";
+import { useStageBox } from "../layout/StageFrame";
 import { INK } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
 
@@ -55,14 +56,15 @@ interface AmbientBackgroundProps {
 
 /**
  * The room the dots live in: ink, a soft pool of light that slides against the tilt as if
- * the phone were lit from above, and an edge wash in the accent colour. Fills the whole
- * window, behind the playfield, so safe-area bands are part of the picture.
+ * the phone were lit from above, and an edge wash in the accent colour. Fills the
+ * game's box (see StageFrame.tsx), behind the playfield, so the light and the wash end
+ * where its walls do.
  *
  * The light and the wash are separate pictures: the light is re-recorded only while the
  * tilt moves, the wash only when the accent changes, so a still phone records nothing.
  */
 export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, frost }) => {
-	const { width, height } = useWindowDimensions();
+	const { width, height } = useStageBox();
 	const tilt = useTilt();
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
@@ -115,9 +117,13 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ accent, fr
 	);
 
 	return (
-		<Canvas style={[StyleSheet.absoluteFill, { backgroundColor: INK }]} pointerEvents="none">
+		<Canvas style={styles.room} pointerEvents="none">
 			<Picture picture={lightPicture} />
 			<Picture picture={washPicture} />
 		</Canvas>
 	);
 };
+
+const styles = StyleSheet.create({
+	room: { ...StyleSheet.absoluteFill, backgroundColor: INK },
+});
