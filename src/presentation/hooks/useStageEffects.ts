@@ -104,5 +104,5 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		transform: [{ translateX: shake.get() }],
 	}));
 
-	return { accent, frost, shakeStyle, bursts };
+	return { accent, frost, shake, shakeStyle, bursts };
 }

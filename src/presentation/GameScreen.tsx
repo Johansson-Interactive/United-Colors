@@ -24,7 +24,6 @@ import { type BestVerdict, handleGameOver } from "../application/useCases/GameOv
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
-import { AmbientBackground } from "./components/AmbientBackground";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { Bursts } from "./effects/Bursts";
@@ -92,7 +91,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const { touch: devTouch, detectGyro, onGyroSample } = useDevControlMode();
 
 	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, shakeStyle, bursts } = useStageEffects(store, phase, playerColor);
+	const { accent, frost, shake, shakeStyle, bursts } = useStageEffects(store, phase, playerColor);
 
 	// Sounds load with the screen and follow the music and effect settings; the effects follow
 	// the game's events and the music the phase. Dispose discards a load in flight.
@@ -275,16 +274,21 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
-				<AmbientBackground accent={accent} frost={frost} />
-
-				<Animated.View style={[styles.inset, stageFadeStyle]}>
+				{/* The canvas fades and shakes the scene itself (see GameCanvas); the bursts over it
+				    fade and shake as views */}
+				<View style={styles.inset}>
+					<GameCanvas
+						scene={scene}
+						frost={frost}
+						accent={accent}
+						stageOpacity={stageOpacity}
+						shake={shake}
+						onLayout={handleLayout}
+						onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
+					/>
+				</View>
+				<Animated.View style={[styles.inset, stageFadeStyle]} pointerEvents="none">
 					<Animated.View style={[styles.stage, shakeStyle]}>
-						<GameCanvas
-							scene={scene}
-							frost={frost}
-							onLayout={handleLayout}
-							onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
-						/>
 						<Bursts bursts={bursts} />
 					</Animated.View>
 				</Animated.View>
