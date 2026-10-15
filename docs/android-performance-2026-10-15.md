@@ -293,6 +293,27 @@ The garbage-collection stalls on the title are gone. The frames still over budge
 
 **A trap when measuring.** `EXPO_PUBLIC_BENCH` is inlined into `App.tsx` when Metro transforms it, and Metro caches that transform. If only the variable changes, even with Gradle's generated assets deleted, the bundle keeps the old value. The first title traces were in fact the drips bench. When switching between a bench build and a normal one, also delete `$TMPDIR/metro-cache` and `node_modules/.cache`.
 
+### Bursts drawn in the game canvas (R4, 2026-10-15)
+
+**Cause.** Each catch rendered `GameScreen` twice (`setBursts` to add the burst, then to remove it), mounted a new `DotMatrixText` (a TextureView plus an EGL surface) for the pop, and animated the ring's `borderWidth`, a layout prop that commits every frame. The pops' opacity and transform skip the commit with sync props, but still invalidate the window, so HWUI redraws it (`traversal`, about 380 per 15 s on the drips bench).
+
+**Change:**
+- **A pure stepper** (`effects/burstFrames.ts`): the pop's and ring's curves, written out from the old views' styles and Reanimated's out-cubic and out-quad easings; a pop's dots as offsets from the text's centre, laid out once per catch, so they land where the view's padded `DotMatrixText` put them; the list (at most 8, oldest dropped first, each dropped when its 900 ms are up); and the per-frame packing into sprites and rings, which reuses its objects. Tests check the curves against Reanimated's own easings and the dots against a model of the old view's layout and transform.
+- **No React state:** `useStageEffects` appends each burst to a shared value on the UI thread. A frame callback stamps it with the frame time on its first frame, ages the list and drops expired bursts. It runs only while a burst is alive, and stops itself through the JS thread, unless a newer burst arrived in the meantime.
+- **Drawn in `GameCanvas`:** one picture, recorded into a recorder kept for the canvas's life, inside the shake group, after the frost-blur group and before the fade cover. Pop dots are two `drawAtlas` calls, every glow and then every dot, from two new cells of the sprite sheet: a dot, and its glow (alpha 0.35 to 0 at 2.6 times the radius). A pop's opacity is its tint's alpha, its scale the RSXform's. Rings are stroked circles with one paint.
+- **Removed:** `Bursts.tsx` and `Stage.tsx` with its fade and shake views. `GameScreen` renders `GameCanvas` directly.
+- **Small differences:** a fading pop's dots are now each drawn at the pop's opacity, where the view faded them as one layer, so overlapping glows fade a touch differently. With several pops alive, every glow is drawn below every dot.
+
+**Measured on the OnePlus 9** (drips bench, release, 60 Hz, per 15 s trace): pending, the user runs the builds.
+
+| Run | Frames over 16.7 ms | p95 | p99 | GCs / 300 frames | `mountViews` | `traversal` | `SurfaceTexture-*` |
+|---|---|---|---|---|---|---|---|
+| Before (atlas A / B) | 3.7 / 3.4 % | 16.2 / 16.3 ms | 23.0 / 21.9 ms | 6–13 / 6–12 | 20–22 | about 380 | about 10 |
+| Bursts A | | | | | | | |
+| Bursts B | | | | | | | |
+
+**Visual check:** pending on the device. Pops in place, rising, swelling and fading; amber from the second step of a combo; staggered on the same tick; the glow as before. Rings for a point catch and game over. Bursts shake with the final hit, stay sharp while the scene frosts, and fade with the stage under the settle bowl.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
@@ -303,8 +324,8 @@ The garbage-collection stalls on the title are gone. The frames still over budge
 | P0 | Main thread saturated | gfxinfo: 1,797 of 1,807 janky frames are slow UI thread; animation phase p50 9.1 ms at 60 Hz | Confirmed, dev build | High | — | R2 to R4 below |
 | P0 | Two full-screen transparent TextureViews redraw every frame, each with a main-thread GL flush and swap, then HWUI recomposites the window | `SkiaBaseView.java:21` (TextureView default), `:35` (`opaque` → SurfaceView); `RNSkView.h:151`; `OpenGLWindowContext.cpp:54` | Likely | High, Android only | M | One opaque canvas for room and scene (R2) |
 | P1 | Every animated style on Android commits through the shadow tree | `staticFlags.json`: `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS: false`; `ReanimatedModuleProxy.cpp:68` | Confirmed; fixed (flag on, see section 2) | Medium, worst during combos | S | Turn the flag on (R3) |
-| P1 | A new Skia canvas (TextureView plus EGL surface) per catch, plus a full `GameScreen` render to add and remove each burst, on the JS thread that runs the game loop | `Bursts.tsx:35` (`Pop` → `DotMatrixText` `<Canvas>`), `useStageEffects.ts:54` | Likely | Medium to high, hitches exactly during combos | M | Draw bursts in the game canvas (R4) |
-| P1 | Burst rings animate `borderWidth`, a layout prop, so every ring frame relays out | `Bursts.tsx:66` | Likely | Low to medium | S | Fixed stroke, or draw rings in Skia (R4) |
+| P1 | A new Skia canvas (TextureView plus EGL surface) per catch, plus a full `GameScreen` render to add and remove each burst, on the JS thread that runs the game loop | `Bursts.tsx:35` (`Pop` → `DotMatrixText` `<Canvas>`), `useStageEffects.ts:54` | Likely; fixed in code (see section 2), measurement pending | Medium to high, hitches exactly during combos | M | Draw bursts in the game canvas (R4) |
+| P1 | Burst rings animate `borderWidth`, a layout prop, so every ring frame relays out | `Bursts.tsx:66` | Likely; fixed in code (R4) | Low to medium | S | Fixed stroke, or draw rings in Skia (R4) |
 | P1 | Display rate: whatever the device runs during play, both threads must finish inside that frame (8.3 ms at 120 Hz) | `peak_refresh_rate` 120; no frame-rate request in the app | Hypothesis: during tilt-only play the OnePlus may already sit at 60 | Medium | S to M | Measure the rate during play; if above 60, try a 60 Hz cap on Android (R5) |
 | P1 | Score changes re-render all of `GameScreen`, and `DotMatrixText` relays out and re-creates its picture mapper | `GameScreen.tsx:78` | Likely | Low to medium | S | HUD subscribes to the score itself (R8) |
 | P2 | Per-frame drawing grows with the dot count: about 12 JSI calls and 3 draws per small dot, 4 decode passes, host objects allocated per frame (`XYWHRect`, `makeShader` per drip and merge) | `sceneDrawer.ts:141-245`, `mergeShader.ts:92` | Likely, size needs a trace | Grows over a run | M | Two `drawAtlas` calls for free small dots (R6) |
