@@ -94,6 +94,22 @@ Each free small dot costs about 12 Skia JSI calls and 3 GPU draws per frame: a h
 
 **Not verified yet:** release-build frame times on either platform, the display rate during tilt-only play (no touches), dot counts in a long run, GPU time for Skia's own GL work, thermal behaviour over a multi-minute run, and any before/after comparison.
 
+### Release-build measurements (2026-10-15, OnePlus 9, display at 60 Hz, phone lying still)
+
+Recorded with `scripts/android-perf-trace.sh` and read with Perfetto's trace processor. Main-thread figures are per frame.
+
+| Scenario | Build | `doFrame` avg | Animation phase avg | Window redraw (traversal) | Skia swaps / frame | Janky |
+|---|---|---|---|---|---|---|
+| Title screen, 15 s | Baseline | 14.8 ms | 13.1 ms | 1.7 ms, every frame | 4.4 | 26 % |
+| Title screen, 15 s | R2 (one opaque canvas) | 14.7 ms | 13.1 ms | 1.5 ms | 3.6 | 22 % |
+| Early play, 15 s | Baseline | 7.7 ms | 5.8 ms | 1.7 ms, every frame | 1.2 | 2 % |
+
+- **The title screen is the slowest screen, in release too.** Its cost is the menu's own animated canvases (the title, the liquid PLAY button, the bowl), not the room. R2 does not touch those.
+- **Skia renders run inside the animation phase.** Each canvas's `eglSwapBuffers` sits under Reanimated's frame callback, so every canvas adds straight to the main thread's frame.
+- **R2 removes the per-frame window redraw.** In play, traversal ran in 100 of 471 frames instead of nearly all of them. But each SurfaceView swap took 1.5–1.9 ms against 0.6–0.8 ms for a TextureView. A net gain in play is not shown yet.
+- **Play runs could not be compared fairly.** They were driven blind with taps while the phone lay at an angle. Some ended in a game over, and one opened the calibration screen. The same baseline build gave 5.4 ms and 10.2 ms animation phases in back-to-back runs. A repeatable scene (task 6) is needed before any play A/B.
+- **New: the main thread runs on the slow cores.** On the Snapdragon 888, CPUs 0–3 are Cortex-A55, 4–6 A78 and 7 X1. In every trace, most of the main thread's time was on CPUs 0–3 at about 1.6 GHz. All cores are allowed (`top-app` cpuset, 0–7), so this is the scheduler's choice. A tilt game sends no touch input, so Android's input boost never fires. iOS runs this work on performance cores. Fixed performance mode (`cmd power set-fixed-performance-mode-enabled`) did not move it. The standard fix is a performance hint session (`PerformanceHintManager`, Android 12+) for the main and JS threads, targeting the frame time. That needs a small native module and is now the most promising lever.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
