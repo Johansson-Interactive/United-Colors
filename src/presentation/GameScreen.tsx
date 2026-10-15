@@ -1,7 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
@@ -26,11 +26,9 @@ import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
-import { Bursts } from "./effects/Bursts";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import type { FlowAction } from "./flow/screenFlow";
-import { GameCanvas } from "./GameCanvas";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
@@ -43,6 +41,7 @@ import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
+import { Stage } from "./Stage";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
@@ -91,7 +90,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const { touch: devTouch, detectGyro, onGyroSample } = useDevControlMode();
 
 	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, shake, shakeStyle, bursts } = useStageEffects(store, phase, playerColor);
+	const { accent, frost, shake, bursts } = useStageEffects(store, phase, playerColor);
 
 	// Sounds load with the screen and follow the music and effect settings; the effects follow
 	// the game's events and the music the phase. Dispose discards a load in flight.
@@ -159,7 +158,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The stage fades out while the kiosk is halted under the settle bowl
 	const stageOpacity = useSharedValue(1);
-	const stageFadeStyle = useAnimatedStyle(() => ({ opacity: stageOpacity.get() }));
 
 	// What a step does to the game, straight away or once its flood covers the screen
 	const perform = useCallback(

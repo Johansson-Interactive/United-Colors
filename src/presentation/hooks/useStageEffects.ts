@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-	useAnimatedStyle,
-	useSharedValue,
-	withDelay,
-	withSequence,
-	withTiming,
-} from "react-native-reanimated";
+import { useSharedValue, withDelay, withSequence, withTiming } from "react-native-reanimated";
 import { createCatchStagger } from "../../application/catchCue";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
@@ -100,9 +94,5 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		});
 	}, [store, addBurst, shake, burstTimers]);
 
-	const shakeStyle = useAnimatedStyle(() => ({
-		transform: [{ translateX: shake.get() }],
-	}));
-
-	return { accent, frost, shake, shakeStyle, bursts };
+	return { accent, frost, shake, bursts };
 }
