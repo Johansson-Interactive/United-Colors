@@ -14,7 +14,7 @@ import {
 } from "@shopify/react-native-skia";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
-import { type LayoutChangeEvent, PanResponder, StyleSheet, View } from "react-native";
+import { type LayoutChangeEvent, PanResponder, Platform, StyleSheet, View } from "react-native";
 import {
 	type SharedValue,
 	useAnimatedReaction,
@@ -133,6 +133,9 @@ const WallDrop: React.FC<WallDropProps> = ({ drops, slot }) => {
 	);
 };
 
+/** A TextureView on Android, an opaque Metal layer on iOS (see GameCanvas) */
+const OPAQUE_CANVAS = Platform.OS !== "android";
+
 /**
  * The game canvas: the room (see room.ts), then the whole scene, drawn on the UI thread every
  * frame from the `scene` shared value with no React reconciliation per frame: recorded
@@ -140,13 +143,14 @@ const WallDrop: React.FC<WallDropProps> = ({ drops, slot }) => {
  * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
  * from follows the device tilt, and freezes while frosted.
  *
- * The canvas is opaque and draws everything behind the interface itself: on Android that
- * makes it a SurfaceView, which the system composites directly, instead of a transparent
- * TextureView the app's own render thread has to blend into the window every frame. A
- * SurfaceView ignores the opacity and transforms of the views around it, so the stage fade
- * and the shake are drawn here too, and so are the bursts over the scene: they shake and fade
- * with it but stay sharp while it frosts. The blur layer only exists while frosted and the fade
- * cover only while fading, so a live scene pays for neither.
+ * The canvas draws everything behind the interface itself, so it can be opaque. On iOS it is,
+ * which saves a blend. On Android it stays a TextureView: an opaque canvas there is a
+ * SurfaceView, whose every frame is a blocking hand-off to SurfaceFlinger on the main thread,
+ * which Android 12 can hold for about 5 ms when it arrives early in the period (see
+ * docs/android-performance-2026-10-15.md). The stage fade and the shake are drawn here, and so
+ * are the bursts over the scene: they shake and fade with it but stay sharp while it frosts.
+ * The blur layer only exists while frosted and the fade cover only while fading, so a live
+ * scene pays for neither.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
 	scene,
@@ -274,7 +278,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
 	return (
 		<View style={styles.container} onLayout={handleLayout} {...(panResponder?.panHandlers ?? {})}>
-			<Canvas style={StyleSheet.absoluteFill} opaque pointerEvents={canvasPointerEvents}>
+			<Canvas
+				style={StyleSheet.absoluteFill}
+				opaque={OPAQUE_CANVAS}
+				pointerEvents={canvasPointerEvents}
+			>
 				<Room width={width} height={height} light={light} wash={wash} />
 				<Group transform={shakeTransform}>
 					<Group
