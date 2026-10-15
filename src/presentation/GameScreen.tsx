@@ -272,31 +272,23 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
-				{/* The canvas fades and shakes the scene itself (see GameCanvas); the bursts over it
-				    fade and shake as views */}
-				<View style={styles.inset}>
-					<GameCanvas
-						scene={scene}
-						frost={frost}
-						accent={accent}
-						stageOpacity={stageOpacity}
-						shake={shake}
-						onLayout={handleLayout}
-						onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
-					/>
-				</View>
-				<Animated.View style={[styles.inset, stageFadeStyle]} pointerEvents="none">
-					<Animated.View style={[styles.stage, shakeStyle]}>
-						<Bursts bursts={bursts} />
-					</Animated.View>
-				</Animated.View>
+				<Stage
+					scene={scene}
+					frost={frost}
+					accent={accent}
+					stageOpacity={stageOpacity}
+					shake={shake}
+					bursts={bursts}
+					onLayout={handleLayout}
+					onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
+				/>
 
 				<FrostDim frost={frost} />
 
 				<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
 						{screen.kind === "hud" && (
-							<HUD score={score} color={playerColor} onPause={handlePause} />
+							<HUD score={score} color={playerColor} onPause={handlePause} corners={corners} />
 						)}
 
 						{screen.kind === "title" && (
