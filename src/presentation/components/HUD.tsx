@@ -2,13 +2,13 @@ import type React from "react";
 import { useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
+	Easing,
 	useAnimatedStyle,
 	useSharedValue,
-	withSequence,
-	withSpring,
 	withTiming,
 } from "react-native-reanimated";
 import type { Corners } from "../../domain/types";
+import { SCORE_BUMP_MS, scoreBumpScale } from "../effects/scoreBump";
 import { cornerButton } from "../layout/cornerButton";
 import { useStageBox } from "../layout/StageFrame";
 import { DotMatrixText } from "./DotMatrixText";
@@ -27,17 +27,16 @@ const PAUSE_SIZE = 44;
 const PAUSE_OFFSET = { top: 12, right: 16 };
 
 export const HUD: React.FC<HUDProps> = ({ score, color, onPause, corners }) => {
+	// Progress through the bump (see scoreBump.ts), at rest at 1 between catches
 	const bump = useSharedValue(1);
 	useEffect(() => {
 		if (score === 0) return;
-		bump.set(
-			withSequence(
-				withTiming(1.22, { duration: 70 }),
-				withSpring(1, { damping: 9, stiffness: 260 }),
-			),
-		);
+		bump.set(0);
+		bump.set(withTiming(1, { duration: SCORE_BUMP_MS, easing: Easing.linear }));
 	}, [score, bump]);
-	const scoreStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.get() }] }));
+	const scoreStyle = useAnimatedStyle(() => ({
+		transform: [{ scale: scoreBumpScale(bump.get()) }],
+	}));
 
 	const { width, height } = useStageBox();
 	const pauseAt = useMemo(
