@@ -24,7 +24,13 @@ import {
 	mergeUniformsByName,
 	packMergeUniforms,
 } from "./mergeShader";
-import { packWallDropUniforms, WALL_DROP_SKSL } from "./wallDropShader";
+import {
+	packWallDropUniforms,
+	WALL_DROP_SKSL,
+	WALL_DROP_SLOTS,
+	type WallDropSlot,
+	wallDropSlots,
+} from "./wallDropShader";
 
 /** Glare centre offset and radius relative to a unit-radius dot, when the device is level */
 const GLARE_OFFSET = -0.28;
@@ -74,8 +80,11 @@ function compileEffect(name: string, sksl: string): SkRuntimeEffect {
  */
 export const MERGE_EFFECT = compileEffect("merge", MERGE_SKSL);
 
-/** A small dot at a wall (see wallDropShader.ts), the same way */
-const WALL_DROP_EFFECT = compileEffect("wall drop", WALL_DROP_SKSL);
+/**
+ * A small dot at a wall (see wallDropShader.ts), the same way: the canvas draws the first
+ * WALL_DROP_SLOTS of them from wallDrops' uniforms, and drawScene any past those
+ */
+export const WALL_DROP_EFFECT = compileEffect("wall drop", WALL_DROP_SKSL);
 const WALL_DROP_PAINT = Skia.Paint();
 WALL_DROP_PAINT.setAntiAlias(true);
 
@@ -100,8 +109,11 @@ const HALO_PAINTS = FILL_COLORS.map((color) => {
 	return paint;
 });
 
-/** The scene is drawn in two layers, below and above the liquid body (see liquidBody) */
-export type SceneLayer = "below" | "above";
+/**
+ * The scene is drawn in layers around the shader nodes the canvas draws: below the wall drops
+ * (see wallDrops), the wall drops' glare, then above the liquid body (see liquidBody)
+ */
+export type SceneLayer = "below" | "drops" | "above";
 
 /** The liquid body to draw between the layers: where, and the merge shader's uniforms */
 export interface LiquidBody {
@@ -137,6 +149,17 @@ export function liquidBody(dots: Float32Array): LiquidBody {
 		height: merge.bottom - merge.top,
 		uniforms: mergeUniformsByName(merge.values, FILL_COLORS[player.color]),
 	};
+}
+
+/**
+ * The wall drops for the canvas to draw with the wall drop shader, in WALL_DROP_SLOTS slots,
+ * below the drops layer. Drawn as Skia nodes for the same reason as the liquid body: a drip
+ * forms on a wall nearly all the time in a late run, and a shader made per drip per frame
+ * set off a garbage collection on the UI thread
+ */
+export function wallDrops(dots: Float32Array): WallDropSlot[] {
+	"worklet";
+	return wallDropSlots(dots, FILL_COLORS);
 }
 
 /** Where the glare sits on a unit dot for a light tilted by `light` radians, clamped on the dot */
@@ -202,6 +225,10 @@ export function drawScene(
 		drawAbove();
 		return;
 	}
+	if (layer === "drops") {
+		drawDropGlares();
+		return;
+	}
 	// Halos first so no glow sits on top of a neighbouring body; a merging dot's halo
 	// shrinks away as the dot slides into the player
 	for (let i = 0; i < count; i++) {
@@ -242,7 +269,15 @@ export function drawScene(
 		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
 		canvas.restore();
 	}
-	// A small dot at a wall: its body by the wall shader, then its glare
+	// The glare on a dot, from its place and size
+	function drawGlare(x: number, y: number, radius: number) {
+		canvas.save();
+		canvas.translate(x + gx * radius, y + gy * radius);
+		canvas.scale(radius, radius);
+		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+		canvas.restore();
+	}
+	// A small dot at a wall past the canvas's slots: its body by the wall shader, then its glare
 	function drawWallDrop(drop: SceneDot) {
 		const packed = packWallDropUniforms(drop);
 		const color = FILL_COLORS[drop.color];
@@ -259,14 +294,10 @@ export function drawScene(
 			WALL_DROP_PAINT,
 		);
 		dropShader.dispose();
-		const { radius } = drop;
-		canvas.save();
-		canvas.translate(drop.x + gx * radius, drop.y + gy * radius);
-		canvas.scale(radius, radius);
-		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-		canvas.restore();
+		drawGlare(drop.x, drop.y, drop.radius);
 	}
-	// Free dots
+	// Free dots. The first WALL_DROP_SLOTS wall drops are the canvas's (see wallDrops)
+	let drops = 0;
 	for (let i = 0; i < count; i++) {
 		const o = i * STRIDE;
 		const kind = dots[o + KIND];
@@ -277,7 +308,7 @@ export function drawScene(
 			kind === SMALL &&
 			Math.abs(dots[o + WALL_X]) + Math.abs(dots[o + WALL_Y]) >= WALL_NORMAL_MIN
 		) {
-			drawWallDrop(readDot(dots, i, dot));
+			if (drops++ >= WALL_DROP_SLOTS) drawWallDrop(readDot(dots, i, dot));
 		} else if (kind === POINT || dots[o + STRETCH_X] !== 0 || dots[o + STRETCH_Y] !== 0) {
 			drawBead(readDot(dots, i, dot));
 		} else {
@@ -291,6 +322,23 @@ export function drawScene(
 			canvas.scale(radius, radius);
 			canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
 			canvas.restore();
+		}
+	}
+	// The glare on each wall drop the canvas drew, over its body (see wallDrops)
+	function drawDropGlares() {
+		let drops = 0;
+		for (let i = 0; i < count && drops < WALL_DROP_SLOTS; i++) {
+			const o = i * STRIDE;
+			const radius = dots[o + RADIUS];
+			if (
+				dots[o + KIND] !== SMALL ||
+				radius <= 0 ||
+				Math.abs(dots[o + WALL_X]) + Math.abs(dots[o + WALL_Y]) < WALL_NORMAL_MIN
+			) {
+				continue;
+			}
+			drops++;
+			drawGlare(dots[o + X], dots[o + Y], radius);
 		}
 	}
 	// Over the liquid body: the glare on it, and a refused dot pressing into it

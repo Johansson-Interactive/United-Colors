@@ -1,4 +1,12 @@
-import type { SceneDot } from "../application/sceneRecord";
+import {
+	dotCount,
+	FIELD,
+	KIND_CODE,
+	readDot,
+	type SceneDot,
+	sceneDot,
+	WALL_NORMAL_MIN,
+} from "../application/sceneRecord";
 import { SMIN_SKSL, WALL_SKSL } from "./liquidShader";
 
 /**
@@ -55,4 +63,95 @@ export function packWallDropUniforms(dot: SceneDot): WallDropUniforms {
 		right: x + reach,
 		bottom: y + reach,
 	};
+}
+
+/**
+ * The wall drop shader's uniforms by name, as Skia's declarative <Shader> takes them: the
+ * packed values (see packWallDropUniforms) cut at the declarations in WALL_DROP_SKSL, with
+ * `color` added
+ */
+export interface WallDropUniformsByName {
+	[name: string]: number | number[];
+	center: number[];
+	radius: number;
+	stretch: number[];
+	wall: number[];
+	neck: number;
+	color: number[];
+}
+
+/** Cut packed values (without `color`) into named uniforms, with `color` (RGBA) added */
+export function wallDropUniformsByName(
+	values: number[],
+	color: ArrayLike<number>,
+): WallDropUniformsByName {
+	"worklet";
+	return {
+		center: [values[0], values[1]],
+		radius: values[2],
+		stretch: [values[3], values[4]],
+		wall: [values[5], values[6], values[7]],
+		neck: values[8],
+		color: [color[0], color[1], color[2], color[3]],
+	};
+}
+
+/**
+ * Wall drops drawn as fixed shader nodes (see WallDropSlot); any more at once are drawn with a
+ * shader made per frame. A late run has one or two on the walls at a time.
+ */
+export const WALL_DROP_SLOTS = 4;
+
+/** One wall drop for the canvas to draw with the wall drop shader: where, and its uniforms */
+export interface WallDropSlot {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	uniforms: WallDropUniformsByName;
+}
+
+/** An unused slot: an empty rect, with uniforms the shader still accepts */
+const NO_DROP: WallDropSlot = {
+	x: 0,
+	y: 0,
+	width: 0,
+	height: 0,
+	uniforms: wallDropUniformsByName([0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0]),
+};
+
+/**
+ * The first WALL_DROP_SLOTS wall drops (small dots at a wall, as hasWall judges it) in the
+ * scene, in scene order, each in a slot with its colour from `colors` (indexed by the scene's
+ * colour index); unused slots are empty. drawScene skips these drops' bodies the same way.
+ */
+export function wallDropSlots(
+	scene: Float32Array,
+	colors: readonly ArrayLike<number>[],
+): WallDropSlot[] {
+	"worklet";
+	const slots: WallDropSlot[] = [];
+	const count = dotCount(scene);
+	const dot = sceneDot();
+	for (let i = 0; i < count && slots.length < WALL_DROP_SLOTS; i++) {
+		// Indexed directly: a worklet call per dot would allocate every frame (see FIELD)
+		const o = i * FIELD.STRIDE;
+		if (
+			scene[o + FIELD.KIND] !== KIND_CODE.small ||
+			scene[o + FIELD.RADIUS] <= 0 ||
+			Math.abs(scene[o + FIELD.WALL_X]) + Math.abs(scene[o + FIELD.WALL_Y]) < WALL_NORMAL_MIN
+		) {
+			continue;
+		}
+		const packed = packWallDropUniforms(readDot(scene, i, dot));
+		slots.push({
+			x: packed.left,
+			y: packed.top,
+			width: packed.right - packed.left,
+			height: packed.bottom - packed.top,
+			uniforms: wallDropUniformsByName(packed.values, colors[dot.color]),
+		});
+	}
+	while (slots.length < WALL_DROP_SLOTS) slots.push(NO_DROP);
+	return slots;
 }

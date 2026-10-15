@@ -35,9 +35,10 @@ import {
 	WASH_POSITIONS,
 	WASH_RADIUS,
 } from "./room";
-import { drawScene, liquidBody, MERGE_EFFECT } from "./sceneDrawer";
+import { drawScene, liquidBody, MERGE_EFFECT, WALL_DROP_EFFECT, wallDrops } from "./sceneDrawer";
 import { INK } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
+import { WALL_DROP_SLOTS, type WallDropSlot } from "./wallDropShader";
 
 interface GameCanvasProps {
 	/** All dots to draw this frame (player last) as flat records, written every frame by the session */
@@ -99,10 +100,33 @@ const Room: React.FC<RoomProps> = ({ width, height, light, wash }) => (
 	</>
 );
 
+/** The wall drop slots, by index (see wallDrops) */
+const DROP_SLOTS = Array.from({ length: WALL_DROP_SLOTS }, (_, i) => i);
+
+interface WallDropProps {
+	drops: SharedValue<WallDropSlot[]>;
+	slot: number;
+}
+
+/** One wall drop slot (see wallDrops): the wall drop shader over the drop's rect, empty if unused */
+const WallDrop: React.FC<WallDropProps> = ({ drops, slot }) => {
+	const rect = useDerivedValue(() => {
+		const drop = drops.get()[slot];
+		return Skia.XYWHRect(drop.x, drop.y, drop.width, drop.height);
+	});
+	const uniforms = useDerivedValue(() => drops.get()[slot].uniforms);
+	return (
+		<Rect rect={rect}>
+			<Shader source={WALL_DROP_EFFECT} uniforms={uniforms} />
+		</Rect>
+	);
+};
+
 /**
- * The game canvas: the room (see room.ts), then the whole scene, recorded into one Picture on
- * the UI thread every frame from the `scene` shared value, with no React reconciliation per
- * frame; how the dots are drawn is in sceneDrawer.ts. The light the room and the dots are lit
+ * The game canvas: the room (see room.ts), then the whole scene, drawn on the UI thread every
+ * frame from the `scene` shared value with no React reconciliation per frame: recorded
+ * pictures, with the wall drops and the liquid body as shader nodes between them; how the dots
+ * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
  * from follows the device tilt, and freezes while frosted.
  *
  * The canvas is opaque and draws everything behind the interface itself: on Android that
@@ -193,13 +217,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 		return colors;
 	});
 
-	// The scene in two layers with the liquid body between them (see sceneDrawer.ts), each
-	// recorded every frame and so into the same recorder each time (see recordPicture.ts)
+	// The scene in layers with the wall drops and the liquid body between them (see
+	// sceneDrawer.ts), each recorded every frame and so into the same recorder each time (see
+	// recordPicture.ts)
 	const [belowRecorder] = useState(() => Skia.PictureRecorder());
+	const [dropsRecorder] = useState(() => Skia.PictureRecorder());
 	const [aboveRecorder] = useState(() => Skia.PictureRecorder());
 	const below = useDerivedValue(() =>
 		recordPicture(belowRecorder, (canvas) =>
 			drawScene(canvas, scene.get(), lightX.get(), lightY.get(), "below"),
+		),
+	);
+	const dropGlares = useDerivedValue(() =>
+		recordPicture(dropsRecorder, (canvas) =>
+			drawScene(canvas, scene.get(), lightX.get(), lightY.get(), "drops"),
 		),
 	);
 	const above = useDerivedValue(() =>
@@ -207,6 +238,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 			drawScene(canvas, scene.get(), lightX.get(), lightY.get(), "above"),
 		),
 	);
+	const drops = useDerivedValue(() => wallDrops(scene.get()));
 	const body = useDerivedValue(() => liquidBody(scene.get()));
 	const bodyX = useDerivedValue(() => body.get().x);
 	const bodyY = useDerivedValue(() => body.get().y);
@@ -236,6 +268,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 						}
 					>
 						<Picture picture={below} />
+						{DROP_SLOTS.map((slot) => (
+							<WallDrop key={slot} drops={drops} slot={slot} />
+						))}
+						<Picture picture={dropGlares} />
 						<Rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight}>
 							<Shader source={MERGE_EFFECT} uniforms={bodyUniforms} />
 						</Rect>
