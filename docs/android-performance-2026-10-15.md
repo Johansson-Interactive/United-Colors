@@ -268,6 +268,31 @@ The earlier conclusion that the catch effects were ruled out was wrong: catches 
 - **Allocation:** the UI runtime allocates about 30 KB a frame more. That is most likely Skia's C++ reading each sprite's fields by name from plain objects, which makes property names in Hermes. Collections rose only slightly and their waits stayed small. Mutable `SkRSXform` host objects (`set()`) would avoid it, at the cost of a JSI call per sprite.
 - **Visual check:** edge quality, the glare following the tilt, and halo colour still need confirming on the device.
 
+### Title screen: recorders kept, colour parsed once (2026-10-15)
+
+**Cause.** On the title, three things allocated or parsed every frame:
+- **`DotMatrixText`** (the TILTLING title, with its wave and parallax) recorded with `createPicture`. That made a new recorder every frame, and Skia reports each one to Hermes as 1 MB.
+- **The liquid PLAY dot** (`DotButton`) rebuilt its shader uniforms every frame for the ripple, and re-parsed its colour string each time with `convertToRGBA`.
+- **Every `DotButton`, ghost rings included,** re-ran its glare mapper on every tilt frame.
+
+**Fixes:**
+- **`DotMatrixText`:** a text with a wave or parallax records into one recorder kept for its life (`recordPicture`). Still texts record once, as before, so labels, the score and the catch pops don't each hold a recorder.
+- **`DotButton`:** the liquid dot parses its colour only when the colour changes. A ghost button reads a still value in place of the tilt.
+- **`Confetti`** (new best) keeps one recorder and one paint for its life, instead of making both every frame.
+
+**Measured on the OnePlus 9** (title at rest, release, not a bench build, 15 s):
+
+| Run | HWUI janky frames | HWUI p95 / p99 | Main-thread frames over 16.7 ms | Main p95 / p99 | GC waits (`hades`) |
+|---|---|---|---|---|---|
+| Before A | 5.98 % | 29 / 36 ms | 12.3 % | 24.4 / 34.1 ms | 97, 742 ms |
+| Before B | 5.26 % | 24 / 40 ms | 9.0 % | 19.4 / 38.1 ms | 54, 652 ms |
+| After A | 0.33 % | 21 / 22 ms | 4.6 % | 16.4 / 19.4 ms | not in the top three |
+| After B | 0.57 % | 20 / 23 ms | 5.0 % | 16.6 / 20.2 ms | not in the top three |
+
+The garbage-collection stalls on the title are gone. The frames still over budget are mostly the title's TextureViews: the title text, the PLAY dot and the icons each draw their own canvas every frame.
+
+**A trap when measuring.** `EXPO_PUBLIC_BENCH` is inlined into `App.tsx` when Metro transforms it, and Metro caches that transform. If only the variable changes, even with Gradle's generated assets deleted, the bundle keeps the old value. The first title traces were in fact the drips bench. When switching between a bench build and a normal one, also delete `$TMPDIR/metro-cache` and `node_modules/.cache`.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
