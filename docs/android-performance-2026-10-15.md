@@ -246,6 +246,28 @@ The earlier conclusion that the catch effects were ruled out was wrong: catches 
 - **Main-thread time saved:** about 1 ms a frame in mounts and redraws, plus Reanimated's own commits, which were about 1 ms a frame in the CPU profile.
 - **Frames over budget:** about 2 points better with the bump curve. Sync props held them within the run-to-run spread. Collections stayed at 4–10 per 300 frames.
 
+### Free small dots drawn with `drawAtlas` (R6, 2026-10-15)
+
+**Change.**
+- **A sprite sheet drawn once** (`dotSprites.ts`, `SPRITE_SHEET` in `sceneDrawer.ts`): a white halo, a white body disc and 48 glare cells, each with the glare at a different distance from the centre. It is a raster image made at load.
+- **Three `drawAtlas` calls** in the `below` layer replace about 12 Skia calls per dot: every halo, then the plain small dots' bodies, then their glares. Halos and bodies are tinted with `BlendMode.Modulate`.
+- **The glare follows the light by rotation:** the light is the same for every dot in a frame, so each glare is the cell at its distance from the centre, turned to face the light. The sheet never has to be redrawn as the phone tilts.
+- **No host objects per sprite:** Skia's `drawAtlas` reads plain JS objects shaped as rects and RSXforms, and colours by index. The packing reuses its objects and arrays from frame to frame (a set of arrays per sprite count, since `drawAtlas` takes whole arrays).
+- **Unchanged:** point dots, stretched dots, refused dots, wall drops and the liquid body keep their own paths, drawn over the plain dots.
+- **A quirk:** React Native Skia 2.6.2 only reads `drawAtlas`'s blend mode when a sixth argument is passed, so the glare batch passes `undefined` colours explicitly.
+
+**Measured on the OnePlus 9** (drips bench, release, 60 Hz; with the bump curve and sync props from the section above):
+
+| Run | Frames over 16.7 ms | p50 | p95 | p99 | UI runtime B/frame | GCs / 300 frames | GC waits / 15 s |
+|---|---|---|---|---|---|---|---|
+| Before (sync A / B) | 9.6 / 11.5 % | 13.2 / 15.1 ms | 17.7 / 18.1 ms | 24.1 / 22.3 ms | 32–41 K | 5–10 | 0–8, 0–75 ms |
+| Atlas A | 3.7 % | 11.9 ms | 16.2 ms | 23.0 ms | 61–72 K | 6–13 | 4, 27 ms |
+| Atlas B | 3.4 % | 12.2 ms | 16.3 ms | 21.9 ms | 61–73 K | 6–12 | 11, 82 ms |
+
+- **Frames over budget:** about a third of what they were. p50 and p95 each dropped about 1.5 ms.
+- **Allocation:** the UI runtime allocates about 30 KB a frame more. That is most likely Skia's C++ reading each sprite's fields by name from plain objects, which makes property names in Hermes. Collections rose only slightly and their waits stayed small. Mutable `SkRSXform` host objects (`set()`) would avoid it, at the cost of a JSI call per sprite.
+- **Visual check:** edge quality, the glare following the tilt, and halo colour still need confirming on the device.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
