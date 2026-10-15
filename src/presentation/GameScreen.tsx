@@ -29,6 +29,8 @@ import { HUD } from "./components/HUD";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import type { FlowAction } from "./flow/screenFlow";
+import { useAutoStart } from "./hooks/useAutoStart";
+import { useBenchStats } from "./hooks/useBenchStats";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
@@ -57,6 +59,8 @@ interface GameScreenProps {
 	watchAppActive: WatchAppActive;
 	/** How the phone's glass rounds its corners, once known; the arena follows (null: square) */
 	corners: Corners | null;
+	/** Start a run in this colour as soon as the title is up, without a press (the bench run) */
+	autoStart?: string;
 }
 
 export const GameScreen: React.FC<GameScreenProps> = ({
@@ -68,6 +72,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	sensor,
 	watchAppActive,
 	corners,
+	autoStart,
 }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
@@ -192,6 +197,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 
 	const { screen, dispatch } = useScreenFlow(store, storage, flood, perform);
+
+	useAutoStart(autoStart, dispatch);
+	useBenchStats(autoStart !== undefined);
 
 	const judged = useEffectEvent((verdict: BestVerdict) =>
 		dispatch({ type: "bestJudged", verdict }),

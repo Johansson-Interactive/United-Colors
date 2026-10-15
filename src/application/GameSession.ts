@@ -13,6 +13,8 @@ export interface GameSessionOptions {
 	random?: () => number;
 	/** What the game spawns; by default the game's own spawning, drawing on `random` */
 	spawner?: Spawner;
+	/** Whether a wrong-colour touch ends the run (default); off only for the bench run */
+	refusals?: boolean;
 }
 
 /** Screen the engine assumes until the canvas reports its layout */
@@ -145,6 +147,7 @@ export class GameSession {
 				screen: this.screen,
 				random: this.options.random,
 				spawner: this.options.spawner,
+				refusals: this.options.refusals,
 			});
 			this.engine.setTiltZero(this.tiltZero, this.tiltZeroDown);
 			this.engine.setSensitivity(this.sensitivity);

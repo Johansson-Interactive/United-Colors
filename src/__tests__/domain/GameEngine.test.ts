@@ -848,6 +848,44 @@ describe("GameEngine", () => {
 		});
 	});
 
+	describe("without refusals (the bench run)", () => {
+		it("lets a wrong-colour dot pass over the player, and the run goes on", () => {
+			const script = scriptedSpawner();
+			const engine = new GameEngine({
+				density: 100,
+				screen: SCREEN,
+				random: () => 0.5,
+				spawner: script.spawner,
+				refusals: false,
+			});
+			engine.startGame(OWN);
+			script.small.push(smallDotAt(CENTRE, OTHER, { id: "wrong" }));
+			for (let t = 0; t < 10; t++) engine.tick();
+			const frame = engine.getFrame();
+			expect(frame.phase).toBe("RUNNING");
+			expect(frame.dots.find((d) => d.id === "wrong")).toMatchObject({
+				reject: undefined,
+				absorb: undefined,
+			});
+		});
+
+		it("still catches dots of the player's colour", () => {
+			const script = scriptedSpawner();
+			const engine = new GameEngine({
+				density: 100,
+				screen: SCREEN,
+				random: () => 0.5,
+				spawner: script.spawner,
+				refusals: false,
+			});
+			engine.startGame(OWN);
+			script.small.push(smallDotAt(CENTRE, OWN, { id: "mine" }));
+			engine.tick();
+			engine.tick();
+			expect(engine.getScore()).toBe(1);
+		});
+	});
+
 	describe("rejecting a wrong-colour dot", () => {
 		/** A run where a wrong-colour dot has just touched the player, with another drifting by */
 		function hitWrongDot() {

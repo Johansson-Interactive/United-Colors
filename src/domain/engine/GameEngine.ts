@@ -34,6 +34,12 @@ export interface GameEngineOptions {
 	random?: () => number;
 	/** What the engine spawns; by default the game's SpawnSystem, drawing on `random` */
 	spawner?: Spawner;
+	/**
+	 * Whether touching a wrong-colour dot refuses it and ends the run (the game's rule, and
+	 * the default). Off, such a dot passes over the player, so a run never ends: only for the
+	 * bench run that measures performance (see application/bench.ts).
+	 */
+	refusals?: boolean;
 }
 
 /**
@@ -67,6 +73,7 @@ export class GameEngine {
 	private tiltZeroDown: TiltZero | null = null;
 	/** Scratch for where each dot is caught between ticks, so collisions allocate nothing */
 	private readonly collisionCircle: Circle = { x: 0, y: 0, radius: 0 };
+	private readonly refusals: boolean;
 
 	constructor(options: GameEngineOptions) {
 		this.density = options.density;
@@ -75,6 +82,7 @@ export class GameEngine {
 		this.playerSpeed = PLAYER_SPEED_PER_DEGREE / DEG_TO_RAD;
 		this.stateMachine = new StateMachine("KIOSK");
 		this.spawner = options.spawner ?? new SpawnSystem(this.random);
+		this.refusals = options.refusals ?? true;
 		this.initPlayer();
 	}
 
@@ -376,7 +384,7 @@ export class GameEngine {
 				// A drip of the player's colour can be plucked off its wall like any other dot
 				dot.startAbsorb();
 				this.events.push({ type: "collect", ...this.scoreCatch(1) });
-			} else if (dot.isForming) {
+			} else if (dot.isForming || !this.refusals) {
 				// A drip of another colour is part of the wall until it leaves: harmless
 			} else {
 				// Wrong colour: the player refuses the dot, then the game is over

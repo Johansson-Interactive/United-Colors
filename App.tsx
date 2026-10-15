@@ -2,6 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { benchSessionOptions, benchTilt } from "./src/application/bench";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
 import { bindScreenAwake } from "./src/application/useCases/BindScreenAwake";
@@ -15,9 +16,17 @@ import { HapticsService } from "./src/infrastructure/HapticsService";
 import { KeepAwakeService } from "./src/infrastructure/KeepAwakeService";
 import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
 import { startPerformanceHint } from "./src/infrastructure/performanceHint";
+import { ScriptedTiltSensor } from "./src/infrastructure/ScriptedTiltSensor";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
+
+/**
+ * A bench build (built with EXPO_PUBLIC_BENCH=1) plays the bench run by itself on launch, for
+ * performance traces of play (see src/application/bench.ts); shipped builds never set it
+ */
+const BENCH = process.env.EXPO_PUBLIC_BENCH === "1";
+const BENCH_COLOR = "#E91E63";
 
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
@@ -26,10 +35,14 @@ const storage = new AsyncStorageRepository();
 const session = new GameSession({
 	store,
 	createClock: (onTick, onFrame) => new FrameClock(onTick, onFrame),
+	...(BENCH ? benchSessionOptions() : {}),
 });
 
-/** One device-motion source: the interface tilt owns it, the game listens to it */
-const sensor = new DeviceMotionAdapter();
+/**
+ * One device-motion source: the interface tilt owns it, the game listens to it. The bench run
+ * steers with a scripted tilt instead.
+ */
+const sensor = BENCH ? new ScriptedTiltSensor(benchTilt) : new DeviceMotionAdapter();
 
 const audio = new AudioService(
 	{
@@ -75,6 +88,7 @@ export default function App() {
 					sensor={sensor}
 					watchAppActive={watchAppActive}
 					corners={corners}
+					autoStart={BENCH ? BENCH_COLOR : undefined}
 				/>
 			</TiltProvider>
 		</SafeAreaProvider>
