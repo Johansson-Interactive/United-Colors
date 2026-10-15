@@ -57,3 +57,5 @@ echo "main-thread waits in the animation phase, by waker (hades = Hermes GC):"
 "$TP" -q "$ROOT/scripts/perf/gc-waits.sql" "$TRACE" 2>/dev/null | sed 's/^/  /'
 echo "buffer handoffs from the main thread, and frames by start in SurfaceFlinger's period:"
 "$TP" -q "$ROOT/scripts/perf/buffer-queue.sql" "$TRACE" 2>/dev/null | sed 's/^/  /'
+echo "main thread in the animation phase, by core (0-3 little, 4-6 big, 7 prime):"
+"$TP" -q "$ROOT/scripts/perf/main-thread-cores.sql" "$TRACE" 2>/dev/null | sed 's/^/  /'
