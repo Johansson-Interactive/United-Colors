@@ -15,7 +15,6 @@ import { FrameClock } from "./src/infrastructure/FrameClock";
 import { HapticsService } from "./src/infrastructure/HapticsService";
 import { KeepAwakeService } from "./src/infrastructure/KeepAwakeService";
 import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
-import { startPerformanceHint } from "./src/infrastructure/performanceHint";
 import { ScriptedTiltSensor } from "./src/infrastructure/ScriptedTiltSensor";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
@@ -68,9 +67,6 @@ bindScreenAwake(store, new KeepAwakeService());
 
 /** How the glass rounds its corners, asked for once at launch */
 const displayCorners = loadDisplayCorners(Platform.OS);
-
-/** Keep the frame work on cores fast enough for it (Android; a tilt game gets no touch boost) */
-void startPerformanceHint(Platform.OS);
 
 export default function App() {
 	const [corners, setCorners] = useState<Corners | null>(null);
