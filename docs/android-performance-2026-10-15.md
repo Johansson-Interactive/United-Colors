@@ -312,18 +312,34 @@ The garbage-collection stalls on the title are gone. The frames still over budge
 | Atlas B (before) | 3.4 % | 12.2 ms | 16.3 ms | 21.9 ms | 6–12 | 48 | 383 | 19 |
 | Bursts A | 7.9 % | 15.1 ms | 17.3 ms | 22.1 ms | 6–8 | 0 | 217 | 2 |
 | Bursts B | 4.3 % | 12.8 ms | 16.5 ms | 21.8 ms | 6–8 | 0 | 188 | 2 |
+| Bursts C | 4.4 % | 14.9 ms | 16.5 ms | 22.4 ms | 6–7 | 0 | 148 | 2 |
 
 - **Views:** no mounts, and no TextureView per catch; only the two long-lived ones remain. Window redraws (`traversal`) fell by about 45 %. What is left is the HUD score bump, which is still a view transform.
 - **Allocation:** the UI runtime allocates 59–69 KB a frame, as before (61–73 K), and collects 6–8 times per 300 frames. Waits on `hades` stayed at 2–3 per 15 s.
-- **Frames over budget:** run B is within the spread of the runs before. Run A is worse, but its extra time all comes from handing buffers to SurfaceFlinger. Main-thread time inside `animation`:
+- **Frames over budget:** slightly worse in all three runs (4.3–7.9 % against 3.4–3.7 %, p95 16.5–17.3 ms against 16.2–16.3 ms). The extra time is the main thread waiting on SurfaceFlinger inside `queueBuffer`, after the frame has been recorded. The bursts don't touch that path. Main-thread time inside `animation`:
 
   | Run | `queueBuffer` | `eglSwapBuffers` | `onFrameAvailable` |
   |---|---|---|---|
   | Atlas A / B | 4,917 / 4,977 ms | 2,982 / 3,020 ms | 2,325 / 2,359 ms |
   | Bursts A | 6,874 ms | 3,946 ms | 3,307 ms |
   | Bursts B | 4,891 ms | 2,963 ms | 2,313 ms |
+  | Bursts C | 6,715 ms | 3,871 ms | 3,232 ms |
 
-  These are binder calls into SurfaceFlinger after the frame has been recorded, and the bursts don't touch them. The main thread's binder waits in A were 2.8 s, against about 1.9 s in the other three runs. A slower system side in that run is the likely cause, not the change. A third run would settle it.
+- **`queueBuffer` has drifted up all evening**, including across changes that never touched the buffer path. Mean per call, in trace order:
+
+  | Traces | Mean `queueBuffer` |
+  |---|---|
+  | drips-after (second pair) | 1.67 / 1.70 ms |
+  | bump | 2.20 / 2.36 ms |
+  | sync | 2.12 / 2.70 ms |
+  | atlas | 2.65 / 2.66 ms |
+  | bursts A / B / C | 3.88 / 2.75 / 3.77 ms |
+
+  The waits are almost all woken by SurfaceFlinger's binder threads. The phone was cool after run C (thermal status 0, CPU 39 °C, GPU 38 °C, battery 32 °C). Two explanations fit:
+  - **Drift on the device**, which the earlier traces already show.
+  - **Lower clocks:** with less app work per frame (no mounts, fewer window redraws), the governor may lower clocks, and SurfaceFlinger answers more slowly.
+
+  The previous build, benched back to back with this one, would tell them apart.
 
 **Visual check:** pending on the device. Pops in place, rising, swelling and fading; amber from the second step of a combo; staggered on the same tick; the glow as before. Rings for a point catch and game over. Bursts shake with the final hit, stay sharp while the scene frosts, and fade with the stage under the settle bowl.
 
