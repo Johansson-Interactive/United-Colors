@@ -1,26 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSharedValue, withDelay, withSequence, withTiming } from "react-native-reanimated";
+import {
+	type FrameCallback,
+	useFrameCallback,
+	useSharedValue,
+	withDelay,
+	withSequence,
+	withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { createCatchStagger } from "../../application/catchCue";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
 import type { GamePhase } from "../../domain/types";
-import { BURST_LIFETIME_MS, type Burst, type BurstInput } from "../effects/Bursts";
+import {
+	advanceBursts,
+	type Burst,
+	burstColor,
+	popBurst,
+	ringBurst,
+	withBurst,
+} from "../effects/burstFrames";
 import { catchPop } from "../effects/catchPop";
 import { INK_LIFT, WHITE } from "../theme/theme";
 import { createTimeoutGroup } from "./timeoutGroup";
-
-const MAX_BURSTS = 8;
 
 /**
  * Presentation-only reactions to what the game does: the edge wash takes the player's
  * colour, the scene frosts when still, the final hit shakes the stage, and score changes
  * burst where the player is. Reads the store; never writes to it.
+ *
+ * The bursts never go through React: each is laid out here once and appended to a list on
+ * the UI thread, which the game canvas draws at `burstClock`, the frame time (see
+ * burstFrames.ts). The clock runs only while a burst is alive.
  */
 export function useStageEffects(store: GameStore, phase: GamePhase, playerColor: string) {
 	const accent = useSharedValue<string>(INK_LIFT);
 	const frost = useSharedValue(0);
 	const shake = useSharedValue(0);
-	const [bursts, setBursts] = useState<Burst[]>([]);
+	const bursts = useSharedValue<Burst[]>([]);
+	const burstClock = useSharedValue(0);
+	/** The newest burst the UI thread has drawn, so a stop sent before a newer one is ignored */
+	const burstSeen = useSharedValue(-1);
 	const burstIdRef = useRef(0);
 
 	// Frost the scene when it is still; wash the edges in the player's colour when playing
@@ -38,20 +58,41 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		accent.set(phase === "KIOSK" ? INK_LIFT : playerColor);
 	}, [phase, playerColor, accent]);
 
-	// Burst removal timers still pending, cleared on unmount so none fire into a dead screen
+	// Stops the clock once the UI thread has no burst left, unless one was added since
+	const clockRef = useRef<FrameCallback | null>(null);
+	const stopClock = useCallback((seen: number) => {
+		if (seen === burstIdRef.current - 1) clockRef.current?.setActive(false);
+	}, []);
+
+	// Stamps, ages and drops the bursts each frame while any is alive
+	const clock = useFrameCallback((frame) => {
+		const list = bursts.get();
+		for (let i = 0; i < list.length; i++) {
+			if (list[i].id > burstSeen.get()) burstSeen.set(list[i].id);
+		}
+		const next = advanceBursts(list, frame.timestamp);
+		if (next !== list) bursts.set(next);
+		burstClock.set(frame.timestamp);
+		if (next.length === 0) scheduleOnRN(stopClock, burstSeen.get());
+	}, false);
+	useEffect(() => {
+		clockRef.current = clock;
+	}, [clock]);
+
+	// Staggered pops still waiting, cleared on unmount so none fire into a dead screen
 	const [burstTimers] = useState(createTimeoutGroup);
 	useEffect(() => () => burstTimers.clearAll(), [burstTimers]);
 
 	const addBurst = useCallback(
-		(burst: BurstInput) => {
-			const id = burstIdRef.current++;
-			setBursts((prev) => [...prev.slice(-(MAX_BURSTS - 1)), { ...burst, id } as Burst]);
-			burstTimers.schedule(
-				() => setBursts((prev) => prev.filter((b) => b.id !== id)),
-				BURST_LIFETIME_MS + 50,
-			);
+		(make: (id: number) => Burst) => {
+			const burst = make(burstIdRef.current++);
+			bursts.modify((list) => {
+				"worklet";
+				return withBurst(list, burst);
+			});
+			clock.setActive(true);
 		},
-		[burstTimers],
+		[bursts, clock],
 	);
 
 	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
@@ -70,13 +111,16 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 					if (!event.sameTick) catchSpot = { x, y };
 					const at = catchSpot;
 					stagger(event.sameTick, () => {
-						addBurst({ kind: "pop", ...at, ...catchPop(event, color) });
-						if (event.type === "collectPoint") addBurst({ kind: "ring", ...at, color, size: 80 });
+						const pop = catchPop(event, color);
+						addBurst((id) => popBurst(id, at.x, at.y, pop.text, burstColor(pop.color)));
+						if (event.type === "collectPoint") {
+							addBurst((id) => ringBurst(id, at.x, at.y, burstColor(color), 80));
+						}
 					});
 					return;
 				}
 				case "gameOver":
-					addBurst({ kind: "ring", x, y, color: WHITE, size: 90 });
+					addBurst((id) => ringBurst(id, x, y, burstColor(WHITE), 90));
 					shake.set(
 						withSequence(
 							withTiming(-10, { duration: 40 }),
@@ -94,5 +138,5 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		});
 	}, [store, addBurst, shake, burstTimers]);
 
-	return { accent, frost, shake, bursts };
+	return { accent, frost, shake, bursts, burstClock };
 }

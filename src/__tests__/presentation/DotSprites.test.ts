@@ -19,6 +19,8 @@ import {
 	HALO_PX,
 	HALO_SCALE,
 	HALO_SPRITE,
+	POP_DOT_SPRITE,
+	POP_GLOW_SPRITE,
 	packDotSprites,
 	SHEET_HEIGHT,
 	SHEET_WIDTH,
@@ -172,7 +174,7 @@ describe("packDotSprites", () => {
 
 describe("the sprite sheet", () => {
 	it("lays the cells out side by side within the sheet", () => {
-		const cells = [HALO_SPRITE, BODY_SPRITE];
+		const cells = [HALO_SPRITE, BODY_SPRITE, POP_GLOW_SPRITE, POP_DOT_SPRITE];
 		for (let step = 0; step < GLARE_STEPS; step++) cells.push(glareCell(step));
 		for (const a of cells) {
 			expect(a.x).toBeGreaterThanOrEqual(0);

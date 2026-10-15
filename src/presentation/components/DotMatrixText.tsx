@@ -23,6 +23,8 @@ import {
 } from "react-native-reanimated";
 import {
 	type ColorBy,
+	GLOW_CORE_ALPHA,
+	GLOW_SCALE,
 	layoutDotMatrix,
 	matrixBox,
 	PARALLAX_GAIN,
@@ -59,8 +61,6 @@ const WAVE_PERIOD_MS = 3600;
 const WAVE_AMPLITUDE = 0.22;
 const LAYER_DEPTH = [1, 0.55, 0.2] as const;
 const WORD_DEPTH = 0.6;
-const GLOW_SCALE = 2.6;
-const GLOW_CORE_ALPHA = 0.35;
 
 /** The dot body colour: the colour string at the text's opacity */
 function fillColor(color: string, opacity: number): Float32Array {

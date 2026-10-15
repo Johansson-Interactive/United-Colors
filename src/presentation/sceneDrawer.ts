@@ -1,5 +1,6 @@
 import {
 	BlendMode,
+	PaintStyle,
 	type SkCanvas,
 	type SkColor,
 	type SkImage,
@@ -22,6 +23,7 @@ import {
 	WALL_NORMAL_MIN,
 } from "../application/sceneRecord";
 import { GAME_COLORS } from "../domain/constants";
+import { GLOW_CORE_ALPHA } from "./dotmatrix/layout";
 import {
 	BODY_CELL,
 	BODY_PX,
@@ -34,11 +36,22 @@ import {
 	glareStepDistance,
 	HALO_CELL,
 	HALO_PX,
+	POP_DOT_PX,
+	POP_DOT_SPRITE,
+	POP_GLOW_PX,
+	POP_GLOW_SPRITE,
 	packDotSprites,
 	SHEET_HEIGHT,
 	SHEET_WIDTH,
 	type SpriteBatch,
 } from "./dotSprites";
+import {
+	BURST_COLORS,
+	type Burst,
+	type BurstSprites,
+	burstSprites,
+	packBursts,
+} from "./effects/burstFrames";
 import {
 	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
@@ -127,6 +140,27 @@ const SPRITE_SHEET: SkImage = (() => {
 	body.setAntiAlias(true);
 	body.setColor(white(1));
 	canvas.drawCircle(HALO_CELL + BODY_CELL / 2, BODY_CELL / 2, BODY_PX, body);
+	// A score pop's dot and its glow, as DotMatrixText draws them (see burstFrames.ts)
+	const popGlowX = POP_GLOW_SPRITE.x + POP_GLOW_SPRITE.width / 2;
+	const popGlowY = POP_GLOW_SPRITE.y + POP_GLOW_SPRITE.height / 2;
+	const popGlow = Skia.Paint();
+	popGlow.setAntiAlias(true);
+	popGlow.setShader(
+		Skia.Shader.MakeRadialGradient(
+			vec(popGlowX, popGlowY),
+			POP_GLOW_PX,
+			[white(GLOW_CORE_ALPHA), white(0)],
+			null,
+			TileMode.Clamp,
+		),
+	);
+	canvas.drawCircle(popGlowX, popGlowY, POP_GLOW_PX, popGlow);
+	canvas.drawCircle(
+		POP_DOT_SPRITE.x + POP_DOT_SPRITE.width / 2,
+		POP_DOT_SPRITE.y + POP_DOT_SPRITE.height / 2,
+		POP_DOT_PX,
+		body,
+	);
 	// Each glare lies to the right of its cell's centre; drawing turns it toward the light
 	for (let step = 0; step < GLARE_STEPS; step++) {
 		const cell = glareCell(step);
@@ -175,6 +209,41 @@ function drawSprites(canvas: SkCanvas, batch: SpriteBatch, tinted: boolean) {
 		BlendMode.Modulate,
 		tinted ? (batch.colors[n] as SkColor[]) : undefined,
 	);
+}
+
+/** Burst colours, indexed as BURST_COLORS */
+const BURST_FILLS = BURST_COLORS.map((color) => Skia.Color(color));
+
+const RING_PAINT = Skia.Paint();
+RING_PAINT.setAntiAlias(true);
+RING_PAINT.setStyle(PaintStyle.Stroke);
+
+/** The burst buffers for the thread drawing the bursts, made there on its first frame */
+function burstBuffers(): BurstSprites {
+	"worklet";
+	const g = globalThis as { __tiltlingBurstSprites?: BurstSprites };
+	if (g.__tiltlingBurstSprites === undefined) g.__tiltlingBurstSprites = burstSprites();
+	return g.__tiltlingBurstSprites;
+}
+
+/**
+ * Draw the bursts (see burstFrames.ts) at frame time `now`: every pop dot's glow, then every
+ * pop dot, as sprites, then the rings
+ */
+export function drawBursts(canvas: SkCanvas, bursts: readonly Burst[], now: number) {
+	"worklet";
+	if (bursts.length === 0) return;
+	const out = burstBuffers();
+	packBursts(bursts, now, BURST_FILLS, out);
+	drawSprites(canvas, out.glows, true);
+	drawSprites(canvas, out.dots, true);
+	for (let i = 0; i < out.ringCount; i++) {
+		const ring = out.rings[i];
+		RING_PAINT.setColor(BURST_FILLS[ring.color]);
+		RING_PAINT.setAlphaf(ring.alpha);
+		RING_PAINT.setStrokeWidth(ring.width);
+		canvas.drawCircle(ring.x, ring.y, ring.radius, RING_PAINT);
+	}
 }
 
 /**

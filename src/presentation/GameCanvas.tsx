@@ -23,6 +23,7 @@ import {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScreenSize } from "../domain/types";
+import type { Burst } from "./effects/burstFrames";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
 import {
@@ -35,7 +36,14 @@ import {
 	WASH_POSITIONS,
 	WASH_RADIUS,
 } from "./room";
-import { drawScene, liquidBody, MERGE_EFFECT, WALL_DROP_EFFECT, wallDrops } from "./sceneDrawer";
+import {
+	drawBursts,
+	drawScene,
+	liquidBody,
+	MERGE_EFFECT,
+	WALL_DROP_EFFECT,
+	wallDrops,
+} from "./sceneDrawer";
 import { INK } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { WALL_DROP_SLOTS, type WallDropSlot } from "./wallDropShader";
@@ -52,6 +60,9 @@ interface GameCanvasProps {
 	stageOpacity: SharedValue<number>;
 	/** Sideways shake of the scene (px), for the final hit */
 	shake: SharedValue<number>;
+	/** The score pops and rings alive, drawn at `burstClock`, the frame time (see burstFrames.ts) */
+	bursts: SharedValue<Burst[]>;
+	burstClock: SharedValue<number>;
 	/** When set (e.g. __DEV__), drag gestures report (dx, dy) for player control */
 	onDragDelta?: (dx: number, dy: number) => void;
 }
@@ -133,7 +144,8 @@ const WallDrop: React.FC<WallDropProps> = ({ drops, slot }) => {
  * makes it a SurfaceView, which the system composites directly, instead of a transparent
  * TextureView the app's own render thread has to blend into the window every frame. A
  * SurfaceView ignores the opacity and transforms of the views around it, so the stage fade
- * and the shake are drawn here too. The blur layer only exists while frosted and the fade
+ * and the shake are drawn here too, and so are the bursts over the scene: they shake and fade
+ * with it but stay sharp while it frosts. The blur layer only exists while frosted and the fade
  * cover only while fading, so a live scene pays for neither.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -143,6 +155,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	accent,
 	stageOpacity,
 	shake,
+	bursts,
+	burstClock,
 	onDragDelta,
 }) => {
 	const { width, height } = useStageBox();
@@ -238,6 +252,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 			drawScene(canvas, scene.get(), lightX.get(), lightY.get(), "above"),
 		),
 	);
+	// Re-recorded only while a burst is alive: the clock stands still otherwise
+	const [burstRecorder] = useState(() => Skia.PictureRecorder());
+	const burstPicture = useDerivedValue(() =>
+		recordPicture(burstRecorder, (canvas) => drawBursts(canvas, bursts.get(), burstClock.get())),
+	);
 	const drops = useDerivedValue(() => wallDrops(scene.get()));
 	const body = useDerivedValue(() => liquidBody(scene.get()));
 	const bodyX = useDerivedValue(() => body.get().x);
@@ -277,6 +296,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 						</Rect>
 						<Picture picture={above} />
 					</Group>
+					<Picture picture={burstPicture} />
 				</Group>
 				{fading ? (
 					<Group layer={<Paint opacity={cover} />}>
@@ -289,8 +309,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 };
 
 const styles = StyleSheet.create({
+	// The whole stage, under the interface
 	container: {
-		flex: 1,
+		...StyleSheet.absoluteFill,
 		backgroundColor: INK,
 	},
 });

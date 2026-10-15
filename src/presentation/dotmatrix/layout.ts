@@ -63,6 +63,10 @@ export function matrixSize(layout: MatrixLayout, pitch: number): { width: number
 	return { width: layout.cols * pitch, height: layout.rows * pitch };
 }
 
+/** A glowing text's glow: its radius relative to the dot's, and its alpha at the centre */
+export const GLOW_SCALE = 2.6;
+export const GLOW_CORE_ALPHA = 0.35;
+
 /** Pixels of parallax drift per radian of tilt for the deepest layer */
 export const PARALLAX_GAIN = 26;
 

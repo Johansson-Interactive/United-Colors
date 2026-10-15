@@ -1,4 +1,5 @@
 import { FIELD, KIND_CODE, WALL_NORMAL_MIN } from "../application/sceneRecord";
+import { GLOW_SCALE } from "./dotmatrix/layout";
 
 /**
  * The free dots as sprites: every halo, and the body and glare of every plain small dot (one
@@ -41,8 +42,23 @@ export const GLARE_MAX_DISTANCE = Math.hypot(GLARE_MAX_OFFSET, GLARE_MAX_OFFSET)
 /** Glare cells per row of the sheet */
 const GLARE_COLUMNS = 8;
 
-/** The sheet: the halo cell, the body cell beside it, then rows of glare cells below them */
-export const SHEET_WIDTH = Math.max(HALO_CELL + BODY_CELL, GLARE_COLUMNS * BODY_CELL);
+/**
+ * Radius (px) of a score pop's dot sprite (see burstFrames.ts): a little above a pop dot at its
+ * widest on a phone, so it is drawn smaller, never stretched. Its glow is DotMatrixText's.
+ */
+export const POP_DOT_PX = 8;
+export const POP_GLOW_PX = POP_DOT_PX * GLOW_SCALE;
+export const POP_DOT_CELL = 2 * (POP_DOT_PX + PAD_PX);
+export const POP_GLOW_CELL = 2 * Math.ceil(POP_GLOW_PX + PAD_PX);
+
+/**
+ * The sheet: the halo cell, the body cell and the pop's glow and dot cells beside it, then
+ * rows of glare cells below them
+ */
+export const SHEET_WIDTH = Math.max(
+	HALO_CELL + BODY_CELL + POP_GLOW_CELL + POP_DOT_CELL,
+	GLARE_COLUMNS * BODY_CELL,
+);
 export const SHEET_HEIGHT = HALO_CELL + Math.ceil(GLARE_STEPS / GLARE_COLUMNS) * BODY_CELL;
 
 /** A cell of the sheet, in the shape Skia reads as a rect */
@@ -55,6 +71,18 @@ export interface SheetCell {
 
 export const HALO_SPRITE: SheetCell = { x: 0, y: 0, width: HALO_CELL, height: HALO_CELL };
 export const BODY_SPRITE: SheetCell = { x: HALO_CELL, y: 0, width: BODY_CELL, height: BODY_CELL };
+export const POP_GLOW_SPRITE: SheetCell = {
+	x: HALO_CELL + BODY_CELL,
+	y: 0,
+	width: POP_GLOW_CELL,
+	height: POP_GLOW_CELL,
+};
+export const POP_DOT_SPRITE: SheetCell = {
+	x: HALO_CELL + BODY_CELL + POP_GLOW_CELL,
+	y: 0,
+	width: POP_DOT_CELL,
+	height: POP_DOT_CELL,
+};
 
 /** The cell holding the glare `step` steps from the centre (0..GLARE_STEPS - 1) */
 export function glareCell(step: number): SheetCell {
@@ -114,9 +142,31 @@ export interface DotSprites {
 	glareCells: SheetCell[];
 }
 
-function spriteBatch(): SpriteBatch {
+export function spriteBatch(): SpriteBatch {
 	"worklet";
 	return { count: 0, placements: [[]], colors: [[]], cells: [[]], pool: [] };
+}
+
+/**
+ * Make `batch` hold `n` sprites this frame: its count, and its arrays for `n` the first time a
+ * frame has that many, filled with `cell` and `color` until the packing writes them
+ */
+export function fitBatch(batch: SpriteBatch, n: number, cell: SheetCell, color: Float32Array) {
+	"worklet";
+	batch.count = n;
+	while (batch.pool.length < n) batch.pool.push({ scos: 0, ssin: 0, tx: 0, ty: 0 });
+	if (batch.placements[n] !== undefined) return;
+	const placements: SpritePlacement[] = [];
+	const cellsOfN: SheetCell[] = [];
+	const colorsOfN: Float32Array[] = [];
+	for (let i = 0; i < n; i++) {
+		placements.push(batch.pool[i]);
+		cellsOfN.push(cell);
+		colorsOfN.push(color);
+	}
+	batch.placements[n] = placements;
+	batch.cells[n] = cellsOfN;
+	batch.colors[n] = colorsOfN;
 }
 
 /** Fresh buffers to pack into, for one canvas on the thread that draws it */
@@ -167,26 +217,9 @@ export function packDotSprites(
 			plainCount++;
 		}
 	}
-	const batches = [halos, bodies, glares];
-	for (let b = 0; b < 3; b++) {
-		const batch = batches[b];
-		const n = b === 0 ? haloCount : plainCount;
-		batch.count = n;
-		while (batch.pool.length < n) batch.pool.push({ scos: 0, ssin: 0, tx: 0, ty: 0 });
-		if (batch.placements[n] === undefined) {
-			const placements: SpritePlacement[] = [];
-			const cellsOfN: SheetCell[] = [];
-			const colorsOfN: Float32Array[] = [];
-			for (let i = 0; i < n; i++) {
-				placements.push(batch.pool[i]);
-				cellsOfN.push(HALO_SPRITE);
-				colorsOfN.push(colors[0]);
-			}
-			batch.placements[n] = placements;
-			batch.cells[n] = cellsOfN;
-			batch.colors[n] = colorsOfN;
-		}
-	}
+	fitBatch(halos, haloCount, HALO_SPRITE, colors[0]);
+	fitBatch(bodies, plainCount, HALO_SPRITE, colors[0]);
+	fitBatch(glares, plainCount, HALO_SPRITE, colors[0]);
 
 	// The glare faces the light: the cell at its distance, turned toward it
 	const distance = Math.hypot(gx, gy);

@@ -29,6 +29,7 @@ import { HUD } from "./components/HUD";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import type { FlowAction } from "./flow/screenFlow";
+import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
 import { useDevControlMode } from "./hooks/useDevControlMode";
@@ -43,7 +44,6 @@ import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
-import { Stage } from "./Stage";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
@@ -95,7 +95,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const { touch: devTouch, detectGyro, onGyroSample } = useDevControlMode();
 
 	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, shake, bursts } = useStageEffects(store, phase, playerColor);
+	const { accent, frost, shake, bursts, burstClock } = useStageEffects(store, phase, playerColor);
 
 	// Sounds load with the screen and follow the music and effect settings; the effects follow
 	// the game's events and the music the phase. Dispose discards a load in flight.
@@ -280,13 +280,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
-				<Stage
+				<GameCanvas
 					scene={scene}
 					frost={frost}
 					accent={accent}
 					stageOpacity={stageOpacity}
 					shake={shake}
 					bursts={bursts}
+					burstClock={burstClock}
 					onLayout={handleLayout}
 					onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
 				/>
