@@ -21,7 +21,7 @@ import java.io.File
  * every Skia render) on the little ones. A performance hint session (Android 12+) is the
  * supported way out: every frame the module reports how long the main thread worked against a
  * target of `workShare` of the frame interval, and the system sizes the CPU for the session's
- * threads (the main thread and the JS thread) to meet it.
+ * threads (the main thread, the JS thread and Hermes's garbage collectors) to meet it.
  */
 class PerformanceHintModule : Module() {
   private val main = Handler(Looper.getMainLooper())
@@ -72,7 +72,7 @@ class PerformanceHintModule : Module() {
   private fun openSession(): PerformanceHintManager.Session? {
     val manager = appContext.reactContext?.getSystemService(PerformanceHintManager::class.java)
       ?: return null
-    val threads = (listOf(Process.myTid()) + threadsNamed(JS_THREAD_NAMES)).distinct()
+    val threads = (listOf(Process.myTid()) + threadsNamed(SESSION_THREAD_NAMES)).distinct()
     val opened = manager.createHintSession(threads.toIntArray(), frameIntervalNanos()) ?: return null
     session = opened
     return opened
@@ -133,7 +133,11 @@ class PerformanceHintModule : Module() {
   }
 
   private companion object {
-    /** React Native's JS thread, by the names it has had */
-    val JS_THREAD_NAMES = setOf("mqt_v_js", "mqt_js")
+    /**
+     * Besides the main thread: React Native's JS thread, by the names it has had, and Hermes's
+     * garbage collector threads ("hades"). The UI runtime's collector matters most: the main
+     * thread waits for it mid-frame, so it must not be left on the little cores either.
+     */
+    val SESSION_THREAD_NAMES = setOf("mqt_v_js", "mqt_js", "hades")
   }
 }
