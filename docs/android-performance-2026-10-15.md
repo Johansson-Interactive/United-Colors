@@ -169,9 +169,29 @@ Per frame, the game made a new recorder for the scene, one for the room picture,
 | Liquid player drawn as a `<Rect>` + `<Shader>` node between two scene layers (`liquidBody`), not a JS shader per frame | 4.0–8.4 % | 46 ms | 6–21 |
 
 **Not yet done:**
-- A forming wall drip still makes a JS shader each frame (1 MB reported per drip per frame). The bench rarely has drips, because it holds at 60 dots and only starts one after a catch. A real late run nearly always has one forming, so real play will collect more often than the bench shows. Fix: a few fixed drip slots drawn as shader nodes, like the liquid body.
 - `DotMatrixText` and `Confetti` still use `createPicture`. That's fine during play, but the title text's wave re-records every frame on the title screen.
 - iOS has not been checked on a device since these changes. They are platform-neutral, but the room, the liquid body and the layering should get a visual check there.
+
+### Wall drips as shader nodes (2026-10-15)
+
+**Cause.** Each wall drip (forming, or tearing off after launch) made a JS shader every frame, so each one reported 1 MB to Hermes per frame. A real late run nearly always has one or two drips on the walls. The steady bench holds at 60 dots, so it starts a drip only after a catch and has none in about 92 % of its traced frames.
+
+**Bench run with drips.** `EXPO_PUBLIC_BENCH=drips` keeps the dots coming, at the rate of a run 10 minutes in and with no cap below the game's limit, so one or two drips are on the walls in every traced frame. It reaches about 78 dots while traced, against the steady run's 60, so compare it only with itself.
+
+**Fix.** The canvas draws the first four drips as fixed `<Rect>` + `<Shader>` nodes (`wallDropSlots` in `wallDropShader.ts`, `WallDrop` in `GameCanvas.tsx`). Any drips past four still get a shader made per frame. The layer order is: the scene below the drips (halos and free dots), the drip slots, a picture with the drips' glare, the liquid body, then the layer above.
+
+**Measured on the OnePlus 9** (drips bench, release, display at 60 Hz). "Before" is the same build with no slots (`WALL_DROP_SLOTS = 0`):
+
+| Run | Frames over 16.7 ms | p95 | p99 | GCs / 300 frames | GC waits / 15 s |
+|---|---|---|---|---|---|
+| Before A | 13.9 % | 18.7 ms | 26.8 ms | 92–94 | 8, 82 ms |
+| Before B | 11.7 % | 18.1 ms | 27.9 ms | 91–96 | 14, 138 ms |
+| After A | 11.6 % | 17.7 ms | 23.6 ms | 6–11 | 9, 76 ms |
+| After B | 13.3 % | 17.7 ms | 27.5 ms | 6–10 | 8, 69 ms |
+
+- **Collections:** they fell by about 90 %, to below the steady bench's 12–21.
+- **Frames over budget:** these didn't move. Most of those ~94 collections didn't stall the main thread, and the GC waits were already small. Fixing the drips mainly removes a risk; it doesn't make frames faster here.
+- **Where the time goes:** what remains at this load is mostly not garbage collection. The main thread spends about 1 s per 15 s waiting on binder calls to `surfaceflinger` (about 900 waits of about 1.1 ms each). The steady bench showed the same. That is the next thing to look into for play.
 
 ## 3. Findings
 
