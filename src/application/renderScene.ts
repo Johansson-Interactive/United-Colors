@@ -1,3 +1,4 @@
+import { arenaContacts } from "../domain/arena";
 import { ABSORB_MERGE_FRACTION, GAME_COLORS } from "../domain/constants";
 import { dripCircle } from "../domain/engine/Drip";
 import type { DotView, RenderFrame, ScreenSize, WallContact } from "../domain/types";
@@ -97,7 +98,7 @@ export function addStretches(ax: number, ay: number, bx: number, by: number): [n
 export interface PlayerPose {
 	x: number;
 	y: number;
-	/** Speed (px/s) the walls hold back on each axis, signed toward the wall; 0 when free */
+	/** Velocity (px/s) the walls hold back, pointing into them; 0 when free */
 	pushX?: number;
 	pushY?: number;
 }
@@ -162,7 +163,7 @@ function colorIndex(color: string): number {
 export function createSceneBuilder() {
 	let buffer = new Float32Array(0);
 	const jelly = createJelly();
-	// The player's push into the walls, smoothed (px/s, signed toward the wall per axis)
+	// The player's push into the walls, smoothed (px/s, pointing into them)
 	let pressX = 0;
 	let pressY = 0;
 	// Scratch for a forming drip's pose
@@ -293,20 +294,18 @@ export function createSceneBuilder() {
 		if (playerDot) {
 			const shape = jelly(playerX, playerY, playerDot.radius, step);
 			let radius = playerDot.radius * Math.min(MERGE_SWELL_MAX, Math.sqrt(1 + swell));
-			// Pressed into each wall the push is toward: the body sinks in as hard as it is
+			// Pressed into each wall the push points into: the body sinks in as hard as it is
 			// pushed, less any gap that has opened as the player pulls away
 			const pressed: WallContact[] = [];
 			let deepest = 0;
 			if (screen && playerDot.radius > 0) {
 				const r = playerDot.radius;
+				// The walls near enough to press into: straight edges, or a rounded corner's curve
+				// at its slant where the player meets it (see arena.ts)
 				const walls: Array<{ wall: WallContact; push: number }> = [];
-				if (pressX < 0) walls.push({ wall: { nx: 1, ny: 0, x: 0, y: playerY }, push: -pressX });
-				if (pressX > 0) {
-					walls.push({ wall: { nx: -1, ny: 0, x: screen.width, y: playerY }, push: pressX });
-				}
-				if (pressY < 0) walls.push({ wall: { nx: 0, ny: 1, x: playerX, y: 0 }, push: -pressY });
-				if (pressY > 0) {
-					walls.push({ wall: { nx: 0, ny: -1, x: playerX, y: screen.height }, push: pressY });
+				for (const wall of arenaContacts(screen, playerX, playerY, r * (1 + PLAYER_PRESS))) {
+					const push = -(pressX * wall.nx + pressY * wall.ny);
+					if (push > 0) walls.push({ wall, push });
 				}
 				for (const { wall, push } of walls) {
 					const gap = (playerX - wall.x) * wall.nx + (playerY - wall.y) * wall.ny - r;

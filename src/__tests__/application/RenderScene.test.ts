@@ -542,6 +542,29 @@ describe("at the walls", () => {
 			expect(top.y).toBeLessThan(20);
 		});
 
+		it("presses into a rounded corner's curve alone, at its slant where it meets it", () => {
+			const rounded = { ...SCREEN, corners: { radius: 60, curve: "circular" as const } };
+			// Resting on the arc round (60, 60), on the diagonal
+			const rest = 60 - 40 * Math.SQRT1_2;
+			const build = createSceneBuilder();
+			let scene: Float32Array = new Float32Array(0);
+			for (let i = 0; i < 60; i++) {
+				scene = build(
+					frame([player]),
+					0,
+					{ x: rest, y: rest, pushX: -300, pushY: -300 },
+					16,
+					rounded,
+				);
+			}
+			const p = readScene(scene)[0];
+			expect(p.wallX).toBeCloseTo(Math.SQRT1_2, 2);
+			expect(p.wallY).toBeCloseTo(Math.SQRT1_2, 2);
+			expect(p).toMatchObject({ wall2X: 0, wall2Y: 0, wall2C: 0 });
+			expect(p.x).toBeLessThan(rest);
+			expect(p.x).toBeCloseTo(p.y, 2);
+		});
+
 		it("follows the push with a short lag rather than at once", () => {
 			const build = createSceneBuilder();
 			build(frame([player]), 0, FLUSH_LEFT, 16, SCREEN);
