@@ -383,6 +383,28 @@ Read from the existing traces (atlas, bursts and control runs) with `scripts/per
 - **Get frames back to on time.** Any main-thread work saved before the swap helps twice: the frame is shorter, and a late frame that swaps within about 6 ms of starting drops back to on time.
 - **A TextureView for the game canvas, as a probe** (drop `opaque` on the `<Canvas>` in `GameCanvas.tsx`, locally, not committed). A TextureView swap took about 0.1–0.8 ms on the main thread in every trace so far. The SurfaceFlinger transaction then happens on HWUI's RenderThread for the window, off the main thread. The cost comes back as a window redraw every frame (about 1.5–1.7 ms of `traversal` on the main thread in the R2 traces) and a blended composite. R2 measured that trade-off before the late mode was understood, on runs it could not compare. Only a back-to-back bench against the current build can decide it.
 
+### The game canvas back on a TextureView on Android (2026-10-16)
+
+The probe above, benched back to back on the drips bench (release, 60 Hz, thermal status 0): the control is `8c589db` with its SurfaceView; the probe is the same code without `opaque`. Two runs each.
+
+| Run | Frames over 16.7 ms | p50 | p95 | p99 | Late frames | Main-thread `animation` per frame | Main-thread swap |
+|---|---|---|---|---|---|---|---|
+| SurfaceView A | 4.4 % | 14.8 ms | 16.5 ms | 21.6 ms | 57 % | 13.4 ms | 4.1 ms |
+| SurfaceView B | 4.6 % | 15.0 ms | 16.6 ms | 22.7 ms | 62 % | 13.7 ms | 4.4 ms |
+| TextureView A | 2.1 % | 10.6 ms | 14.2 ms | 20.2 ms | 1.9 % | 9.5 ms | 0.66 ms |
+| TextureView B | 1.7 % | 10.5 ms | 13.5 ms | 19.1 ms | 1.6 % | 9.3 ms | 0.67 ms |
+
+- **Main thread:** frames over budget roughly halve, and p50 drops by about 4.5 ms. The swap falls from about 4 ms to 0.7 ms, and the late mode is gone: the TextureView's swap does not wait on SurfaceFlinger.
+- **What it costs:**
+  - The window redraws every frame: `traversal` goes from 137–175 to about 880 per 15 s, at about 1.1 ms each on the main thread.
+  - HWUI's RenderThread now draws every frame, about 4.0 ms each, composites the texture and makes the SurfaceFlinger hand-off there. That is its own thread, in parallel with the next main-thread frame.
+- **Unchanged:** UI-runtime allocation (55–67 KB a frame) and collections (5–8 per 300 frames).
+- **Frame timeline:** SurfaceFlinger now times the window's frames, which it didn't for the SurfaceView. "App Deadline Missed" stays at 11–13 per 15 s, against 8 on the SurfaceView, so presenting does not get worse.
+- **Change:** `GameCanvas` passes `opaque` only off Android. iOS keeps its opaque Metal layer, which still saves a blend there.
+- **The fade, the shake and the bursts stay inside the canvas.** A TextureView would honour ancestor opacity and transforms too, but nothing depends on that now.
+
+**Visual check:** pending on the device. The stage fade under the settle bowl, the game-over shake, the pause frost, flood transitions, the corner caps, and no flash of ink or transparency when play starts.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
