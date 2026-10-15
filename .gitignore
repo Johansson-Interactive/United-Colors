@@ -39,5 +39,8 @@ yarn-error.*
 # Biome
 .biome/
 
+# Performance traces (scripts/android-perf-trace.sh)
+traces/
+
 # Python
 scripts/__pycache__/
