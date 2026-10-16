@@ -483,6 +483,15 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 
 **Status:** not measured yet. It needs a release bench against `b80be97`, and a multi-minute run for heat before it stays. If it does not pay, it goes, as the hint module did.
 
+### Declarative Skia nodes taking new values: looked at, left as they are (2026-10-16)
+
+`JsiRecorder::applyUpdates` takes 4.4 % of the main thread in the CPU profile above, about 0.55 ms per frame on the debuggable build.
+- **Why it runs every frame:** Skia's container runs one mapper for the whole canvas (`Container.native.ts`). Whenever any shared value in the tree changes, which is every frame of play, it converts every shared value again, not only the one that changed.
+- **The heaviest part is the shader uniforms**, at 2.75 %, about 0.34 ms. Skia reads each uniform map by name: its property names, a string per name, then each value (`Convertor.h`, `getPropertyValue<Uniforms>`). There are five maps per frame, the four wall-drop slots and the liquid body. On the drips bench, usually one slot holds a drop, and the other three convert an empty one every frame.
+- **The only cheap fix is fewer slots** (`WALL_DROP_SLOTS` from 4 to 2). On a release build that saves perhaps 0.1–0.15 ms a frame, inside the run-to-run spread. A third or fourth drip at once would then go back to a shader made per frame, which used to set off garbage collections.
+- **The other fixes cost more and gain less:** packing the uniforms into fewer names, or one shader node for every drop.
+- **Decision:** left as it is, unless a future profile shows it grown.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
