@@ -5,7 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { type BenchRun, benchSessionOptions, benchTilt } from "./src/application/bench";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
-import { bindScreenAwake } from "./src/application/useCases/BindScreenAwake";
+import { bindRunInPlay } from "./src/application/useCases/BindRunInPlay";
 import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
@@ -64,7 +64,8 @@ const audio = new AudioService(
 const haptics = new HapticsService();
 
 /** Tilting is no touch, so keep the screen from dimming mid-run; bound for the app's lifetime */
-bindScreenAwake(store, new KeepAwakeService());
+const keepAwake = new KeepAwakeService();
+bindRunInPlay(store, (inPlay) => keepAwake.setAwake(inPlay));
 
 /** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
 void pinMainThreadToFastCores();

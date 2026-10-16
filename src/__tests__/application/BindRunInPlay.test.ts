@@ -1,5 +1,5 @@
 import { createGameStore } from "../../application/GameStore";
-import { bindScreenAwake } from "../../application/useCases/BindScreenAwake";
+import { bindRunInPlay } from "../../application/useCases/BindRunInPlay";
 import type { GamePhase } from "../../domain/types";
 
 function setup(phase: GamePhase) {
@@ -8,37 +8,38 @@ function setup(phase: GamePhase) {
 		store.setState((s) => ({ frame: { ...s.frame, phase: next } }));
 	setPhase(phase);
 	const calls: boolean[] = [];
-	const unbind = bindScreenAwake(store, { setAwake: (awake) => calls.push(awake) });
+	const unbind = bindRunInPlay(store, (inPlay) => calls.push(inPlay));
 	return { setPhase, unbind, calls };
 }
 
-describe("bindScreenAwake", () => {
+describe("bindRunInPlay", () => {
 	it.each<[GamePhase, boolean]>([
 		["KIOSK", false],
 		["RUNNING", true],
 		["REJECTING", true],
 		["PAUSED", false],
 		["GAME_OVER", false],
-	])("starts in %s with awake %s", (phase, awake) => {
-		expect(setup(phase).calls).toEqual([awake]);
+	])("starts in %s with in play %s", (phase, inPlay) => {
+		expect(setup(phase).calls).toEqual([inPlay]);
 	});
 
-	it("keeps the screen on when a run starts and lets it dim at game over", () => {
+	it("reports play when a run starts and stops at game over, not on each rejection", () => {
 		const { setPhase, calls } = setup("KIOSK");
 		setPhase("RUNNING");
 		setPhase("REJECTING");
+		setPhase("RUNNING");
 		setPhase("GAME_OVER");
 		expect(calls).toEqual([false, true, false]);
 	});
 
-	it("lets the screen dim while paused and holds it again on resume", () => {
+	it("stops while paused and reports play again on resume", () => {
 		const { setPhase, calls } = setup("RUNNING");
 		setPhase("PAUSED");
 		setPhase("RUNNING");
 		expect(calls).toEqual([true, false, true]);
 	});
 
-	it("releases the screen on unsubscribe and stops following the phase", () => {
+	it("stops on unsubscribe and no longer follows the phase", () => {
 		const { setPhase, unbind, calls } = setup("RUNNING");
 		unbind();
 		setPhase("KIOSK");
