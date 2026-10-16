@@ -452,7 +452,23 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 - **Bursts:** pops keep their colours, because a pop's tint carries its fading opacity. They also take the rects and placements.
 - **Purity:** the packing stays pure. It writes through a `SpriteKit`: Skia's objects in `sceneDrawer.ts`, plain objects in the tests.
 
-**Expected:** most of `drawAtlas`'s 2.8 ms per frame (debuggable build) goes, about 2 ms of main-thread time per frame. Not measured yet; it needs a release bench against `c4fe30f`.
+**Expected:** most of `drawAtlas`'s 2.8 ms per frame (debuggable build) goes, about 2 ms of main-thread time per frame.
+
+**Measured** on the drips bench (release, 60 Hz, thermal status 0), back to back against the control `c4fe30f`. The change build was `main` at the time, which may have included the two burst fixes after it (`1e46b17`, `a2630e7`); they only touch the bursts.
+
+| Run | Frames over 16.7 ms | p50 | p95 | p99 | `animation` per frame | UI runtime per frame | GCs / 300 frames |
+|---|---|---|---|---|---|---|---|
+| Change A | 1.2 % | 10.3 ms | 13.4 ms | 17.2 ms | 8.76 ms | 32 KB | 5–7 |
+| Change B | 1.0 % | 10.2 ms | 13.5 ms | 15.7 ms | 8.67 ms | 32 KB | 5–6 |
+| Control A | 2.7 % | 10.7 ms | 15.1 ms | 20.1 ms | 9.32 ms | 61–69 KB | 7–10 |
+| Control B | 3.1 % | 10.7 ms | 14.9 ms | 18.8 ms | 9.34 ms | 68–69 KB | 8–9 |
+
+- **Frames over budget fall by about 60 %**, from 2.7–3.1 % to 1.0–1.2 %. p95 drops about 1.5 ms and p99 about 3 ms.
+- **The UI runtime allocates half as much**, 32 KB a frame against 61–69 KB: the names Skia made for every field read were JS strings. It collects a little less often.
+- **`animation` is 0.6 ms shorter per frame, but the CPU did more than that less work.** The little cores ran at 1.51–1.53 GHz against 1.63 GHz, as the governor lowered their clock for the lighter load. More of the main thread also stayed on the little cores: 86–87 % of `animation`, against 79–80 %. In cycles, the main thread's `animation` work fell by about 10 %.
+- **Window redraws are unchanged**, at about 1.2 ms per frame.
+
+**Visual check:** pending on the device. The dots' colours, halos and edges should look as before, and pops should still fade.
 
 ## 3. Findings
 
