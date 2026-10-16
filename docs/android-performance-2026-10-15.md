@@ -418,6 +418,42 @@ Read from the TextureView traces (tv-A, tv-B) with `scripts/perf/main-thread-cor
 - **Moving the main thread to the big cores is now the largest lever on this phone**, if the scheduler can be made to. An app may set its own threads' CPU affinity (`sched_setaffinity`) with no permission. A probe can do it from the shell on a debuggable build, with `run-as` and `taskset`, so no code is needed to measure it. If it pays, the fix is a small native call in a local module during runs, with a thermal check over a multi-minute run.
 - **The 8.5 ms needs a fresh CPU profile to split.** The 2026-10-15 profile predates the atlas, the sync props, the bursts and the TextureView. The same debuggable build can take one with `simpleperf`.
 
+### Pinning the main thread, and a fresh CPU profile (2026-10-16)
+
+**Pinning from the shell is blocked.** With SELinux enforcing, `run-as <package> taskset -p f0 <pid>` fails with "Permission denied", even on a debuggable build: the `run-as` domain may not read or set the app's scheduling. The four probe runs on that build were therefore all unpinned. They give its run-to-run spread:
+- 2.4–3.1 % of frames over budget, p50 10.6–10.8 ms, p95 14.9–15.7 ms.
+- About 72 % of `animation` on the little cores and 27 % on the big ones.
+
+The big-core share is higher than in the release traces (6–8 %), so a debuggable build is scheduled differently. A pin needs code in the app, a native `sched_setaffinity` call, so that probe is left for later.
+
+**CPU profile.** Taken with `simpleperf` on the same debuggable build: the drips bench, the main thread sampled at 4 kHz for 10 s, 29,695 samples, none lost. It was symbolized against the build's `merged_native_libs`; the reports are in `traces/simpleperf/tv/`. The main thread was busy about 12.4 ms per frame. Java runs partly interpreted on a debuggable build, which accounts for about 9 % of the samples and is not in a release build.
+
+| Where | Share of main thread | Per frame |
+|---|---|---|
+| **Worklets** (`AnimationFrameBatchinator::flush`) | 45 % | 5.6 ms |
+| – `drawAtlas`, of which almost all is reading its arguments | 22.7 % | 2.8 ms |
+| –– each RSXform read by name from a plain object (`JsiSkRSXform::fromValue`) | 7.4 % | 0.9 ms |
+| –– each rect read by name (`JsiSkRect::fromValue`) | 7.0 % | 0.9 ms |
+| –– each colour read as properties "0" to "3" | about 7 % | 0.9 ms |
+| –– Ganesh's own atlas work | under 1 % | 0.1 ms |
+| – declarative Skia nodes taking new values (`JsiRecorder::applyUpdates`) | 4.4 % | 0.5 ms |
+| **Skia's render on the main thread** (`performDraw`: replay, flush, swap) | 8.1 % | 1.0 ms |
+| **`Process.getProcessGroup`** (the phone's own code, every frame) | 7.0 % | 0.9 ms |
+| Java interpreted (debuggable build only) | about 9 % | 1.1 ms |
+
+Each plain-object field Skia reads costs a JS string made for its name (`createStringFromAscii`, 6.8 % of the main thread alone) and a property lookup. That happens 12 times per sprite per frame: 4 for the RSXform, 4 for the rect and 4 for the colour. The GPU side of the atlas is almost free. Skia reads its own rect and RSXform objects directly (`isHostObject` → `asHostObject`), with no names.
+
+### drawAtlas fed Skia's own objects (2026-10-16)
+
+**Change:**
+- **Rects:** each sheet cell's rect is made once as a Skia rect, so `drawAtlas` reads it directly.
+- **Placements:** made once per sprite slot as Skia RSXforms and rewritten through their `set`. The function is kept from the first lookup, so a sprite costs one native call instead of four reads by name.
+- **Colours:** the free dots' halos and bodies are baked into the sheet in each of the three game colours, so their `drawAtlas` calls pass no colours. A baked cell is what Modulate gave before, the colour at the white sprite's alpha.
+- **Bursts:** pops keep their colours, because a pop's tint carries its fading opacity. They also take the rects and placements.
+- **Purity:** the packing stays pure. It writes through a `SpriteKit`: Skia's objects in `sceneDrawer.ts`, plain objects in the tests.
+
+**Expected:** most of `drawAtlas`'s 2.8 ms per frame (debuggable build) goes, about 2 ms of main-thread time per frame. Not measured yet; it needs a release bench against `c4fe30f`.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
