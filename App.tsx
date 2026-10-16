@@ -16,6 +16,7 @@ import { HapticsService } from "./src/infrastructure/HapticsService";
 import { KeepAwakeService } from "./src/infrastructure/KeepAwakeService";
 import { isOtherAudioPlaying } from "./src/infrastructure/otherAudio";
 import { ScriptedTiltSensor } from "./src/infrastructure/ScriptedTiltSensor";
+import { pinMainThreadToFastCores } from "./src/infrastructure/threadAffinity";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
@@ -64,6 +65,9 @@ const haptics = new HapticsService();
 
 /** Tilting is no touch, so keep the screen from dimming mid-run; bound for the app's lifetime */
 bindScreenAwake(store, new KeepAwakeService());
+
+/** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
+void pinMainThreadToFastCores(Platform.OS);
 
 /** How the glass rounds its corners, asked for once at launch */
 const displayCorners = loadDisplayCorners(Platform.OS);
