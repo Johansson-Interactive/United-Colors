@@ -494,7 +494,21 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 - **The tail is not clearly better.** Pinned B had 13 frames over budget. In them the main thread ran 6.9 ms, the same as in its other frames, and waited for the rest. Pinned A's three were collector stalls (78 ms of waits on `hades`). Neither is CPU work, which is what the pin changes.
 - **Power:** an A78 at 0.8 GHz against an A55 near its 1.8 GHz maximum. That is likely comparable or better for the same work, but not measured.
 
-**Status:** kept for now, for the headroom: about 2.4 ms per frame, which matters most if play turns out to run at 120 Hz (P3-1). It still needs a multi-minute run for heat. If that shows throttling, it goes.
+**Status:** kept for now, for the headroom: about 2.4 ms per frame, which matters most if play turns out to run at 120 Hz (P3-1).
+
+**Five minutes of play** (`scripts/android-heat.sh`): the drips bench for 300 s from a cool phone, then a 15 s trace. The temperatures are read from "Current temperatures from HAL"; the "Cached temperatures" block above it can be minutes old. Pinned first, then the control (`b80be97`) after a cool-down to the same start.
+
+| Run | Start: hottest CPU / skin | End: hottest CPU / skin | Thermal status | Frames over 16.7 ms | p95 | p99 | `animation` per frame | Cores |
+|---|---|---|---|---|---|---|---|---|
+| Pinned | 32.3 / 31.1 °C | 37.9 / 33.9 °C | 0 | 0.6 % | 13.7 ms | 15.6 ms | 8.36 ms | 98 % big, at 1.16 GHz |
+| Control | 32.9 / 32.0 °C | 40.6 / 34.5 °C | 0 | 9.2 % | 18.4 ms | 21.0 ms | 9.59 ms | 57 % big, 42 % little |
+| Control, earlier pass | about 33 / 32 °C | not read | 0 | 8.3 % | 17.6 ms | 24.8 ms | 9.53 ms | 59 % big, 39 % little |
+
+- **Sustained play is where the pin pays most.** After five minutes the control misses 8–9 % of frames, against about 1 % in the 15 s bench: its frame work grows to 9.6 ms, and the scheduler splits it between the clusters. Pinned, the work stays on the big cores and misses 0.6 %.
+- **It does not run hotter.** The CPUs rose 5.6 °C pinned against 7.7 °C for the control, and the skin 2.8 °C against 2.5 °C. Thermal status stayed 0 in both.
+- **The frame work grows in both builds over a run** (6.4 to 8.4 ms pinned, 8.8 to 9.6 ms for the control), so a 15 s bench understates late play. Sustained runs belong in the bench from here on.
+
+**Decision:** the pin stays.
 
 ### Declarative Skia nodes taking new values: looked at, left as they are (2026-10-16)
 
