@@ -27,6 +27,7 @@ import { GLOW_CORE_ALPHA } from "./dotmatrix/layout";
 import {
 	BODY_CELL,
 	BODY_PX,
+	BODY_SPRITES,
 	type DotSprites,
 	dotSprites,
 	GLARE_RADIUS,
@@ -34,8 +35,8 @@ import {
 	glareCell,
 	glareOffset,
 	glareStepDistance,
-	HALO_CELL,
 	HALO_PX,
+	HALO_SPRITES,
 	POP_DOT_PX,
 	POP_DOT_SPRITE,
 	POP_GLOW_PX,
@@ -44,6 +45,7 @@ import {
 	SHEET_HEIGHT,
 	SHEET_WIDTH,
 	type SpriteBatch,
+	type SpriteKit,
 } from "./dotSprites";
 import {
 	BURST_COLORS,
@@ -115,31 +117,46 @@ const WALL_DROP_PAINT = Skia.Paint();
 WALL_DROP_PAINT.setAntiAlias(true);
 
 /**
- * The sprite sheet the free dots are drawn from (see dotSprites.ts), in white: the halo, the
- * body, and the glare at each of its distances from the centre. Drawn once, into a raster
- * image any thread can draw.
+ * The sprite sheet the free dots are drawn from (see dotSprites.ts): the halo and the body in
+ * each game colour, the pop's glow and dot and the glare at each of its distances from the
+ * centre in white. Drawn once, into a raster image any thread can draw. A coloured cell is
+ * what a white one tinted with Modulate gave: the colour, at the white's alpha.
  */
 const SPRITE_SHEET: SkImage = (() => {
 	const surface = Skia.Surface.Make(SHEET_WIDTH, SHEET_HEIGHT);
 	if (!surface) throw new Error("sprite sheet surface failed");
 	const canvas = surface.getCanvas();
+	const tinted = (color: Float32Array, alpha: number) =>
+		Float32Array.of(color[0], color[1], color[2], color[3] * alpha);
 	const white = (alpha: number) => Float32Array.of(1, 1, 1, alpha);
-	const halo = Skia.Paint();
-	halo.setAntiAlias(true);
-	halo.setShader(
-		Skia.Shader.MakeRadialGradient(
-			vec(HALO_CELL / 2, HALO_CELL / 2),
-			HALO_PX,
-			[white(0.5), white(0.16), white(0)],
-			[0.3, 0.6, 1],
-			TileMode.Clamp,
-		),
-	);
-	canvas.drawCircle(HALO_CELL / 2, HALO_CELL / 2, HALO_PX, halo);
 	const body = Skia.Paint();
 	body.setAntiAlias(true);
+	FILL_COLORS.forEach((color, i) => {
+		const haloCell = HALO_SPRITES[i];
+		const hx = haloCell.x + haloCell.width / 2;
+		const hy = haloCell.y + haloCell.height / 2;
+		const halo = Skia.Paint();
+		halo.setAntiAlias(true);
+		halo.setShader(
+			Skia.Shader.MakeRadialGradient(
+				vec(hx, hy),
+				HALO_PX,
+				[tinted(color, 0.5), tinted(color, 0.16), tinted(color, 0)],
+				[0.3, 0.6, 1],
+				TileMode.Clamp,
+			),
+		);
+		canvas.drawCircle(hx, hy, HALO_PX, halo);
+		const bodyCell = BODY_SPRITES[i];
+		body.setColor(color);
+		canvas.drawCircle(
+			bodyCell.x + bodyCell.width / 2,
+			bodyCell.y + bodyCell.height / 2,
+			BODY_PX,
+			body,
+		);
+	});
 	body.setColor(white(1));
-	canvas.drawCircle(HALO_CELL + BODY_CELL / 2, BODY_CELL / 2, BODY_PX, body);
 	// A score pop's dot and its glow, as DotMatrixText draws them (see burstFrames.ts)
 	const popGlowX = POP_GLOW_SPRITE.x + POP_GLOW_SPRITE.width / 2;
 	const popGlowY = POP_GLOW_SPRITE.y + POP_GLOW_SPRITE.height / 2;
@@ -185,26 +202,41 @@ const SPRITE_SHEET: SkImage = (() => {
 
 const ATLAS_PAINT = Skia.Paint();
 
-/** The sprite buffers for the thread drawing the scene, made there on its first frame */
-function spriteBuffers(): DotSprites {
+/**
+ * Skia's own rects and RSXforms, which drawAtlas reads directly, where it reads a plain object
+ * field by field by name: a cell's rect made once, a placement made once and rewritten through
+ * its `set`, kept so each sprite costs one call (see SpriteKit)
+ */
+function skiaKit(): SpriteKit<SkRSXform, SkRect> {
 	"worklet";
-	const g = globalThis as { __tiltlingDotSprites?: DotSprites };
-	if (g.__tiltlingDotSprites === undefined) g.__tiltlingDotSprites = dotSprites();
+	return {
+		placement: () => {
+			const placement = Skia.RSXform(0, 0, 0, 0);
+			return { placement, place: placement.set };
+		},
+		rect: (cell) => Skia.XYWHRect(cell.x, cell.y, cell.width, cell.height),
+	};
+}
+
+/** The sprite buffers for the thread drawing the scene, made there on its first frame */
+function spriteBuffers(): DotSprites<SkRSXform, SkRect> {
+	"worklet";
+	const g = globalThis as { __tiltlingDotSprites?: DotSprites<SkRSXform, SkRect> };
+	if (g.__tiltlingDotSprites === undefined) g.__tiltlingDotSprites = dotSprites(skiaKit());
 	return g.__tiltlingDotSprites;
 }
 
-/** Draw a batch of sprites from the sheet, each tinted by its colour unless `tinted` is false */
-function drawSprites(canvas: SkCanvas, batch: SpriteBatch, tinted: boolean) {
+/** Draw a batch of sprites from the sheet, each tinted by its colour if `tinted` */
+function drawSprites(canvas: SkCanvas, batch: SpriteBatch<SkRSXform, SkRect>, tinted: boolean) {
 	"worklet";
 	const n = batch.count;
 	if (n === 0) return;
-	// Skia reads plain objects shaped as rects and RSXforms, and colours by index, so reused
-	// JS objects stand in for host objects that would be made per sprite per frame. It only
+	// Colours are read by index from each entry, so a reused Float32Array serves. Skia only
 	// reads the blend mode when a sixth argument is passed, so `undefined` stands for no colours
 	canvas.drawAtlas(
 		SPRITE_SHEET,
-		batch.cells[n] as unknown as SkRect[],
-		batch.placements[n] as unknown as SkRSXform[],
+		batch.cells[n],
+		batch.placements[n],
 		ATLAS_PAINT,
 		BlendMode.Modulate,
 		tinted ? (batch.colors[n] as SkColor[]) : undefined,
@@ -219,10 +251,10 @@ RING_PAINT.setAntiAlias(true);
 RING_PAINT.setStyle(PaintStyle.Stroke);
 
 /** The burst buffers for the thread drawing the bursts, made there on its first frame */
-function burstBuffers(): BurstSprites {
+function burstBuffers(): BurstSprites<SkRSXform, SkRect> {
 	"worklet";
-	const g = globalThis as { __tiltlingBurstSprites?: BurstSprites };
-	if (g.__tiltlingBurstSprites === undefined) g.__tiltlingBurstSprites = burstSprites();
+	const g = globalThis as { __tiltlingBurstSprites?: BurstSprites<SkRSXform, SkRect> };
+	if (g.__tiltlingBurstSprites === undefined) g.__tiltlingBurstSprites = burstSprites(skiaKit());
 	return g.__tiltlingBurstSprites;
 }
 
@@ -361,9 +393,9 @@ export function drawScene(
 	// shrinks away as the dot slides into the player); then the plain small dots' bodies and
 	// glares, all as sprites (see dotSprites.ts)
 	const sprites = spriteBuffers();
-	packDotSprites(dots, gx, gy, FILL_COLORS, sprites);
-	drawSprites(canvas, sprites.halos, true);
-	drawSprites(canvas, sprites.bodies, true);
+	packDotSprites(dots, gx, gy, sprites);
+	drawSprites(canvas, sprites.halos, false);
+	drawSprites(canvas, sprites.bodies, false);
 	drawSprites(canvas, sprites.glares, false);
 	// A glass bead: body, the yolk of a point dot and glare, all stretched along its lean
 	function drawBead(bead: SceneDot) {

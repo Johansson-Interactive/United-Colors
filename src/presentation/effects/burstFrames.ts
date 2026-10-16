@@ -8,6 +8,7 @@ import {
 	POP_GLOW_CELL,
 	POP_GLOW_SPRITE,
 	type SpriteBatch,
+	type SpriteKit,
 	spriteBatch,
 } from "../dotSprites";
 import { COMBO_AMBER, WHITE } from "../theme/theme";
@@ -217,18 +218,21 @@ interface BurstRing {
 }
 
 /** Everything the bursts draw in a frame, reused from frame to frame */
-export interface BurstSprites {
+export interface BurstSprites<P, R> {
 	/** Every pop dot's glow, then every pop dot, tinted by its pop's colour and opacity */
-	glows: SpriteBatch;
-	dots: SpriteBatch;
+	glows: SpriteBatch<P, R>;
+	dots: SpriteBatch<P, R>;
+	/** The glow and dot cells (see POP_GLOW_SPRITE, POP_DOT_SPRITE) */
+	glowCell: R;
+	dotCell: R;
 	/** One tint per pop drawn, rewritten each frame */
 	tints: Float32Array[];
 	rings: BurstRing[];
 	ringCount: number;
 }
 
-/** Fresh buffers to pack into, for the thread that draws the bursts */
-export function burstSprites(): BurstSprites {
+/** Fresh buffers to pack into, for the thread that draws the bursts (see SpriteKit) */
+export function burstSprites<P, R>(kit: SpriteKit<P, R>): BurstSprites<P, R> {
 	"worklet";
 	const tints: Float32Array[] = [];
 	const rings: BurstRing[] = [];
@@ -236,7 +240,15 @@ export function burstSprites(): BurstSprites {
 		tints.push(new Float32Array(4));
 		rings.push({ x: 0, y: 0, radius: 0, width: 0, alpha: 0, color: 0 });
 	}
-	return { glows: spriteBatch(), dots: spriteBatch(), tints, rings, ringCount: 0 };
+	return {
+		glows: spriteBatch(kit),
+		dots: spriteBatch(kit),
+		glowCell: kit.rect(POP_GLOW_SPRITE),
+		dotCell: kit.rect(POP_DOT_SPRITE),
+		tints,
+		rings,
+		ringCount: 0,
+	};
 }
 
 /**
@@ -244,11 +256,11 @@ export function burstSprites(): BurstSprites {
  * dotSprites.ts), and each ring as a circle to stroke. `colors` are BURST_COLORS as Skia
  * colours. A burst not yet stamped draws as at its start; one past its lifetime not at all.
  */
-export function packBursts(
+export function packBursts<P, R>(
 	list: readonly Burst[],
 	now: number,
 	colors: readonly Float32Array[],
-	out: BurstSprites,
+	out: BurstSprites<P, R>,
 ): void {
 	"worklet";
 	let dotCount = 0;
@@ -258,8 +270,8 @@ export function packBursts(
 		if (burst.kind === "pop" && age < BURST_LIFETIME_MS) dotCount += burst.dots.length / 2;
 	}
 	const { glows, dots, tints, rings } = out;
-	fitBatch(glows, dotCount, POP_GLOW_SPRITE, colors[0]);
-	fitBatch(dots, dotCount, POP_DOT_SPRITE, colors[0]);
+	fitBatch(glows, dotCount, out.glowCell, colors[0]);
+	fitBatch(dots, dotCount, out.dotCell, colors[0]);
 	const glowCells = glows.cells[dotCount];
 	const glowColors = glows.colors[dotCount];
 	const dotCells = dots.cells[dotCount];
@@ -304,19 +316,11 @@ export function packBursts(
 		for (let k = 0; k < offsets.length; k += 2) {
 			const x = cx + scale * offsets[k];
 			const y = cy + scale * offsets[k + 1];
-			const glow = glows.pool[d];
-			glow.scos = s;
-			glow.ssin = 0;
-			glow.tx = x - s * glowHalf;
-			glow.ty = y - s * glowHalf;
-			glowCells[d] = POP_GLOW_SPRITE;
+			glows.place[d](s, 0, x - s * glowHalf, y - s * glowHalf);
+			glowCells[d] = out.glowCell;
 			glowColors[d] = tint;
-			const dot = dots.pool[d];
-			dot.scos = s;
-			dot.ssin = 0;
-			dot.tx = x - s * dotHalf;
-			dot.ty = y - s * dotHalf;
-			dotCells[d] = POP_DOT_SPRITE;
+			dots.place[d](s, 0, x - s * dotHalf, y - s * dotHalf);
+			dotCells[d] = out.dotCell;
 			dotColors[d] = tint;
 			d++;
 		}

@@ -1,22 +1,28 @@
 import { FIELD, KIND_CODE, WALL_NORMAL_MIN } from "../application/sceneRecord";
+import { GAME_COLORS } from "../domain/constants";
 import { GLOW_SCALE } from "./dotmatrix/layout";
 
 /**
  * The free dots as sprites: every halo, and the body and glare of every plain small dot (one
  * in free flight, not stretched and not at a wall), packed for three drawAtlas calls in place
- * of about twelve Skia calls per dot. The sprites are white and drawn once into one image (see
- * sceneDrawer.ts); a halo or body takes its dot's colour from the colour it is drawn with.
+ * of about twelve Skia calls per dot. The sprites are drawn once into one image (see
+ * sceneDrawer.ts): a halo and a body in each game colour, so the dots' calls pass no colours,
+ * and white glares.
  *
  * The glare's place on a dot follows the light, which is the same for every dot in a frame:
  * the sprite sheet holds the glare at GLARE_STEPS distances from the centre, and each glare is
  * turned to face the light. So the sheet is drawn once, however the phone tilts.
+ *
+ * drawAtlas reads plain objects field by field, by name, which cost more than the rest of the
+ * call put together; Skia's own rect and RSXform objects it reads directly. So the buffers hold
+ * whatever a SpriteKit makes: Skia's objects on the UI thread, a cell's rect made once and a
+ * placement rewritten in place with one call per sprite; plain objects in tests.
  *
  * This module is the geometry and the packing, with no Skia in it, so it can be tested; it
  * runs on the UI thread every frame, so it packs a whole scene per call, indexing the record
  * directly, and reuses its objects from frame to frame (see FIELD in sceneRecord.ts).
  */
 
-/** Glare centre offset and radius relative to a unit-radius dot, when the device is level */
 const GLARE_OFFSET = -0.28;
 export const GLARE_RADIUS = 0.75;
 /** How far (unit radii per radian of tilt) the light slides across each dot */
@@ -34,13 +40,18 @@ export const HALO_PX = 96;
 const PAD_PX = 2;
 /** Side (px) of a body or glare cell, and of the halo cell */
 export const BODY_CELL = 2 * (BODY_PX + PAD_PX);
-export const HALO_CELL = 2 * (HALO_PX + PAD_PX);
+const HALO_CELL = 2 * (HALO_PX + PAD_PX);
 /** Glare distances in the sheet, evenly from the centre to GLARE_MAX_DISTANCE */
 export const GLARE_STEPS = 48;
 /** Farthest the glare gets from the centre: both axes at their limit */
 export const GLARE_MAX_DISTANCE = Math.hypot(GLARE_MAX_OFFSET, GLARE_MAX_OFFSET);
 /** Glare cells per row of the sheet */
 const GLARE_COLUMNS = 8;
+
+/**
+ * Radius (px) of a score pop's dot sprite (see burstFrames.ts): a little above a pop dot at its
+/** Halo and body cells: one of each per game colour, in GAME_COLORS order */
+const DOT_COLORS = GAME_COLORS.length;
 
 /**
  * Radius (px) of a score pop's dot sprite (see burstFrames.ts): a little above a pop dot at its
@@ -52,16 +63,16 @@ export const POP_DOT_CELL = 2 * (POP_DOT_PX + PAD_PX);
 export const POP_GLOW_CELL = 2 * Math.ceil(POP_GLOW_PX + PAD_PX);
 
 /**
- * The sheet: the halo cell, the body cell and the pop's glow and dot cells beside it, then
- * rows of glare cells below them
+ * The sheet: a halo cell per colour, a body cell per colour and the pop's glow and dot cells
+ * beside them, then rows of glare cells below them
  */
 export const SHEET_WIDTH = Math.max(
-	HALO_CELL + BODY_CELL + POP_GLOW_CELL + POP_DOT_CELL,
+	DOT_COLORS * (HALO_CELL + BODY_CELL) + POP_GLOW_CELL + POP_DOT_CELL,
 	GLARE_COLUMNS * BODY_CELL,
 );
 export const SHEET_HEIGHT = HALO_CELL + Math.ceil(GLARE_STEPS / GLARE_COLUMNS) * BODY_CELL;
 
-/** A cell of the sheet, in the shape Skia reads as a rect */
+/** A cell of the sheet */
 export interface SheetCell {
 	x: number;
 	y: number;
@@ -69,16 +80,29 @@ export interface SheetCell {
 	height: number;
 }
 
-export const HALO_SPRITE: SheetCell = { x: 0, y: 0, width: HALO_CELL, height: HALO_CELL };
-export const BODY_SPRITE: SheetCell = { x: HALO_CELL, y: 0, width: BODY_CELL, height: BODY_CELL };
+/** The halo cells, by the scene's colour index */
+export const HALO_SPRITES: readonly SheetCell[] = GAME_COLORS.map((_, i) => ({
+	x: i * HALO_CELL,
+	y: 0,
+	width: HALO_CELL,
+	height: HALO_CELL,
+}));
+/** The body cells, by the scene's colour index */
+export const BODY_SPRITES: readonly SheetCell[] = GAME_COLORS.map((_, i) => ({
+	x: DOT_COLORS * HALO_CELL + i * BODY_CELL,
+	y: 0,
+	width: BODY_CELL,
+	height: BODY_CELL,
+}));
+const POP_X = DOT_COLORS * (HALO_CELL + BODY_CELL);
 export const POP_GLOW_SPRITE: SheetCell = {
-	x: HALO_CELL + BODY_CELL,
+	x: POP_X,
 	y: 0,
 	width: POP_GLOW_CELL,
 	height: POP_GLOW_CELL,
 };
 export const POP_DOT_SPRITE: SheetCell = {
-	x: HALO_CELL + BODY_CELL + POP_GLOW_CELL,
+	x: POP_X + POP_GLOW_CELL,
 	y: 0,
 	width: POP_DOT_CELL,
 	height: POP_DOT_CELL,
@@ -109,7 +133,7 @@ export function glareOffset(light: number): number {
 	);
 }
 
-/** A sprite's placement, in the shape Skia reads as an RSXform */
+/** A sprite's placement as an RSXform's fields (the plain stand-in tests read) */
 export interface SpritePlacement {
 	scos: number;
 	ssin: number;
@@ -117,52 +141,93 @@ export interface SpritePlacement {
 	ty: number;
 }
 
+/** Rewrites one placement: an RSXform's `set`, or a plain placement's fields */
+type Place = (scos: number, ssin: number, tx: number, ty: number) => void;
+
+/**
+ * Where the buffers get what drawAtlas reads: a placement `P` with the function that rewrites
+ * it, and the rect `R` for a sheet cell, asked for once per cell
+ */
+export interface SpriteKit<P, R> {
+	placement(): { placement: P; place: Place };
+	rect(cell: SheetCell): R;
+}
+
+/** The kit of plain objects: a placement is its fields, a cell is its own rect */
+export function plainKit(): SpriteKit<SpritePlacement, SheetCell> {
+	"worklet";
+	return {
+		placement: () => {
+			const placement = { scos: 0, ssin: 0, tx: 0, ty: 0 };
+			const place: Place = (scos, ssin, tx, ty) => {
+				placement.scos = scos;
+				placement.ssin = ssin;
+				placement.tx = tx;
+				placement.ty = ty;
+			};
+			return { placement, place };
+		},
+		rect: (cell) => cell,
+	};
+}
+
 /**
  * One drawAtlas call's sprites. drawAtlas takes whole arrays, so each count has its own
  * arrays, made the first time a frame has that many sprites and reused after; their entries
  * are rewritten in place each frame.
  */
-export interface SpriteBatch {
+export interface SpriteBatch<P, R> {
 	count: number;
 	/** Placements, by count: placements[n] holds the first n of `pool` */
-	placements: SpritePlacement[][];
-	/** Colours by count, rewritten each frame (unused for glares) */
+	placements: P[][];
+	/** Colours by count, rewritten each frame; only for a batch drawn tinted */
 	colors: Float32Array[][];
 	/** Cells by count, rewritten each frame */
-	cells: SheetCell[][];
-	pool: SpritePlacement[];
+	cells: R[][];
+	pool: P[];
+	/** What rewrites each of `pool`, by index */
+	place: Place[];
+	kit: SpriteKit<P, R>;
 }
 
 /** Everything the free dots' three drawAtlas calls draw in a frame */
-export interface DotSprites {
-	halos: SpriteBatch;
-	bodies: SpriteBatch;
-	glares: SpriteBatch;
+export interface DotSprites<P, R> {
+	halos: SpriteBatch<P, R>;
+	bodies: SpriteBatch<P, R>;
+	glares: SpriteBatch<P, R>;
+	/** The halo and body cells, by colour index (see HALO_SPRITES, BODY_SPRITES) */
+	haloCells: R[];
+	bodyCells: R[];
 	/** The glare cells, by step (see glareCell) */
-	glareCells: SheetCell[];
+	glareCells: R[];
 }
 
-export function spriteBatch(): SpriteBatch {
+export function spriteBatch<P, R>(kit: SpriteKit<P, R>): SpriteBatch<P, R> {
 	"worklet";
-	return { count: 0, placements: [[]], colors: [[]], cells: [[]], pool: [] };
+	return { count: 0, placements: [[]], colors: [[]], cells: [[]], pool: [], place: [], kit };
 }
 
 /**
  * Make `batch` hold `n` sprites this frame: its count, and its arrays for `n` the first time a
- * frame has that many, filled with `cell` and `color` until the packing writes them
+ * frame has that many, filled with `cell` (and `color`, for a tinted batch) until the packing
+ * writes them
  */
-export function fitBatch(batch: SpriteBatch, n: number, cell: SheetCell, color: Float32Array) {
+export function fitBatch<P, R>(batch: SpriteBatch<P, R>, n: number, cell: R, color?: Float32Array) {
 	"worklet";
 	batch.count = n;
-	while (batch.pool.length < n) batch.pool.push({ scos: 0, ssin: 0, tx: 0, ty: 0 });
+	while (batch.pool.length < n) {
+		const made = batch.kit.placement();
+		batch.pool.push(made.placement);
+		batch.place.push(made.place);
+	}
 	if (batch.placements[n] !== undefined) return;
-	const placements: SpritePlacement[] = [];
-	const cellsOfN: SheetCell[] = [];
+	const placements: P[] = [];
+	const cellsOfN: R[] = [];
 	const colorsOfN: Float32Array[] = [];
 	for (let i = 0; i < n; i++) {
 		placements.push(batch.pool[i]);
 		cellsOfN.push(cell);
-		colorsOfN.push(color);
+		if (color !== undefined) colorsOfN.push(color);
 	}
 	batch.placements[n] = placements;
 	batch.cells[n] = cellsOfN;
@@ -170,26 +235,32 @@ export function fitBatch(batch: SpriteBatch, n: number, cell: SheetCell, color: 
 }
 
 /** Fresh buffers to pack into, for one canvas on the thread that draws it */
-export function dotSprites(): DotSprites {
+export function dotSprites<P, R>(kit: SpriteKit<P, R>): DotSprites<P, R> {
 	"worklet";
-	const glareCells: SheetCell[] = [];
-	for (let step = 0; step < GLARE_STEPS; step++) glareCells.push(glareCell(step));
-	return { halos: spriteBatch(), bodies: spriteBatch(), glares: spriteBatch(), glareCells };
+	const glareCells: R[] = [];
+	for (let step = 0; step < GLARE_STEPS; step++) glareCells.push(kit.rect(glareCell(step)));
+	return {
+		halos: spriteBatch(kit),
+		bodies: spriteBatch(kit),
+		glares: spriteBatch(kit),
+		haloCells: HALO_SPRITES.map((cell) => kit.rect(cell)),
+		bodyCells: BODY_SPRITES.map((cell) => kit.rect(cell)),
+		glareCells,
+	};
 }
 
 /**
  * Pack the frame's sprites into `out`: a halo for every dot but the player (a merging dot's
  * shrinking as it slides in), and a body and a glare for every plain small dot, the glare at
- * (`gx`, `gy`) unit radii from the centre (see glareOffset). `colors` are the body colours by
- * the scene's colour index. Afterwards each batch's `count` says how many it holds, and
- * placements[count], colors[count] and cells[count] are its arrays for drawAtlas.
+ * (`gx`, `gy`) unit radii from the centre (see glareOffset). Halos and bodies come from the
+ * cells in their dot's colour. Afterwards each batch's `count` says how many it holds, and
+ * placements[count] and cells[count] are its arrays for drawAtlas.
  */
-export function packDotSprites(
+export function packDotSprites<P, R>(
 	dots: Float32Array,
 	gx: number,
 	gy: number,
-	colors: readonly Float32Array[],
-	out: DotSprites,
+	out: DotSprites<P, R>,
 ): void {
 	"worklet";
 	const { X, Y, RADIUS, COLOR, KIND, MERGE, STRETCH_X, STRETCH_Y, WALL_X, WALL_Y, STRIDE } = FIELD;
@@ -217,9 +288,9 @@ export function packDotSprites(
 			plainCount++;
 		}
 	}
-	fitBatch(halos, haloCount, HALO_SPRITE, colors[0]);
-	fitBatch(bodies, plainCount, HALO_SPRITE, colors[0]);
-	fitBatch(glares, plainCount, HALO_SPRITE, colors[0]);
+	fitBatch(halos, haloCount, out.haloCells[0]);
+	fitBatch(bodies, plainCount, out.bodyCells[0]);
+	fitBatch(glares, plainCount, out.glareCells[0]);
 
 	// The glare faces the light: the cell at its distance, turned toward it
 	const distance = Math.hypot(gx, gy);
@@ -232,9 +303,7 @@ export function packDotSprites(
 	const glareCellNow = out.glareCells[step];
 
 	const haloCells = halos.cells[haloCount];
-	const haloColors = halos.colors[haloCount];
 	const bodyCells = bodies.cells[plainCount];
-	const bodyColors = bodies.colors[plainCount];
 	const glareCells = glares.cells[plainCount];
 	const half = HALO_CELL / 2;
 	const bodyHalf = BODY_CELL / 2;
@@ -247,18 +316,13 @@ export function packDotSprites(
 		if (radius <= 0 || kind === PLAYER) continue;
 		const x = dots[o + X];
 		const y = dots[o + Y];
-		const color = colors[dots[o + COLOR]];
+		const color = dots[o + COLOR];
 		const fade = kind === MERGING ? 1 - dots[o + MERGE] : 1;
 		if (fade > 0) {
 			// Scaled about the cell's centre, which lands on the dot's
 			const s = (radius * HALO_SCALE * fade) / HALO_PX;
-			const halo = halos.pool[h];
-			halo.scos = s;
-			halo.ssin = 0;
-			halo.tx = x - s * half;
-			halo.ty = y - s * half;
-			haloCells[h] = HALO_SPRITE;
-			haloColors[h] = color;
+			halos.place[h](s, 0, x - s * half, y - s * half);
+			haloCells[h] = out.haloCells[color];
 			h++;
 		}
 		if (
@@ -270,21 +334,12 @@ export function packDotSprites(
 			continue;
 		}
 		const s = radius / BODY_PX;
-		const body = bodies.pool[p];
-		body.scos = s;
-		body.ssin = 0;
-		body.tx = x - s * bodyHalf;
-		body.ty = y - s * bodyHalf;
-		bodyCells[p] = BODY_SPRITE;
-		bodyColors[p] = color;
+		bodies.place[p](s, 0, x - s * bodyHalf, y - s * bodyHalf);
+		bodyCells[p] = out.bodyCells[color];
 		// Turned about the cell's centre: (u, v) lands at (scos u - ssin v + tx, ssin u + scos v + ty)
 		const c = s * turnCos;
 		const sn = s * turnSin;
-		const glare = glares.pool[p];
-		glare.scos = c;
-		glare.ssin = sn;
-		glare.tx = x - (c - sn) * bodyHalf;
-		glare.ty = y - (sn + c) * bodyHalf;
+		glares.place[p](c, sn, x - (c - sn) * bodyHalf, y - (sn + c) * bodyHalf);
 		glareCells[p] = glareCellNow;
 		p++;
 	}

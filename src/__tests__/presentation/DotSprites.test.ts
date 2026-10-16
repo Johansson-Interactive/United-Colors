@@ -6,9 +6,10 @@ import {
 	setWall,
 	writeDot,
 } from "../../application/sceneRecord";
+import { GAME_COLORS } from "../../domain/constants";
 import {
 	BODY_PX,
-	BODY_SPRITE,
+	BODY_SPRITES,
 	type DotSprites,
 	dotSprites,
 	GLARE_MAX_DISTANCE,
@@ -18,21 +19,18 @@ import {
 	glareStepDistance,
 	HALO_PX,
 	HALO_SCALE,
-	HALO_SPRITE,
+	HALO_SPRITES,
 	POP_DOT_SPRITE,
 	POP_GLOW_SPRITE,
 	packDotSprites,
+	plainKit,
 	SHEET_HEIGHT,
 	SHEET_WIDTH,
 	type SheetCell,
 	type SpritePlacement,
 } from "../../presentation/dotSprites";
 
-const COLORS = [
-	Float32Array.of(1, 0, 0, 1),
-	Float32Array.of(0, 1, 0, 1),
-	Float32Array.of(0, 0, 1, 1),
-];
+type Plain = DotSprites<SpritePlacement, SheetCell>;
 
 interface Dot {
 	kind: SceneKind;
@@ -59,26 +57,66 @@ function centre(cell: SheetCell): [number, number] {
 	return [cell.width / 2, cell.height / 2];
 }
 
-function packed(scene: Float32Array, gx = 0, gy = 0, out: DotSprites = dotSprites()): DotSprites {
-	packDotSprites(scene, gx, gy, COLORS, out);
+function packed(scene: Float32Array, gx = 0, gy = 0, out: Plain = dotSprites(plainKit())): Plain {
+	packDotSprites(scene, gx, gy, out);
 	return out;
 }
 
 const PLAIN: Dot = { kind: "small", x: 40, y: 70, radius: 12, color: 2 };
 
 describe("packDotSprites", () => {
-	it("draws a plain small dot as a halo, a body and a glare, in its colour", () => {
+	it("draws a plain small dot as a halo, a body and a glare, from its colour's cells", () => {
 		const { halos, bodies, glares } = packed(sceneOf([PLAIN]));
 		expect([halos.count, bodies.count, glares.count]).toEqual([1, 1, 1]);
-		expect(halos.colors[1][0]).toBe(COLORS[2]);
-		expect(bodies.colors[1][0]).toBe(COLORS[2]);
-		expect(halos.cells[1][0]).toBe(HALO_SPRITE);
-		expect(bodies.cells[1][0]).toBe(BODY_SPRITE);
+		expect(halos.cells[1][0]).toBe(HALO_SPRITES[2]);
+		expect(bodies.cells[1][0]).toBe(BODY_SPRITES[2]);
+	});
+
+	it("takes each dot's halo and body from the cells of its own colour", () => {
+		const { halos, bodies } = packed(
+			sceneOf([
+				{ ...PLAIN, color: 1 },
+				{ ...PLAIN, color: 0 },
+			]),
+		);
+		expect(halos.cells[2]).toEqual([HALO_SPRITES[1], HALO_SPRITES[0]]);
+		expect(bodies.cells[2]).toEqual([BODY_SPRITES[1], BODY_SPRITES[0]]);
+	});
+
+	it("passes no colours, so the dots are drawn untinted", () => {
+		const { halos, bodies, glares } = packed(sceneOf([PLAIN, PLAIN]));
+		expect(halos.colors[2]).toHaveLength(0);
+		expect(bodies.colors[2]).toHaveLength(0);
+		expect(glares.colors[2]).toHaveLength(0);
+	});
+
+	it("gets its rects from the kit once per cell, and a placement per sprite slot", () => {
+		const kit = plainKit();
+		let rects = 0;
+		let placements = 0;
+		const counting = {
+			placement: () => {
+				placements++;
+				return kit.placement();
+			},
+			rect: (cell: SheetCell) => {
+				rects++;
+				return kit.rect(cell);
+			},
+		};
+		const out = dotSprites(counting);
+		expect(rects).toBe(HALO_SPRITES.length + BODY_SPRITES.length + GLARE_STEPS);
+		packed(sceneOf([PLAIN, PLAIN]), 0, 0, out);
+		packed(sceneOf([PLAIN]), 0.2, 0, out);
+		packed(sceneOf([PLAIN, PLAIN]), 0, 0.2, out);
+		expect(rects).toBe(HALO_SPRITES.length + BODY_SPRITES.length + GLARE_STEPS);
+		// Two halos, two bodies and two glares at most, made once
+		expect(placements).toBe(6);
 	});
 
 	it("centres the body on the dot at its radius", () => {
 		const body = packed(sceneOf([PLAIN])).bodies.placements[1][0];
-		const [cx, cy] = centre(BODY_SPRITE);
+		const [cx, cy] = centre(BODY_SPRITES[2]);
 		const [x, y] = place(body, cx, cy);
 		expect(x).toBeCloseTo(PLAIN.x, 5);
 		expect(y).toBeCloseTo(PLAIN.y, 5);
@@ -88,7 +126,7 @@ describe("packDotSprites", () => {
 
 	it("centres the halo on the dot at the halo's size", () => {
 		const halo = packed(sceneOf([PLAIN])).halos.placements[1][0];
-		const [cx, cy] = centre(HALO_SPRITE);
+		const [cx, cy] = centre(HALO_SPRITES[2]);
 		const [x, y] = place(halo, cx, cy);
 		expect([x, y]).toEqual([PLAIN.x, PLAIN.y]);
 		const [ex] = place(halo, cx + HALO_PX, cy);
@@ -157,7 +195,7 @@ describe("packDotSprites", () => {
 	});
 
 	it("reuses its arrays and objects from frame to frame", () => {
-		const out = dotSprites();
+		const out = dotSprites(plainKit());
 		packed(sceneOf([PLAIN, PLAIN]), 0, 0, out);
 		const placements = out.bodies.placements[2];
 		const first = placements[0];
@@ -165,16 +203,16 @@ describe("packDotSprites", () => {
 		packed(sceneOf([{ ...PLAIN, x: 5 }, PLAIN]), 0.3, 0.1, out);
 		expect(out.bodies.placements[2]).toBe(placements);
 		expect(out.bodies.placements[2][0]).toBe(first);
-		expect(first.tx).not.toBe(PLAIN.x - (PLAIN.radius / BODY_PX) * (BODY_SPRITE.width / 2));
+		expect(first.tx).not.toBe(PLAIN.x - (PLAIN.radius / BODY_PX) * (BODY_SPRITES[2].width / 2));
 		expect(out.bodies.placements[2]).toHaveLength(2);
-		expect(out.bodies.colors[2]).toHaveLength(2);
+		expect(out.bodies.cells[2]).toHaveLength(2);
 		expect(out.glares.cells[2]).toHaveLength(2);
 	});
 });
 
 describe("the sprite sheet", () => {
 	it("lays the cells out side by side within the sheet", () => {
-		const cells = [HALO_SPRITE, BODY_SPRITE, POP_GLOW_SPRITE, POP_DOT_SPRITE];
+		const cells = [...HALO_SPRITES, ...BODY_SPRITES, POP_GLOW_SPRITE, POP_DOT_SPRITE];
 		for (let step = 0; step < GLARE_STEPS; step++) cells.push(glareCell(step));
 		for (const a of cells) {
 			expect(a.x).toBeGreaterThanOrEqual(0);
@@ -191,6 +229,11 @@ describe("the sprite sheet", () => {
 				expect(apart).toBe(true);
 			}
 		}
+	});
+
+	it("has a halo and a body cell for every game colour", () => {
+		expect(HALO_SPRITES).toHaveLength(GAME_COLORS.length);
+		expect(BODY_SPRITES).toHaveLength(GAME_COLORS.length);
 	});
 
 	it("holds every glare distance the light can reach", () => {

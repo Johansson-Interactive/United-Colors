@@ -10,6 +10,7 @@ import {
 	POP_GLOW_CELL,
 	POP_GLOW_PX,
 	POP_GLOW_SPRITE,
+	plainKit,
 	type SpritePlacement,
 } from "../../presentation/dotSprites";
 import {
@@ -138,7 +139,7 @@ describe("the ring's curves", () => {
 describe("packBursts", () => {
 	it("puts a pop's dots and glows where the view drew them, at every age", () => {
 		const pop = popBurst(0, 140, 300, "+12", 0);
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		for (const age of AGES) {
 			packBursts([started(pop, 1000)], 1000 + age, COLORS, out);
 			const expected = oldPopDots("+12", age, 140, 300);
@@ -165,7 +166,7 @@ describe("packBursts", () => {
 
 	it("tints a pop's dots and glows in its colour at its opacity", () => {
 		const pop = popBurst(0, 0, 0, "+1", 3);
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		packBursts([started(pop, 0)], 600, COLORS, out);
 		const n = out.dots.count;
 		const tint = out.dots.colors[n][0];
@@ -176,7 +177,7 @@ describe("packBursts", () => {
 	});
 
 	it("strokes a ring through the middle of the view's border, scaled about the burst", () => {
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		packBursts([started(ringBurst(0, 50, 60, 2, 80), 0)], 450, COLORS, out);
 		expect(out.ringCount).toBe(1);
 		const ring = out.rings[0];
@@ -196,7 +197,7 @@ describe("packBursts", () => {
 	});
 
 	it("draws a burst not yet stamped as at its start, and none past its lifetime", () => {
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		const fresh = popBurst(0, 0, 0, "+1", 0);
 		const old = started(popBurst(1, 0, 0, "+100", 0), 0);
 		const ring = started(ringBurst(2, 0, 0, 0), 0);
@@ -207,7 +208,7 @@ describe("packBursts", () => {
 	});
 
 	it("draws several pops, every glow below every dot, each in its own tint", () => {
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		const a = started(popBurst(0, 0, 0, "+1", 0), 0);
 		const b = started(popBurst(1, 0, 0, "+2", 1), 0);
 		packBursts([a, b], 100, COLORS, out);
@@ -218,7 +219,7 @@ describe("packBursts", () => {
 	});
 
 	it("reuses its arrays and objects from frame to frame", () => {
-		const out = burstSprites();
+		const out = burstSprites(plainKit());
 		const list = [started(popBurst(0, 0, 0, "+5", 0), 0)];
 		packBursts(list, 10, COLORS, out);
 		const n = out.dots.count;
