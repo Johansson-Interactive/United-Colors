@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	type FrameCallback,
+	type FrameInfo,
 	useFrameCallback,
 	useSharedValue,
 	withDelay,
@@ -35,6 +36,10 @@ import { createTimeoutGroup } from "./timeoutGroup";
  * burstFrames.ts). The clock runs only while a burst is alive.
  */
 export function useStageEffects(store: GameStore, phase: GamePhase, playerColor: string) {
+	// Memoised by hand, not by the React Compiler: it reads the frame callback's worklet factory
+	// as a call that may change the shared values, so it rebuilt the callback on every render
+	// and dropped the useCallback around it, and useFrameCallback re-registers on each new one
+	"use no memo";
 	const accent = useSharedValue<string>(INK_LIFT);
 	const frost = useSharedValue(0);
 	const shake = useSharedValue(0);
@@ -69,16 +74,21 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	);
 
 	// Stamps, ages and drops the bursts each frame while any is alive
-	const clock = useFrameCallback((frame) => {
-		const list = bursts.get();
-		for (let i = 0; i < list.length; i++) {
-			if (list[i].id > burstSeen.get()) burstSeen.set(list[i].id);
-		}
-		const next = advanceBursts(list, frame.timestamp);
-		if (next !== list) bursts.set(next);
-		burstClock.set(frame.timestamp);
-		if (next.length === 0) scheduleOnRN(stopClock, burstSeen.get());
-	}, false);
+	const onFrame = useCallback(
+		(frame: FrameInfo) => {
+			"worklet";
+			const list = bursts.get();
+			for (let i = 0; i < list.length; i++) {
+				if (list[i].id > burstSeen.get()) burstSeen.set(list[i].id);
+			}
+			const next = advanceBursts(list, frame.timestamp);
+			if (next !== list) bursts.set(next);
+			burstClock.set(frame.timestamp);
+			if (next.length === 0) scheduleOnRN(stopClock, burstSeen.get());
+		},
+		[bursts, burstSeen, burstClock, stopClock],
+	);
+	const clock = useFrameCallback(onFrame, false);
 	useEffect(() => {
 		clockRef.current = clock;
 	}, [clock]);
