@@ -4,7 +4,10 @@ interface ThreadAffinityModule {
 	pinMainThreadToFastCores(): Promise<number[]>;
 }
 
-/** The local module in modules/thread-affinity (Android only); missing from older dev clients */
+/**
+ * The local module in modules/thread-affinity. Registered on Android only, so it is missing on
+ * iOS and from dev clients built before it.
+ */
 const ThreadAffinity = requireOptionalNativeModule<ThreadAffinityModule>("ThreadAffinity");
 
 /**
@@ -14,8 +17,7 @@ const ThreadAffinity = requireOptionalNativeModule<ThreadAffinityModule>("Thread
  * none on iOS, without the native module, on a phone whose cores are all alike, or if the call
  * fails.
  */
-export async function pinMainThreadToFastCores(os: string): Promise<number[]> {
-	if (os !== "android") return [];
+export async function pinMainThreadToFastCores(): Promise<number[]> {
 	try {
 		const cpus = await ThreadAffinity?.pinMainThreadToFastCores();
 		return Array.isArray(cpus) ? cpus : [];

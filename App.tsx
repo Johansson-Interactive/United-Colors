@@ -67,7 +67,7 @@ const haptics = new HapticsService();
 bindScreenAwake(store, new KeepAwakeService());
 
 /** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
-void pinMainThreadToFastCores(Platform.OS);
+void pinMainThreadToFastCores();
 
 /** How the glass rounds its corners, asked for once at launch */
 const displayCorners = loadDisplayCorners(Platform.OS);
