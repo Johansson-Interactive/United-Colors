@@ -16,6 +16,7 @@ import {
 	advanceBursts,
 	type Burst,
 	burstColor,
+	createBurstIds,
 	popBurst,
 	ringBurst,
 	withBurst,
@@ -41,7 +42,7 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	const burstClock = useSharedValue(0);
 	/** The newest burst the UI thread has drawn, so a stop sent before a newer one is ignored */
 	const burstSeen = useSharedValue(-1);
-	const burstIdRef = useRef(0);
+	const [burstIds] = useState(createBurstIds);
 
 	// Frost the scene when it is still; wash the edges in the player's colour when playing
 	useEffect(() => {
@@ -60,9 +61,12 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 
 	// Stops the clock once the UI thread has no burst left, unless one was added since
 	const clockRef = useRef<FrameCallback | null>(null);
-	const stopClock = useCallback((seen: number) => {
-		if (seen === burstIdRef.current - 1) clockRef.current?.setActive(false);
-	}, []);
+	const stopClock = useCallback(
+		(seen: number) => {
+			if (burstIds.isNewest(seen)) clockRef.current?.setActive(false);
+		},
+		[burstIds],
+	);
 
 	// Stamps, ages and drops the bursts each frame while any is alive
 	const clock = useFrameCallback((frame) => {
@@ -85,14 +89,14 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 
 	const addBurst = useCallback(
 		(make: (id: number) => Burst) => {
-			const burst = make(burstIdRef.current++);
+			const burst = make(burstIds.take());
 			bursts.modify((list) => {
 				"worklet";
 				return withBurst(list, burst);
 			});
 			clock.setActive(true);
 		},
-		[bursts, clock],
+		[bursts, clock, burstIds],
 	);
 
 	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
