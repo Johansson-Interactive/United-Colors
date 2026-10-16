@@ -10,6 +10,7 @@ import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
+import { DisplayRateService } from "./src/infrastructure/DisplayRateService";
 import { loadDisplayCorners } from "./src/infrastructure/displayCorners";
 import { FrameClock } from "./src/infrastructure/FrameClock";
 import { HapticsService } from "./src/infrastructure/HapticsService";
@@ -63,9 +64,16 @@ const audio = new AudioService(
 
 const haptics = new HapticsService();
 
-/** Tilting is no touch, so keep the screen from dimming mid-run; bound for the app's lifetime */
+/**
+ * Tilting is no touch, so while a run is in play keep the screen from dimming and the display
+ * at its fastest rate (Android); bound for the app's lifetime
+ */
 const keepAwake = new KeepAwakeService();
-bindRunInPlay(store, (inPlay) => keepAwake.setAwake(inPlay));
+const displayRate = new DisplayRateService();
+bindRunInPlay(store, (inPlay) => {
+	keepAwake.setAwake(inPlay);
+	displayRate.setFastest(inPlay);
+});
 
 /** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
 void pinMainThreadToFastCores();

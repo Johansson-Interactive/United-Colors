@@ -68,6 +68,15 @@ export interface ScreenAwake {
 	setAwake(awake: boolean): void;
 }
 
+/**
+ * The display's refresh rate. Phones that vary it go by touches, and a run has none, so they
+ * fall back to their slow rate during play unless the app asks for the fast one.
+ */
+export interface DisplayRate {
+	/** Ask for the display's fastest rate, or leave the rate to the system again */
+	setFastest(fastest: boolean): void;
+}
+
 /** Report whether the app is in the foreground; returns the unsubscribe */
 export type WatchAppActive = (listener: (active: boolean) => void) => () => void;
 

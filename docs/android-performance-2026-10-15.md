@@ -519,6 +519,14 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 - **The other fixes cost more and gain less:** packing the uniforms into fewer names, or one shader node for every drop.
 - **Decision:** left as it is, unless a future profile shows it grown.
 
+### Play asks for the fastest display rate (2026-10-16)
+
+Test players reported 120 Hz in the menus but not in play. The likely cause is P1: the app never asked for a rate, so Android picked one from touches. Menus are tapped and stay at 120. A run has no touches, so the display falls back to 60. That is why every bench above ran at 60 Hz.
+
+- **Change:** `modules/display-rate` sets the window's `preferredDisplayModeId` to the fastest mode at the current resolution. `App.tsx` asks for it while `bindRunInPlay` (`src/application/useCases/BindRunInPlay.ts`) reports a run in play (`RUNNING` and `REJECTING`) and gives it back in the other phases, alongside the screen keep-awake. Logcat tag `DisplayRate`.
+- **The budget halves:** 8.3 ms a frame instead of 16.7 ms. After five minutes, pinned, the main thread's `animation` work was 8.4 ms per frame at 60 Hz. Some of that work runs once per frame, so it costs more per second at 120; some runs per tick or per catch and doesn't.
+- **Not measured yet.** Bench sustained play at 120 (`scripts/android-heat.sh`) against the control `f896895`, and read the rate during play from `dumpsys SurfaceFlinger`. If 120 drops frames, R5's 60 Hz cap is one line in the module's mode pick.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
@@ -531,7 +539,7 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 | P1 | Every animated style on Android commits through the shadow tree | `staticFlags.json`: `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS: false`; `ReanimatedModuleProxy.cpp:68` | Confirmed; fixed (flag on, see section 2) | Medium, worst during combos | S | Turn the flag on (R3) |
 | P1 | A new Skia canvas (TextureView plus EGL surface) per catch, plus a full `GameScreen` render to add and remove each burst, on the JS thread that runs the game loop | `Bursts.tsx:35` (`Pop` → `DotMatrixText` `<Canvas>`), `useStageEffects.ts:54` | Confirmed; fixed (see section 2) | Medium to high, hitches exactly during combos | M | Draw bursts in the game canvas (R4) |
 | P1 | Burst rings animate `borderWidth`, a layout prop, so every ring frame relays out | `Bursts.tsx:66` | Likely; fixed in code (R4) | Low to medium | S | Fixed stroke, or draw rings in Skia (R4) |
-| P1 | Display rate: whatever the device runs during play, both threads must finish inside that frame (8.3 ms at 120 Hz) | `peak_refresh_rate` 120; no frame-rate request in the app | Hypothesis: during tilt-only play the OnePlus may already sit at 60 | Medium | S to M | Measure the rate during play; if above 60, try a 60 Hz cap on Android (R5) |
+| P1 | Display rate: whatever the device runs during play, both threads must finish inside that frame (8.3 ms at 120 Hz) | `peak_refresh_rate` 120; no frame-rate request in the app | Likely: test players see 120 in menus, not in play. Play now asks for the fastest rate; not benched yet | Medium | S to M | Measure the rate during play; if above 60, try a 60 Hz cap on Android (R5) |
 | P1 | Score changes re-render all of `GameScreen`, and `DotMatrixText` relays out and re-creates its picture mapper | `GameScreen.tsx:78` | Likely | Low to medium | S | HUD subscribes to the score itself (R8) |
 | P2 | Per-frame drawing grows with the dot count: about 12 JSI calls and 3 draws per small dot, 4 decode passes, host objects allocated per frame (`XYWHRect`, `makeShader` per drip and merge) | `sceneDrawer.ts:141-245`, `mergeShader.ts:92` | Likely, size needs a trace | Grows over a run | M | Two `drawAtlas` calls for free small dots (R6) |
 | P2 | Room: two full-screen gradient passes per frame, plus two full-screen texture composites; bandwidth heats the SoC | `AmbientBackground.tsx:82-117` | Hypothesis (thermal) | Medium on sustained play | S, after R2 | One SkSL pass for ink, light and wash (R7) |
