@@ -481,7 +481,20 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 - **When:** `App.tsx` calls it once at launch, like the removed hint module. It logs `ThreadAffinity: main thread limited to CPUs …`.
 - **Where it does nothing:** on iOS, on phones whose cores are all alike, and when the module is missing.
 
-**Status:** not measured yet. It needs a release bench against `b80be97`, and a multi-minute run for heat before it stays. If it does not pay, it goes, as the hint module did.
+**Measured** on the drips bench (release, 60 Hz, thermal status 0), back to back against the control `b80be97`. The pinned runs went first, pin-B before pin-A.
+
+| Run | Frames over 16.7 ms | p50 | p95 | p99 | `animation` per frame | On the big cores | Big-core clock |
+|---|---|---|---|---|---|---|---|
+| Pinned A | 0.3 % | 8.9 ms | 13.2 ms | 14.5 ms | 6.40 ms | 98 % | 0.82 GHz |
+| Pinned B | 1.5 % | 9.8 ms | 15.4 ms | 16.8 ms | 6.37 ms | 98 % | 0.81 GHz |
+| Control A | 1.0 % | 10.3 ms | 13.4 ms | 16.1 ms | 8.79 ms | 12 % | 1.32 GHz |
+| Control B | 1.0 % | 10.3 ms | 13.4 ms | 16.1 ms | 8.77 ms | 13 % | 1.28 GHz |
+
+- **The work gets 27 % shorter:** `animation` falls from 8.8 to 6.4 ms per frame, even though the governor runs the big cores at only about 0.8 GHz for this load. p50 falls by 0.5–1.4 ms.
+- **The tail is not clearly better.** Pinned B had 13 frames over budget. In them the main thread ran 6.9 ms, the same as in its other frames, and waited for the rest. Pinned A's three were collector stalls (78 ms of waits on `hades`). Neither is CPU work, which is what the pin changes.
+- **Power:** an A78 at 0.8 GHz against an A55 near its 1.8 GHz maximum. That is likely comparable or better for the same work, but not measured.
+
+**Status:** kept for now, for the headroom: about 2.4 ms per frame, which matters most if play turns out to run at 120 Hz (P3-1). It still needs a multi-minute run for heat. If that shows throttling, it goes.
 
 ### Declarative Skia nodes taking new values: looked at, left as they are (2026-10-16)
 
