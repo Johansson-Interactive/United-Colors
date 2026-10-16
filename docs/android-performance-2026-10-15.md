@@ -470,6 +470,19 @@ Each plain-object field Skia reads costs a JS string made for its name (`createS
 
 **Visual check:** pending on the device. The dots' colours, halos and edges should look as before, and pops should still fade.
 
+### The main thread pinned to the fast cores (2026-10-16)
+
+**Why:** 86–87 % of `animation` still runs on the little cores at about 1.5 GHz (see above), and the shell can't pin the thread to test it.
+
+**Change:** a local module, `modules/thread-affinity` (Android only):
+- **What it pins:** the app's main thread, to every CPU faster than the slowest cluster, judged by `cpuinfo_max_freq`. On the Snapdragon 888 that is CPUs 4–7.
+- **How:** a small JNI call to `sched_setaffinity`. An app may set its own threads' affinity, with no permission.
+- **Kept on:** it pins again when the app returns to the foreground, because a background cpuset without the fast cores makes the kernel drop the limit.
+- **When:** `App.tsx` calls it once at launch, like the removed hint module. It logs `ThreadAffinity: main thread limited to CPUs …`.
+- **Where it does nothing:** on iOS, on phones whose cores are all alike, and when the module is missing.
+
+**Status:** not measured yet. It needs a release bench against `b80be97`, and a multi-minute run for heat before it stays. If it does not pay, it goes, as the hint module did.
+
 ## 3. Findings
 
 **Confirmed** = measured. **Likely** = follows from the code or library source. **Hypothesis** = needs a trace.
