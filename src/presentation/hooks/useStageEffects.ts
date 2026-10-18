@@ -17,10 +17,10 @@ import {
 	advanceBursts,
 	type Burst,
 	burstColor,
+	comboTotalBurst,
 	createBurstIds,
 	popBurst,
 	ringBurst,
-	totalBurst,
 	withBurst,
 } from "../effects/burstFrames";
 import { catchPop, comboTotalPop } from "../effects/catchPop";
@@ -138,7 +138,7 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 				case "comboEnd": {
 					const pop = comboTotalPop(event);
 					const { x: atX, y: atY } = catchSpot;
-					addBurst((id) => totalBurst(id, atX, atY, pop.text, burstColor(pop.color)));
+					addBurst((id) => comboTotalBurst(id, atX, atY, pop.text, burstColor(pop.color)));
 					return;
 				}
 				case "gameOver":

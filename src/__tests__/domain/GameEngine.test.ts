@@ -255,16 +255,16 @@ describe("GameEngine", () => {
 			expect(engine.getScore()).toBe(1 + 3 + POINT_DOT_VALUE + 4);
 		});
 
-		it("a catch 16 ticks after the last carries the combo on, one 17 ticks after starts a new one", () => {
+		it("a catch a whole window after the last carries the combo on, one a tick later starts a new one", () => {
 			const { engine, small } = stagedEngine(OWN);
 			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
 			engine.tick();
 			engine.getFrame();
-			ticks(engine, 15);
+			ticks(engine, COMBO_WINDOW_TICKS - 1);
 			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
 			engine.tick();
 			expect(catches(engine)).toEqual([[3, 2, false]]);
-			ticks(engine, 16);
+			ticks(engine, COMBO_WINDOW_TICKS);
 			small.push(smallDotAt(CENTRE, OWN, { id: "c" }));
 			engine.tick();
 			expect(catches(engine)).toEqual([[1, 1, false]]);

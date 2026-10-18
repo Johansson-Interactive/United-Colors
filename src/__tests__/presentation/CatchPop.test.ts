@@ -20,7 +20,7 @@ describe("catchPop", () => {
 
 describe("comboTotalPop", () => {
 	it("shows what a whole combo paid as the bare total, in combo amber", () => {
-		expect(comboTotalPop({ type: "comboEnd", total: 16, catches: 4 })).toEqual({
+		expect(comboTotalPop({ total: 16, catches: 4 })).toEqual({
 			text: "16",
 			color: "#FFC107",
 		});

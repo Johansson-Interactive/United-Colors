@@ -20,6 +20,9 @@ import {
 	type Burst,
 	burstColor,
 	burstSprites,
+	COMBO_TOTAL_LIFETIME_MS,
+	COMBO_TOTAL_SCALE,
+	comboTotalBurst,
 	createBurstIds,
 	MAX_BURSTS,
 	NOT_STARTED,
@@ -36,9 +39,6 @@ import {
 	ringOpacity,
 	ringProgress,
 	ringScale,
-	TOTAL_LIFETIME_MS,
-	TOTAL_SCALE,
-	totalBurst,
 	withBurst,
 } from "../../presentation/effects/burstFrames";
 import { COMBO_AMBER, WHITE } from "../../presentation/theme/theme";
@@ -327,10 +327,10 @@ describe("burst ids", () => {
 
 describe("the combo total's pop", () => {
 	it("runs the pop's curves over a longer lifetime than a catch's pop", () => {
-		expect(TOTAL_LIFETIME_MS).toBeGreaterThan(BURST_LIFETIME_MS);
+		expect(COMBO_TOTAL_LIFETIME_MS).toBeGreaterThan(BURST_LIFETIME_MS);
 		for (const age of [0, 100, 450, 900, 1200]) {
-			expect(popProgress(age, TOTAL_LIFETIME_MS)).toBeCloseTo(
-				outCubic(Math.min(1, age / TOTAL_LIFETIME_MS)),
+			expect(popProgress(age, COMBO_TOTAL_LIFETIME_MS)).toBeCloseTo(
+				outCubic(Math.min(1, age / COMBO_TOTAL_LIFETIME_MS)),
 				12,
 			);
 		}
@@ -338,17 +338,17 @@ describe("the combo total's pop", () => {
 
 	it("stays on screen after a catch's pop is gone, until its own lifetime is up", () => {
 		let list = withBurst([], popBurst(0, 0, 0, "+7", 0));
-		list = withBurst(list, totalBurst(1, 0, 0, "16", 0));
+		list = withBurst(list, comboTotalBurst(1, 0, 0, "16", 0));
 		advanceBursts(list, 0);
 		const held = advanceBursts(list, BURST_LIFETIME_MS);
 		expect(held.map((b) => b.id)).toEqual([1]);
-		expect(advanceBursts(held, TOTAL_LIFETIME_MS - 1)).toBe(held);
-		expect(advanceBursts(held, TOTAL_LIFETIME_MS)).toEqual([]);
+		expect(advanceBursts(held, COMBO_TOTAL_LIFETIME_MS - 1)).toBe(held);
+		expect(advanceBursts(held, COMBO_TOTAL_LIFETIME_MS)).toEqual([]);
 
 		const out = burstSprites(plainKit());
 		packBursts(held, BURST_LIFETIME_MS, COLORS, out);
 		expect(out.dots.count).toBe(held[0].dots.length / 2);
-		packBursts(held, TOTAL_LIFETIME_MS, COLORS, out);
+		packBursts(held, COMBO_TOTAL_LIFETIME_MS, COLORS, out);
 		expect(out.dots.count).toBe(0);
 	});
 
@@ -363,11 +363,11 @@ describe("the combo total's pop", () => {
 		// Both past their swell, at the same point of their curves
 		const pop = radiusAndSpan(popBurst(0, 100, 200, "16", 4), 450);
 		const total = radiusAndSpan(
-			totalBurst(1, 100, 200, "16", 4),
-			(450 * TOTAL_LIFETIME_MS) / BURST_LIFETIME_MS,
+			comboTotalBurst(1, 100, 200, "16", 4),
+			(450 * COMBO_TOTAL_LIFETIME_MS) / BURST_LIFETIME_MS,
 		);
-		expect(total.radius / pop.radius).toBeCloseTo(TOTAL_SCALE, 9);
-		expect(total.span / pop.span).toBeCloseTo(TOTAL_SCALE, 9);
-		expect(TOTAL_SCALE).toBeGreaterThan(1);
+		expect(total.radius / pop.radius).toBeCloseTo(COMBO_TOTAL_SCALE, 9);
+		expect(total.span / pop.span).toBeCloseTo(COMBO_TOTAL_SCALE, 9);
+		expect(COMBO_TOTAL_SCALE).toBeGreaterThan(1);
 	});
 });

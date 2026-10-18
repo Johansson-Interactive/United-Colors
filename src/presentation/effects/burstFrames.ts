@@ -29,8 +29,8 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
 /** How long a burst lasts (ms) */
 export const BURST_LIFETIME_MS = 900;
 /** How long a combo total's pop lasts (ms), and how much larger it is drawn than a catch's */
-export const TOTAL_LIFETIME_MS = 1300;
-export const TOTAL_SCALE = 1.6;
+export const COMBO_TOTAL_LIFETIME_MS = 1300;
+export const COMBO_TOTAL_SCALE = 1.6;
 /** Bursts alive at once; a new one past this drops the oldest */
 export const MAX_BURSTS = 8;
 /** A ring's diameter (px) before it grows, unless the burst gives its own */
@@ -57,7 +57,7 @@ export const NOT_STARTED = -1;
 /** One burst, as plain numbers; every burst has every field, so the UI thread sees one shape */
 export interface Burst {
 	id: number;
-	kind: "pop" | "total" | "ring";
+	kind: "pop" | "comboTotal" | "ring";
 	/** Where it happened */
 	x: number;
 	y: number;
@@ -104,8 +104,14 @@ export function popBurst(id: number, x: number, y: number, text: string, color: 
 }
 
 /** A combo total's pop of `text`, from where the combo's last catch landed */
-export function totalBurst(id: number, x: number, y: number, text: string, color: number): Burst {
-	return { ...popBurst(id, x, y, text, color), kind: "total" };
+export function comboTotalBurst(
+	id: number,
+	x: number,
+	y: number,
+	text: string,
+	color: number,
+): Burst {
+	return { ...popBurst(id, x, y, text, color), kind: "comboTotal" };
 }
 
 /** A ring from (x, y), `size` across before it grows */
@@ -174,7 +180,7 @@ export function createBurstIds(): BurstIds {
 /** How long `burst` lasts (ms) */
 function lifetime(burst: Burst): number {
 	"worklet";
-	return burst.kind === "total" ? TOTAL_LIFETIME_MS : BURST_LIFETIME_MS;
+	return burst.kind === "comboTotal" ? COMBO_TOTAL_LIFETIME_MS : BURST_LIFETIME_MS;
 }
 
 /**
@@ -345,7 +351,7 @@ export function packBursts<P, R>(
 			continue;
 		}
 		const t = popProgress(age, span);
-		const scale = burst.kind === "total" ? popScale(t) * TOTAL_SCALE : popScale(t);
+		const scale = burst.kind === "comboTotal" ? popScale(t) * COMBO_TOTAL_SCALE : popScale(t);
 		const color = colors[burst.color];
 		const tint = tints[pops++];
 		tint[0] = color[0];

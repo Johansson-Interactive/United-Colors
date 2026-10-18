@@ -101,8 +101,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
-		this.comboStep = 0;
-		this.comboTotal = 0;
+		this.resetCombo();
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -116,8 +115,7 @@ export class GameEngine {
 		this.dots = [];
 		this.score = 0;
 		this.timeStep = 0;
-		this.comboStep = 0;
-		this.comboTotal = 0;
+		this.resetCombo();
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -420,6 +418,11 @@ export class GameEngine {
 		if (this.comboStep > 1) {
 			this.events.push({ type: "comboEnd", total: this.comboTotal, catches: this.comboStep });
 		}
+		this.resetCombo();
+	}
+
+	/** No combo going */
+	private resetCombo(): void {
 		this.comboStep = 0;
 		this.comboTotal = 0;
 	}
