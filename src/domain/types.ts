@@ -117,6 +117,12 @@ export type GameEvent =
 	/** A point dot was caught and recoloured the player */
 	| ({ type: "collectPoint" } & Catch)
 	| { type: "pointSpawn" }
+	/**
+	 * A combo of two or more catches ran its course: its window ran out after the last catch.
+	 * `total` is everything it paid, `catches` its length. None when a refusal or a new run
+	 * cuts it short
+	 */
+	| { type: "comboEnd"; total: number; catches: number }
 	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
 	| { type: "spit" }
 	| { type: "gameOver" };

@@ -7,11 +7,12 @@ function report(store: GameStore, events: GameEvent[]) {
 }
 
 describe("bindHaptics", () => {
-	it("buzzes once as the player spits the refused dot out", () => {
+	it("buzzes once as the player spits the refused dot out, and for nothing else", () => {
 		const store = createGameStore();
 		let spits = 0;
 		bindHaptics(store, { spit: () => spits++ });
 		report(store, [{ type: "collect", value: 1, step: 1, sameTick: false }]);
+		report(store, [{ type: "comboEnd", total: 4, catches: 2 }]);
 		report(store, []);
 		report(store, [{ type: "spit" }]);
 		report(store, [{ type: "gameOver" }]);

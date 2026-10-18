@@ -53,9 +53,13 @@ export class GameEngine {
 	private dots: Dot[] = [];
 	private score = 0;
 	private timeStep = 0;
-	/** Combo step of the last catch (0 before any), and the tick it landed on */
+	/**
+	 * Combo step of the last catch (0 when no combo is going), the tick it landed on, and what
+	 * the combo has paid so far
+	 */
 	private comboStep = 0;
 	private lastCatchTick = 0;
+	private comboTotal = 0;
 	private density: number;
 	private screen: ScreenSize;
 	private random: () => number;
@@ -98,6 +102,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.comboStep = 0;
+		this.comboTotal = 0;
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -112,6 +117,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.comboStep = 0;
+		this.comboTotal = 0;
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -206,6 +212,7 @@ export class GameEngine {
 
 		const isKiosk = phase === "KIOSK";
 		this.timeStep++;
+		this.endLapsedCombo();
 		// Dots that finished merging between ticks leave before spawn limits apply
 		this.removeFlaggedDots();
 		for (const dot of this.dots) dot.beginTick();
@@ -398,12 +405,22 @@ export class GameEngine {
 
 	/** Score a catch worth `base` on its own, carrying the combo on if it is still going */
 	private scoreCatch(base: number): Catch {
-		const since = this.timeStep - this.lastCatchTick;
-		const going = this.comboStep > 0 && since <= COMBO_WINDOW_TICKS;
-		this.comboStep = going ? this.comboStep + 1 : 1;
+		const sameTick = this.comboStep > 0 && this.lastCatchTick === this.timeStep;
+		this.comboStep++;
 		this.lastCatchTick = this.timeStep;
-		const value = base + this.comboStep - 1;
+		const value = base + 2 * (this.comboStep - 1);
 		this.score += value;
-		return { value, step: this.comboStep, sameTick: going && since === 0 };
+		this.comboTotal += value;
+		return { value, step: this.comboStep, sameTick };
+	}
+
+	/** End the combo once its window has run out, reporting it if it was two catches or more */
+	private endLapsedCombo(): void {
+		if (this.comboStep === 0 || this.timeStep - this.lastCatchTick <= COMBO_WINDOW_TICKS) return;
+		if (this.comboStep > 1) {
+			this.events.push({ type: "comboEnd", total: this.comboTotal, catches: this.comboStep });
+		}
+		this.comboStep = 0;
+		this.comboTotal = 0;
 	}
 }

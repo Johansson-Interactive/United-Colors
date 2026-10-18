@@ -229,22 +229,45 @@ describe("GameEngine", () => {
 			for (let i = 0; i < count; i++) engine.tick();
 		}
 
-		it("each catch within COMBO_WINDOW_TICKS of the last pays one more than the one before it would", () => {
+		it("each catch pays two more than the one before it would, so small dots total the length squared", () => {
+			const { engine, small } = stagedEngine(OWN);
+			const paid: number[] = [];
+			for (const id of ["a", "b", "c", "d", "e"]) {
+				small.push(smallDotAt(CENTRE, OWN, { id }));
+				engine.tick();
+				paid.push(...catches(engine).map(([value]) => value as number));
+				if (id === "d") expect(engine.getScore()).toBe(16);
+			}
+			expect(paid).toEqual([1, 3, 5, 7, 9]);
+			expect(engine.getScore()).toBe(25);
+		});
+
+		it("a point dot pays its own value plus the same ladder bonus at its step", () => {
 			const { engine, small, point } = stagedEngine(OWN);
 			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
 			engine.tick();
-			expect(catches(engine)).toEqual([[1, 1, false]]);
-
-			ticks(engine, COMBO_WINDOW_TICKS - 1);
 			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
 			engine.tick();
-			expect(catches(engine)).toEqual([[2, 2, false]]);
-
-			ticks(engine, COMBO_WINDOW_TICKS - 1);
+			engine.getFrame();
 			point.push(pointOnPlayer("p", OTHER));
 			engine.tick();
-			expect(catches(engine)).toEqual([[POINT_DOT_VALUE + 2, 3, false]]);
-			expect(engine.getScore()).toBe(1 + 2 + POINT_DOT_VALUE + 2);
+			expect(catches(engine)).toEqual([[POINT_DOT_VALUE + 4, 3, false]]);
+			expect(engine.getScore()).toBe(1 + 3 + POINT_DOT_VALUE + 4);
+		});
+
+		it("a catch 16 ticks after the last carries the combo on, one 17 ticks after starts a new one", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			engine.getFrame();
+			ticks(engine, 15);
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[3, 2, false]]);
+			ticks(engine, 16);
+			small.push(smallDotAt(CENTRE, OWN, { id: "c" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[1, 1, false]]);
 		});
 
 		it("a point dot keeps the combo going in the player's new colour", () => {
@@ -254,7 +277,7 @@ describe("GameEngine", () => {
 			expect(catches(engine)).toEqual([[POINT_DOT_VALUE, 1, false]]);
 			small.push(smallDotAt(CENTRE, OTHER, { id: "a" }));
 			engine.tick();
-			expect(catches(engine)).toEqual([[2, 2, false]]);
+			expect(catches(engine)).toEqual([[3, 2, false]]);
 		});
 
 		it("catches on the same tick are consecutive steps", () => {
@@ -264,23 +287,93 @@ describe("GameEngine", () => {
 			engine.tick();
 			expect(catches(engine)).toEqual([
 				[1, 1, false],
-				[POINT_DOT_VALUE + 1, 2, true],
+				[POINT_DOT_VALUE + 2, 2, true],
 			]);
 			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
 			engine.tick();
-			expect(catches(engine)).toEqual([[3, 3, false]]);
+			expect(catches(engine)).toEqual([[5, 3, false]]);
 		});
 
-		it("ends silently once the window lapses", () => {
+		/** The combo ends reported with the next frame */
+		function comboEnds(engine: GameEngine) {
+			return engine.getFrame().events.filter((e) => e.type === "comboEnd");
+		}
+
+		it("reports its total and length once, on the first tick after the window runs out", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			point.push(pointOnPlayer("p", OTHER));
+			engine.tick();
+			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
+			engine.tick();
+			engine.getFrame();
+			ticks(engine, COMBO_WINDOW_TICKS);
+			expect(comboEnds(engine)).toEqual([]);
+			engine.tick();
+			expect(comboEnds(engine)).toEqual([
+				{ type: "comboEnd", total: 1 + POINT_DOT_VALUE + 2 + 5, catches: 3 },
+			]);
+			ticks(engine, COMBO_WINDOW_TICKS * 2);
+			expect(comboEnds(engine)).toEqual([]);
+		});
+
+		it("a catch on its own ends without a combo end, and the next starts afresh", () => {
 			const { engine, small } = stagedEngine(OWN);
 			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
 			engine.tick();
 			engine.getFrame();
-			ticks(engine, COMBO_WINDOW_TICKS);
+			ticks(engine, COMBO_WINDOW_TICKS + 1);
 			expect(engine.getFrame().events).toEqual([]);
 			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
 			engine.tick();
 			expect(catches(engine)).toEqual([[1, 1, false]]);
+		});
+
+		/** A run two small dots into a combo, with its frame taken */
+		function twoIntoACombo() {
+			const staged = stagedEngine(OWN);
+			staged.small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			staged.engine.tick();
+			staged.small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			staged.engine.tick();
+			staged.engine.getFrame();
+			return staged;
+		}
+
+		it("cut short by a refusal still pays, but reports no combo end", () => {
+			const { engine, small } = twoIntoACombo();
+			small.push(smallDotAt(CENTRE, OTHER, { id: "wrong" }));
+			const reported: GameEvent[] = [];
+			for (let t = 0; t <= REJECT_TICKS + COMBO_WINDOW_TICKS; t++) {
+				engine.tick();
+				reported.push(...engine.getFrame().events);
+			}
+			expect(engine.getFrame()).toMatchObject({ phase: "GAME_OVER", score: 1 + 3 });
+			expect(reported.filter((e) => e.type === "comboEnd")).toEqual([]);
+		});
+
+		it("cut short by a new run or kiosk mode reports no combo end", () => {
+			for (const restart of [
+				(engine: GameEngine) => engine.startGame(OWN),
+				(engine: GameEngine) => engine.startKiosk(),
+			]) {
+				const { engine } = twoIntoACombo();
+				restart(engine);
+				ticks(engine, COMBO_WINDOW_TICKS * 2);
+				expect(comboEnds(engine)).toEqual([]);
+			}
+		});
+
+		it("still reports its end after a pause", () => {
+			const { engine } = twoIntoACombo();
+			engine.pause();
+			ticks(engine, COMBO_WINDOW_TICKS * 3);
+			engine.resume();
+			ticks(engine, COMBO_WINDOW_TICKS);
+			expect(comboEnds(engine)).toEqual([]);
+			engine.tick();
+			expect(comboEnds(engine)).toEqual([{ type: "comboEnd", total: 4, catches: 2 }]);
 		});
 
 		it("a drip plucked off its wall counts", () => {
@@ -290,7 +383,7 @@ describe("GameEngine", () => {
 			engine.tick();
 			engine.getFrame();
 			engine.tick();
-			expect(catches(engine)).toEqual([[2, 2, false]]);
+			expect(catches(engine)).toEqual([[3, 2, false]]);
 		});
 
 		it("survives a pause, since ticks stop too", () => {
@@ -303,7 +396,7 @@ describe("GameEngine", () => {
 			engine.resume();
 			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
 			engine.tick();
-			expect(catches(engine)).toEqual([[2, 2, false]]);
+			expect(catches(engine)).toEqual([[3, 2, false]]);
 		});
 
 		it("a new game starts without one", () => {

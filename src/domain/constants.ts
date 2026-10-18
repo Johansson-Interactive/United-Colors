@@ -65,10 +65,10 @@ export const POINT_DOT_PULSE_SPEED = 12;
 
 /**
  * Combo rules: a catch at most this many ticks after the one before carries the combo on
- * (267 ms at 30 Hz). Each catch pays its own value plus one for every catch before it in the
- * combo, without limit
+ * (533 ms at 30 Hz). Each catch pays its own value plus two for every catch before it in the
+ * combo, without limit, so a combo of small dots alone totals its length squared
  */
-export const COMBO_WINDOW_TICKS = 8;
+export const COMBO_WINDOW_TICKS = 16;
 
 /** Player dot rules */
 export const PLAYER_DOT_SIZE_RATIO = 0.125;
