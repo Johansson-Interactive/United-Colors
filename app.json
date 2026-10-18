@@ -54,7 +54,7 @@
 			],
 			"expo-asset",
 			"./plugins/withDevLauncherStripPhaseAlwaysRuns.js",
-			"./plugins/withDevDisplayName.js",
+			"./plugins/withDevVariant.js",
 			"./plugins/withGameCategory.js",
 			[
 				"expo-splash-screen",
