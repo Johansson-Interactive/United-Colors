@@ -15,9 +15,9 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
 
 /**
  * Short-lived feedback drawn at a point in the playfield, in the game canvas: a score pop that
- * floats up, or a ring that expands from where something happened (a point catch, the final
- * hit). They were views once; their curves are those views' animations, and a pop's dots land
- * where the view's DotMatrixText put them.
+ * floats up (a combo's total is one too, larger and held longer), or a ring that expands from
+ * where something happened (a point catch, the final hit). They were views once; their curves
+ * are those views' animations, and a pop's dots land where the view's DotMatrixText put them.
  *
  * The list of bursts lives on the UI thread. The JS thread lays each one out once (see
  * popBurst) and appends it with withBurst; the UI thread stamps it with the frame time on its
@@ -28,6 +28,9 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
 
 /** How long a burst lasts (ms) */
 export const BURST_LIFETIME_MS = 900;
+/** How long a combo total's pop lasts (ms), and how much larger it is drawn than a catch's */
+export const TOTAL_LIFETIME_MS = 1300;
+export const TOTAL_SCALE = 1.6;
 /** Bursts alive at once; a new one past this drops the oldest */
 export const MAX_BURSTS = 8;
 /** A ring's diameter (px) before it grows, unless the burst gives its own */
@@ -54,7 +57,7 @@ export const NOT_STARTED = -1;
 /** One burst, as plain numbers; every burst has every field, so the UI thread sees one shape */
 export interface Burst {
 	id: number;
-	kind: "pop" | "ring";
+	kind: "pop" | "total" | "ring";
 	/** Where it happened */
 	x: number;
 	y: number;
@@ -98,6 +101,11 @@ export function popBurst(id: number, x: number, y: number, text: string, color: 
 		centreY: height / 2 - POP_DROP,
 		start: NOT_STARTED,
 	};
+}
+
+/** A combo total's pop of `text`, from where the combo's last catch landed */
+export function totalBurst(id: number, x: number, y: number, text: string, color: number): Burst {
+	return { ...popBurst(id, x, y, text, color), kind: "total" };
 }
 
 /** A ring from (x, y), `size` across before it grows */
@@ -163,6 +171,12 @@ export function createBurstIds(): BurstIds {
 	};
 }
 
+/** How long `burst` lasts (ms) */
+function lifetime(burst: Burst): number {
+	"worklet";
+	return burst.kind === "total" ? TOTAL_LIFETIME_MS : BURST_LIFETIME_MS;
+}
+
 /**
  * Advance the list to frame time `now`: a burst not yet drawn starts now (stamped in place),
  * and one whose lifetime is up is dropped. Returns `list` itself unless one was dropped.
@@ -173,12 +187,12 @@ export function advanceBursts(list: Burst[], now: number): Burst[] {
 	for (let i = 0; i < list.length; i++) {
 		const burst = list[i];
 		if (burst.start === NOT_STARTED) burst.start = now;
-		else if (now - burst.start >= BURST_LIFETIME_MS) expired++;
+		else if (now - burst.start >= lifetime(burst)) expired++;
 	}
 	if (expired === 0) return list;
 	const next: Burst[] = [];
 	for (let i = 0; i < list.length; i++) {
-		if (now - list[i].start < BURST_LIFETIME_MS) next.push(list[i]);
+		if (now - list[i].start < lifetime(list[i])) next.push(list[i]);
 	}
 	return next;
 }
@@ -186,10 +200,10 @@ export function advanceBursts(list: Burst[], now: number): Burst[] {
 // The curves, by progress `t` (0..1, eased) through a burst. The easings are Reanimated's
 // Easing.out(cubic) and Easing.out(quad) over linear time, written out.
 
-/** A pop's progress `age` ms in: out-cubic */
-export function popProgress(age: number): number {
+/** A pop's progress `age` ms into its `duration`: out-cubic */
+export function popProgress(age: number, duration: number = BURST_LIFETIME_MS): number {
 	"worklet";
-	const left = 1 - Math.min(1, Math.max(0, age / BURST_LIFETIME_MS));
+	const left = 1 - Math.min(1, Math.max(0, age / duration));
 	return 1 - left * left * left;
 }
 
@@ -297,7 +311,7 @@ export function packBursts<P, R>(
 	for (let i = 0; i < list.length; i++) {
 		const burst = list[i];
 		const age = burst.start === NOT_STARTED ? 0 : now - burst.start;
-		if (burst.kind === "pop" && age < BURST_LIFETIME_MS) dotCount += burst.dots.length / 2;
+		if (burst.kind !== "ring" && age < lifetime(burst)) dotCount += burst.dots.length / 2;
 	}
 	const { glows, dots, tints, rings } = out;
 	fitBatch(glows, dotCount, out.glowCell, colors[0]);
@@ -314,7 +328,8 @@ export function packBursts<P, R>(
 	for (let i = 0; i < list.length; i++) {
 		const burst = list[i];
 		const age = burst.start === NOT_STARTED ? 0 : now - burst.start;
-		if (age >= BURST_LIFETIME_MS) continue;
+		const span = lifetime(burst);
+		if (age >= span) continue;
 		if (burst.kind === "ring") {
 			const t = ringProgress(age);
 			const scale = ringScale(t);
@@ -329,8 +344,8 @@ export function packBursts<P, R>(
 			ring.color = burst.color;
 			continue;
 		}
-		const t = popProgress(age);
-		const scale = popScale(t);
+		const t = popProgress(age, span);
+		const scale = burst.kind === "total" ? popScale(t) * TOTAL_SCALE : popScale(t);
 		const color = colors[burst.color];
 		const tint = tints[pops++];
 		tint[0] = color[0];

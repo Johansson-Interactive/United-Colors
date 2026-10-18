@@ -20,9 +20,10 @@ import {
 	createBurstIds,
 	popBurst,
 	ringBurst,
+	totalBurst,
 	withBurst,
 } from "../effects/burstFrames";
-import { catchPop } from "../effects/catchPop";
+import { catchPop, comboTotalPop } from "../effects/catchPop";
 import { INK_LIFT, WHITE } from "../theme/theme";
 import { createTimeoutGroup } from "./timeoutGroup";
 
@@ -111,7 +112,8 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 
 	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
 	// is at its live position: the frame was published by the very move that scored. A catch on
-	// the same tick as the one before pops a moment later, where that one did (see catchCue).
+	// the same tick as the one before pops a moment later, where that one did (see catchCue). A
+	// combo's total pops where its last catch landed; a new run never ends the old run's combo.
 	useEffect(() => {
 		const stagger = createCatchStagger(burstTimers.schedule);
 		let catchSpot = { x: 0, y: 0 };
@@ -131,6 +133,12 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 							addBurst((id) => ringBurst(id, at.x, at.y, burstColor(color), 80));
 						}
 					});
+					return;
+				}
+				case "comboEnd": {
+					const pop = comboTotalPop(event);
+					const { x: atX, y: atY } = catchSpot;
+					addBurst((id) => totalBurst(id, atX, atY, pop.text, burstColor(pop.color)));
 					return;
 				}
 				case "gameOver":

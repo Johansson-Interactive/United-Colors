@@ -1,4 +1,4 @@
-import { catchPop } from "../../presentation/effects/catchPop";
+import { catchPop, comboTotalPop } from "../../presentation/effects/catchPop";
 import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 describe("catchPop", () => {
@@ -15,5 +15,14 @@ describe("catchPop", () => {
 			color: COMBO_AMBER,
 		});
 		expect(COMBO_AMBER).toBe("#FFC107");
+	});
+});
+
+describe("comboTotalPop", () => {
+	it("shows what a whole combo paid as the bare total, in combo amber", () => {
+		expect(comboTotalPop({ type: "comboEnd", total: 16, catches: 4 })).toEqual({
+			text: "16",
+			color: "#FFC107",
+		});
 	});
 });
