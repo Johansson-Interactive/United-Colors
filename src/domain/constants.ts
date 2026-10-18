@@ -9,7 +9,7 @@ import type { GameSettings } from "./types";
 export const GAME_HERTZ = 30.0;
 
 /** Small dot rules */
-export const SMALL_DOT_SPEED_RATIO = 0.02;
+export const SMALL_DOT_SPEED_RATIO = 0.018;
 export const SMALL_DOT_SIZE_RATIO = 0.0625;
 /** Ticks between small dots at the start of a game (4 s: 15 a minute), and always in kiosk */
 export const SMALL_DOT_CREATE_INTERVAL = 120;

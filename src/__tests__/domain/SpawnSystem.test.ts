@@ -357,6 +357,13 @@ describe("SpawnSystem", () => {
 			}
 		});
 
+		it("moves 1.8 px a tick at a density of 100 once shot off", () => {
+			const dot = spawnFrom(0);
+			const before = { x: dot.x, y: dot.y };
+			dot.update(0);
+			expect(Math.hypot(dot.x - before.x, dot.y - before.y)).toBeCloseTo(1.8);
+		});
+
 		it("never sets a dot off straight across the screen or along its edge", () => {
 			let n = 0;
 			const system = new SpawnSystem(() => ((++n * 9301 + 49297) % 233280) / 233280);
