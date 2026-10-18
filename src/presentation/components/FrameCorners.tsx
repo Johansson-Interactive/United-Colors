@@ -17,14 +17,12 @@ const CORNERS = [
 function makeCap(screen: ScreenSize, extent: number, flipX: boolean, flipY: boolean) {
 	const x = (u: number) => (flipX ? extent - u : u);
 	const y = (v: number) => (flipY ? extent - v : v);
-	const path = Skia.Path.Make();
-	path.moveTo(x(0), y(0));
+	const builder = Skia.PathBuilder.Make().moveTo(x(0), y(0));
 	cornerCubics(screen).forEach(([u0, v0, u1, v1, u2, v2, u3, v3], i) => {
-		if (i === 0) path.lineTo(x(u0), y(v0));
-		path.cubicTo(x(u1), y(v1), x(u2), y(v2), x(u3), y(v3));
+		if (i === 0) builder.lineTo(x(u0), y(v0));
+		builder.cubicTo(x(u1), y(v1), x(u2), y(v2), x(u3), y(v3));
 	});
-	path.close();
-	return path;
+	return builder.close().detach();
 }
 
 /**
