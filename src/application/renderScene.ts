@@ -42,7 +42,7 @@ export const MERGE_MAX_DOTS = 8;
 /** The player may swell to at most this multiple of its radius while taking dots in */
 export const MERGE_SWELL_MAX = 1.3;
 /** A merging dot has shrunk to this fraction of its radius by the time it reaches the player */
-const MERGE_SHRINK = 0.55;
+export const MERGE_SHRINK = 0.55;
 /** A point dot's yolk radius relative to the dot's */
 export const YOLK_RADIUS = 0.5;
 /** The yolk is drawn this share of the way from the dot's centre to its rim, toward the player */

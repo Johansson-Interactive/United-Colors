@@ -21,5 +21,5 @@ export async function handleGameOver(
 
 	const best = Math.max(score, highScore);
 	store.getState().setHighScore(best);
-	return { best, newBest };
+	return { best, newBest, previous: highScore };
 }

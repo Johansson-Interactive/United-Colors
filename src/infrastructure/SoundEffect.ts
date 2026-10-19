@@ -3,14 +3,22 @@ import type { AudioPlayer } from "expo-audio";
 /** The slice of an expo-audio player a sound effect drives */
 export type Voice = Pick<
 	AudioPlayer,
-	"playing" | "play" | "pause" | "seekTo" | "remove" | "shouldCorrectPitch" | "setPlaybackRate"
+	| "playing"
+	| "play"
+	| "pause"
+	| "seekTo"
+	| "remove"
+	| "shouldCorrectPitch"
+	| "setPlaybackRate"
+	| "volume"
 >;
 
 /**
  * One sound effect backed by a small pool of players. Rapid repeats take a free voice and
  * overlap, rather than rewinding a single player that is still playing or still seeking.
  * A play can be pitched up by playing faster without pitch correction (varispeed), as far as
- * the octave a rate of 2 gives, the most expo-audio allows.
+ * the octave a rate of 2 gives, the most expo-audio allows. Each play sets its voice's volume,
+ * so a quiet play doesn't leave a pooled voice quiet for the next.
  */
 export class SoundEffect {
 	private cursor = 0;
@@ -18,15 +26,23 @@ export class SoundEffect {
 	private disposed = false;
 	private readonly rewinding = new Set<Voice>();
 
-	constructor(private readonly voices: readonly Voice[]) {
-		for (const voice of voices) voice.shouldCorrectPitch = false;
+	/** `level` is the effect's mix level (0..1): the volume of a full play */
+	constructor(
+		private readonly voices: readonly Voice[],
+		private readonly level = 1,
+	) {
+		for (const voice of voices) {
+			voice.shouldCorrectPitch = false;
+			voice.volume = level;
+		}
 	}
 
-	/** Play once, raised by `pitch` semitones (0..12) */
-	play(pitch = 0): void {
+	/** Play once, raised by `pitch` semitones (0..12), at `volume` (0..1) of the mix level */
+	play(pitch = 0, volume = 1): void {
 		if (this.muted || this.disposed) return;
 		const voice = this.takeVoice();
 		if (!voice) return;
+		voice.volume = this.level * volume;
 		voice.setPlaybackRate(2 ** (pitch / 12));
 		this.rewinding.add(voice);
 		voice

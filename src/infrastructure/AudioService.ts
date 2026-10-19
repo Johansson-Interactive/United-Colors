@@ -103,12 +103,12 @@ export class AudioService implements GameAudio {
 		return this.loading;
 	}
 
-	playCollect(pitch: number): void {
-		this.effects.collect?.play(pitch);
+	playCollect(pitch: number, volume = 1): void {
+		this.effects.collect?.play(pitch, volume);
 	}
 
-	playLargeCollect(pitch: number): void {
-		this.effects.collectLarge?.play(pitch);
+	playLargeCollect(pitch: number, volume = 1): void {
+		this.effects.collectLarge?.play(pitch, volume);
 	}
 
 	playPointSpawn(): void {
@@ -162,7 +162,7 @@ export class AudioService implements GameAudio {
 			if (generation !== this.generation) return;
 
 			names.forEach((name, i) => {
-				created[name] = new SoundEffect(createPlayers(uris[i], VOICES[name], VOLUME[name]));
+				created[name] = new SoundEffect(createPlayers(uris[i], VOICES[name]), VOLUME[name]);
 			});
 			const byTrack: Partial<Record<MusicTrack, Loop>> = {};
 			tracks.forEach((track, i) => {
@@ -236,7 +236,7 @@ async function resolveUri(source: number): Promise<string> {
 	return uri;
 }
 
-function createPlayers(uri: string | undefined, count: number, volume = 1): AudioPlayer[] {
+function createPlayers(uri: string | undefined, count: number): AudioPlayer[] {
 	if (!uri) throw new Error("Sound asset has no URI");
 	const voices: AudioPlayer[] = [];
 	try {
@@ -245,7 +245,6 @@ function createPlayers(uri: string | undefined, count: number, volume = 1): Audi
 			// which races the next play and costs a session round trip each time
 			const voice = createAudioPlayer(uri, { keepAudioSessionActive: true });
 			voices.push(voice);
-			voice.volume = volume;
 		}
 	} catch (error) {
 		for (const voice of voices) voice.remove();

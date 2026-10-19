@@ -337,6 +337,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 							<GameOverOverlay
 								store={store}
 								color={playerColor}
+								audio={audio}
 								onRetry={handleRetryPress}
 								onBack={handleLeavePress}
 							/>

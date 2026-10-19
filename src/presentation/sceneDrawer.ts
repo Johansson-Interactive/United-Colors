@@ -95,6 +95,26 @@ GLARE_PAINT.setShader(
 	),
 );
 
+/**
+ * The glare on a dot at (x, y) of `radius`, turned toward the light by the offsets glareOffset
+ * gives (`gx`, `gy`), as the scene draws it on every dot
+ */
+export function drawGlareAt(
+	canvas: SkCanvas,
+	x: number,
+	y: number,
+	radius: number,
+	gx: number,
+	gy: number,
+) {
+	"worklet";
+	canvas.save();
+	canvas.translate(x + gx * radius, y + gy * radius);
+	canvas.scale(radius, radius);
+	canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+	canvas.restore();
+}
+
 function compileEffect(name: string, sksl: string): SkRuntimeEffect {
 	const effect = Skia.RuntimeEffect.Make(sksl);
 	if (!effect) throw new Error(`${name} shader failed to compile`);
@@ -423,11 +443,7 @@ export function drawScene(
 	}
 	// The glare on a dot, from its place and size
 	function drawGlare(x: number, y: number, radius: number) {
-		canvas.save();
-		canvas.translate(x + gx * radius, y + gy * radius);
-		canvas.scale(radius, radius);
-		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-		canvas.restore();
+		drawGlareAt(canvas, x, y, radius, gx, gy);
 	}
 	// A small dot at a wall past the canvas's slots: its body by the wall shader, then its glare
 	function drawWallDrop(drop: SceneDot) {

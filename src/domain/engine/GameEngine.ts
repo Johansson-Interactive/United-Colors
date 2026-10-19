@@ -12,12 +12,14 @@ import {
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { SmallDot } from "../entities/SmallDot";
+import { comboPay } from "../run";
 import type {
 	Catch,
 	Circle,
 	DotView,
 	GameEvent,
 	RenderFrame,
+	RunCatch,
 	ScreenSize,
 	TiltZero,
 } from "../types";
@@ -56,6 +58,8 @@ export class GameEngine {
 	/** Combo step of the last catch (0 when no combo is going), and the tick it landed on */
 	private comboStep = 0;
 	private lastCatchTick = 0;
+	/** The current run's catches in order, for its run record; its run time is `timeStep` */
+	private runCatches: RunCatch[] = [];
 	private density: number;
 	private screen: ScreenSize;
 	private random: () => number;
@@ -98,6 +102,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.resetCombo();
+		this.runCatches = [];
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -112,6 +117,7 @@ export class GameEngine {
 		this.score = 0;
 		this.timeStep = 0;
 		this.resetCombo();
+		this.runCatches = [];
 		this.rejected = null;
 		this.events = [];
 		this.spawner.reset();
@@ -292,11 +298,13 @@ export class GameEngine {
 
 		const events = this.events;
 		this.events = [];
+		const phase = this.stateMachine.phase;
 		return {
-			phase: this.stateMachine.phase,
+			phase,
 			score: this.score,
 			dots,
 			events,
+			...(phase === "GAME_OVER" ? { run: { catches: this.runCatches, ticks: this.timeStep } } : {}),
 		};
 	}
 
@@ -380,11 +388,11 @@ export class GameEngine {
 			if (dot.kind === "point") {
 				this.player.color = dot.color;
 				dot.startAbsorb();
-				this.events.push({ type: "collectPoint", ...this.scoreCatch(POINT_DOT_VALUE) });
+				this.events.push({ type: "collectPoint", ...this.scoreCatch(POINT_DOT_VALUE, dot) });
 			} else if (dot.color === this.player.color) {
 				// A drip of the player's colour can be plucked off its wall like any other dot
 				dot.startAbsorb();
-				this.events.push({ type: "collect", ...this.scoreCatch(1) });
+				this.events.push({ type: "collect", ...this.scoreCatch(1, dot) });
 			} else if (dot.isForming || !this.refusals) {
 				// A drip of another colour is part of the wall until it leaves: harmless
 			} else {
@@ -397,13 +405,26 @@ export class GameEngine {
 		}
 	}
 
-	/** Score a catch worth `base` on its own, carrying the combo on if it is still going */
-	private scoreCatch(base: number): Catch {
+	/**
+	 * Score catching `dot`, worth `base` on its own, carrying the combo on if it is still going,
+	 * and keep it in the run record of a run that can end
+	 */
+	private scoreCatch(base: number, dot: Dot): Catch {
 		const sameTick = this.comboStep > 0 && this.lastCatchTick === this.timeStep;
 		this.comboStep++;
 		this.lastCatchTick = this.timeStep;
-		const value = base + 2 * (this.comboStep - 1);
+		const value = base + comboPay(this.comboStep);
 		this.score += value;
+		// Without refusals no game over comes to carry the run record, so keep none
+		if (this.refusals) {
+			this.runCatches.push({
+				tick: this.timeStep,
+				value,
+				step: this.comboStep,
+				color: dot.color,
+				point: dot.kind === "point",
+			});
+		}
 		return { value, step: this.comboStep, sameTick };
 	}
 
