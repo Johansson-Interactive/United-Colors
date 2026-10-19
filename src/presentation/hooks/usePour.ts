@@ -6,17 +6,21 @@ import {
 	useSharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import type { GameAudio } from "../../application/ports";
+import type { CatchSoundOptions, GameAudio } from "../../application/ports";
 import type { PourPlan, PourView } from "../effects/pourRun";
 import { type PourFrame, type PourStatus, startPour, stepPour } from "../effects/pourScene";
 
-/** How loud a catch sounds in the pour, against in play */
-const POUR_VOLUME = 0.4;
+/**
+ * How a catch sounds in the pour: quieter than in play, and dropped rather than taking over a
+ * busy player, as a flurry of take-overs stalls frames
+ */
+const POUR_SOUND: CatchSoundOptions = { volume: 0.4, skipWhenBusy: true };
 
 /**
  * Plays a planned pour from the game over's mount, stepping it on the UI thread every frame
  * (see stepPour) against the best to beat `best` (see bestToBeat), and sounding each heard
  * landing quietly at its catch's pitch. The canvas draws `frame`; the interface reads `status`.
+ * A frame's sounds and status change go to the JavaScript side together, at most once a frame.
  * The drop never finishes; it keeps rippling. Leaving the game over unmounts it, and the pour
  * stops with it. Never buzzes: a pour is a replay, not play.
  */
@@ -36,12 +40,13 @@ export function usePour(
 	const bestToBeat = useSharedValue(best);
 	useEffect(() => bestToBeat.set(best), [bestToBeat, best]);
 
-	const sound = useCallback(
-		(sounds: PourView["sounds"]) => {
+	const report = useCallback(
+		(sounds: PourView["sounds"], changed: PourStatus | null) => {
 			for (const { point, pitch } of sounds) {
-				if (point) audio.playLargeCollect(pitch, { volume: POUR_VOLUME });
-				else audio.playCollect(pitch, { volume: POUR_VOLUME });
+				if (point) audio.playLargeCollect(pitch, POUR_SOUND);
+				else audio.playCollect(pitch, POUR_SOUND);
 			}
+			if (changed !== null) setStatus(changed);
 		},
 		[audio],
 	);
@@ -58,10 +63,11 @@ export function usePour(
 			);
 			playback.set(step.playback);
 			frame.set(step.playback.frame);
-			if (step.sounds.length > 0) scheduleOnRN(sound, step.sounds);
-			if (step.status !== null) scheduleOnRN(setStatus, step.status);
+			if (step.sounds.length > 0 || step.status !== null) {
+				scheduleOnRN(report, step.sounds, step.status);
+			}
 		},
-		[plan, playback, frame, bestToBeat, sound],
+		[plan, playback, frame, bestToBeat, report],
 	);
 	useFrameCallback(onFrame);
 
