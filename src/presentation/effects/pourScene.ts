@@ -16,7 +16,7 @@ import {
 import { MERGE_SHRINK } from "../../application/renderScene";
 import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunRecord } from "../../domain/types";
-import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
+import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS, NO_AMBER } from "../mergeShader";
 import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
 	amberLevel,
@@ -276,8 +276,8 @@ interface PourBead {
 
 /**
  * The drop and the catches merging into it as one liquid body under the merge shader (see
- * mergeShader.ts), in coordinates from the drop's centre: the shader's values (its colour
- * aside), the rect to fill, and where its amber layer starts, down to the rect's bottom
+ * mergeShader.ts), in coordinates from the drop's centre: the shader's values (its colours
+ * aside), the rect to fill, and its amber layer's level
  */
 export interface PourBody {
 	values: number[];
@@ -285,7 +285,8 @@ export interface PourBody {
 	y: number;
 	width: number;
 	height: number;
-	amberY: number;
+	/** The amber layer's level below the drop's centre (px); NO_AMBER without one */
+	amber: number;
 	/** Catches of another colour than the drop, which fall on their own until they land */
 	beads: PourBead[];
 }
@@ -342,17 +343,17 @@ export function pourBody({
 	blobs.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
 	const pad = blend / 4 + 1;
-	const bottom = reach + pad;
+	const level = amber > 0 ? radius * amberLevel(amber) : NO_AMBER;
 	if (count === 0) {
-		return { values: blobs, x: 0, y: 0, width: 0, height: 0, amberY: 0, beads };
+		return { values: blobs, x: 0, y: 0, width: 0, height: 0, amber: level, beads };
 	}
 	return {
 		values: blobs,
 		x: -side - pad,
 		y: highest - pad,
 		width: 2 * (side + pad),
-		height: bottom - highest + pad,
-		amberY: amber > 0 ? radius * amberLevel(amber) : bottom,
+		height: reach + pad - highest + pad,
+		amber: level,
 		beads,
 	};
 }

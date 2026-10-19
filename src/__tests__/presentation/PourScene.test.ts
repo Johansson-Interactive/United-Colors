@@ -21,7 +21,7 @@ import {
 	startPour,
 	stepPour,
 } from "../../presentation/effects/pourScene";
-import { mergeUniformsByName } from "../../presentation/mergeShader";
+import { mergeUniformsByName, NO_AMBER } from "../../presentation/mergeShader";
 
 describe("pourFit", () => {
 	const PITCH = 14;
@@ -326,10 +326,10 @@ describe("pourBody", () => {
 		}
 	});
 
-	it("fills amber from the level of the bonus's share to the bottom", () => {
-		const none = draw([], 40, 0).body;
-		expect(none.amberY).toBeGreaterThanOrEqual(none.y + none.height);
-		expect(draw([], 40, 0.5).body.amberY).toBeCloseTo(0);
+	it("gives the shader the amber's level for the bonus's share, and none without one", () => {
+		expect(draw([], 40, 0).body.amber).toBe(NO_AMBER);
+		expect(draw([], 40, 0.5).body.amber).toBeCloseTo(0);
+		expect(draw([], 40, 0.2).body.amber).toBeCloseTo(40 * amberLevel(0.2));
 	});
 });
 

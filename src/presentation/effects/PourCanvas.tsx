@@ -54,8 +54,8 @@ COLOR_PAINT.setAntiAlias(true);
 
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
- * the drop and the catches merging into it as one body under the merge shader, again in amber
- * below the combo bonus's level, so the layer slops with the liquid; then its glare, turned
+ * the drop and the catches merging into it as one body under the merge shader, amber below the
+ * combo bonus's wavy surface, so the layer sloshes with the liquid; then its glare, turned
  * toward the tilt as AGAIN's is, the tally over it, ink inside the drop and in the drop's
  * colour outside, and the `+N` in ink in the amber, and the landings' bursts over all, as in
  * play. Catches of another colour are drawn under it. Every frame, on the UI thread, from
@@ -78,17 +78,14 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 		return pourBody({ flights, color: drop.color, radius, jelly, top, amber, scale });
 	});
 	const color = useDerivedValue(() => RGBA[frame.get().view.drop.color]);
-	const uniforms = useDerivedValue(() => mergeUniformsByName(body.get().values, color.get()));
-	const amberUniforms = useDerivedValue(() => mergeUniformsByName(body.get().values, AMBER));
+	const uniforms = useDerivedValue(() => {
+		const { values, amber } = body.get();
+		return mergeUniformsByName(values, color.get(), amber, AMBER);
+	});
 	const bodyX = useDerivedValue(() => body.get().x);
 	const bodyY = useDerivedValue(() => body.get().y);
 	const bodyWidth = useDerivedValue(() => body.get().width);
 	const bodyHeight = useDerivedValue(() => body.get().height);
-	const amberY = useDerivedValue(() => body.get().amberY);
-	const amberHeight = useDerivedValue(() => {
-		const b = body.get();
-		return Math.max(0, b.y + b.height - b.amberY);
-	});
 
 	// Recorded every frame, so each into a recorder kept for the canvas's life (see recordPicture.ts)
 	const [underRecorder] = useState(() => Skia.PictureRecorder());
@@ -129,9 +126,6 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 				<Picture picture={under} />
 				<Rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight}>
 					<Shader source={MERGE_EFFECT} uniforms={uniforms} />
-				</Rect>
-				<Rect x={bodyX} y={amberY} width={bodyWidth} height={amberHeight}>
-					<Shader source={MERGE_EFFECT} uniforms={amberUniforms} />
 				</Rect>
 				<Picture picture={over} />
 			</Group>
