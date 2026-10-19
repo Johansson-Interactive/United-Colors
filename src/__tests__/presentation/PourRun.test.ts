@@ -4,7 +4,6 @@ import { GLYPH_ROWS } from "../../presentation/dotmatrix/glyphs";
 import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
 import { burstColor, layOutBurst, type NewBurst } from "../../presentation/effects/burstFrames";
 import {
-	amberLevel,
 	POUR_BONUS_MIN_PITCH,
 	POUR_FADE_MS,
 	POUR_FALL_MS,
@@ -466,7 +465,7 @@ describe("pourAt", () => {
 	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
 			const p = plan({ catches, ticks: 120 });
-			expect(pourAt(p, 10_000)).toMatchObject({ amber: 0, bonus: null, settled: true });
+			expect(pourAt(p, 10_000)).toMatchObject({ amberLevel: null, bonus: null, settled: true });
 		}
 	});
 
@@ -508,7 +507,16 @@ describe("the amber layer", () => {
 	}
 
 	/** The amber surface's height from the drop's centre (px, down) */
-	const surfaceOf = (view: PourView) => amberLevel(view.amber) * view.drop.radius;
+	const surfaceOf = (view: PourView) => (view.amberLevel ?? 1) * view.drop.radius;
+
+	/**
+	 * The share of the drop's area drawn amber: the circle's segment below the surface, `d` radii
+	 * under its centre, is acos(d) - d √(1 - d²) of its π
+	 */
+	function amberShareOf({ amberLevel: d }: PourView): number {
+		if (d === null) return 0;
+		return (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI;
+	}
 
 	/** The `+N` of a view, which must have one */
 	function bonusOf(view: PourView) {
@@ -540,7 +548,7 @@ describe("the amber layer", () => {
 		// A +2 combo bonus in a score of 102: under 2% of the drop
 		const view = pourAt(plan(comboRun(2, 98)), RESTED);
 		expect(view.drop.tally).toBe(102);
-		expect(view.amber).toBeGreaterThan(5 * (2 / 102));
+		expect(amberShareOf(view)).toBeGreaterThan(5 * (2 / 102));
 		const bonus = bonusOf(view);
 		expect(bonus.dots).toHaveLength(layoutDotMatrix("+2").dots.length);
 		expect(bonus.pitch).toBeCloseTo(POUR_BONUS_MIN_PITCH, 2);
@@ -551,7 +559,7 @@ describe("the amber layer", () => {
 		// A combo of five pays 25, 20 of it bonus, in a score of 75
 		const view = pourAt(plan(comboRun(5, 50)), RESTED);
 		expect(view.drop.tally).toBe(75);
-		expect(view.amber).toBeCloseTo(20 / 75);
+		expect(amberShareOf(view)).toBeCloseTo(20 / 75);
 		const { pitch, dots } = bonusOf(view);
 		expect(dots).toHaveLength(layoutDotMatrix("+20").dots.length);
 		expect(pitch).toBeGreaterThan(POUR_BONUS_MIN_PITCH);
@@ -562,7 +570,7 @@ describe("the amber layer", () => {
 	it("never draws +N larger than the tally's dots", () => {
 		// A combo of ten pays 100, 90 of it bonus, its tally set close
 		const view = pourAt(planPour({ record: comboRun(10, 0), color: RED, pitch: 6 }), RESTED);
-		expect(view.amber).toBeCloseTo(0.9);
+		expect(amberShareOf(view)).toBeCloseTo(0.9);
 		expect(bonusOf(view).pitch).toBe(6);
 		expectInAmber(view);
 	});
@@ -571,19 +579,19 @@ describe("the amber layer", () => {
 		const p = plan(comboRun(10, 0));
 		expect(POUR_RISE_MS).toBeGreaterThanOrEqual(400);
 		expect(POUR_RISE_MS).toBeLessThanOrEqual(600);
-		expect(pourAt(p, SETTLE_AT - 1).amber).toBe(0);
-		expect(pourAt(p, SETTLE_AT).amber).toBe(0);
+		expect(pourAt(p, SETTLE_AT - 1).amberLevel).toBeNull();
+		expect(pourAt(p, SETTLE_AT).amberLevel).toBeNull();
 		let last = 0;
 		for (let ms = SETTLE_AT; ms <= SETTLE_AT + POUR_RISE_MS; ms += 10) {
 			const view = pourAt(p, ms);
-			expect(view.amber).toBeGreaterThanOrEqual(last);
-			last = view.amber;
+			expect(amberShareOf(view)).toBeGreaterThanOrEqual(last);
+			last = amberShareOf(view);
 			expect(bonusOf(view).opacity).toBe(0);
 		}
-		const halfway = pourAt(p, SETTLE_AT + POUR_RISE_MS / 2).amber;
+		const halfway = amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS / 2));
 		expect(halfway).toBeGreaterThan(0.1);
 		expect(halfway).toBeLessThan(0.8);
-		expect(pourAt(p, SETTLE_AT + POUR_RISE_MS).amber).toBeCloseTo(0.9);
+		expect(amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS))).toBeCloseTo(0.9);
 		const fading = bonusOf(pourAt(p, SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
 		expect(fading).toBeGreaterThan(0);
 		expect(fading).toBeLessThan(1);

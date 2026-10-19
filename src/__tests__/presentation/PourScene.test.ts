@@ -2,7 +2,6 @@ import type { BestVerdict } from "../../application/GameStore";
 import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunCatch } from "../../domain/types";
 import {
-	amberLevel,
 	POUR_MAX_RADIUS,
 	POUR_START_MS,
 	type PourFlight,
@@ -202,21 +201,6 @@ describe("bestToBeat", () => {
 	});
 });
 
-describe("amberLevel", () => {
-	it("is the bottom of the drop with no combo bonus and its top with only bonus", () => {
-		expect(amberLevel(0)).toBeCloseTo(1);
-		expect(amberLevel(1)).toBeCloseTo(-1);
-	});
-
-	it("cuts the drop's area at the bonus's share", () => {
-		expect(amberLevel(0.5)).toBeCloseTo(0);
-		// The segment below a line half a radius under the centre: acos(0.5) - 0.5 sin(acos(0.5))
-		const segment = (Math.acos(0.5) - 0.5 * Math.sqrt(0.75)) / Math.PI;
-		expect(amberLevel(segment)).toBeCloseTo(0.5, 4);
-		expect(amberLevel(1 - segment)).toBeCloseTo(-0.5, 4);
-	});
-});
-
 describe("pourBody", () => {
 	const RED = "#E53935";
 	const BLUE = "#1E88E5";
@@ -234,8 +218,14 @@ describe("pourBody", () => {
 		...more,
 	});
 	/** The body's circles, the drop's first, and its bead catches, drawn at `scale` */
-	function draw(flights: PourFlight[], radius = 40, amber = 0, scale = 1) {
-		const body = pourBody({ flights, color: RED, radius, jelly: STILL, top: TOP, amber, scale });
+	function draw(
+		flights: PourFlight[],
+		radius = 40,
+		amberLevel: number | null = null,
+		scale = 1,
+	) {
+		const input = { flights, color: RED, radius, jelly: STILL, top: TOP, amberLevel, scale };
+		const body = pourBody(input);
 		const { blobs, count, blend, jelly } = mergeUniformsByName(body.values, [0, 0, 0, 1]);
 		const circles: { x: number; y: number; radius: number }[] = [];
 		for (let i = 0; i < count; i++) {
@@ -246,7 +236,7 @@ describe("pourBody", () => {
 
 	it("is the drop at the centre with its jelly, and nothing else between catches", () => {
 		const jelly = { stretchX: 0.1, stretchY: 0, wobble: 3 };
-		const input = { flights: [], color: RED, radius: 40, jelly, top: TOP, amber: 0, scale: 1 };
+		const input = { flights: [], color: RED, radius: 40, jelly, top: TOP, amberLevel: null, scale: 1 };
 		const body = pourBody(input);
 		const named = mergeUniformsByName(body.values, [0, 0, 0, 1]);
 		expect(named.count).toBe(1);
@@ -327,10 +317,11 @@ describe("pourBody", () => {
 		}
 	});
 
-	it("gives the shader the amber's level for the bonus's share, and none without one", () => {
-		expect(draw([], 40, 0).body.amber).toBe(NO_AMBER);
-		expect(draw([], 40, 0.5).body.amber).toBeCloseTo(0);
-		expect(draw([], 40, 0.2).body.amber).toBeCloseTo(40 * amberLevel(0.2));
+	it("gives the shader the amber's level in px below the drop's centre, and none without one", () => {
+		expect(draw([], 40, null).body.amber).toBe(NO_AMBER);
+		expect(draw([], 40, 0).body.amber).toBe(0);
+		expect(draw([], 40, 0.5).body.amber).toBe(20);
+		expect(draw([], 40, -0.25).body.amber).toBe(-10);
 	});
 });
 
@@ -437,11 +428,6 @@ describe("stepPour", () => {
 		expect(passed(5)).toBe(-1);
 	});
 
-	it("draws the amber as it rises, not after it", () => {
-		const { steps } = play(20_000);
-		for (const { playback } of steps) expect(playback.frame.amber).toBe(playback.frame.view.amber);
-	});
-
 	it("keeps the tally above the amber's wavy surface and +N below it, however it waves", () => {
 		/** A combo of `length`, then `alone` catches on their own, ending in a combo bonus */
 		const comboPour = (length: number, alone: number) =>
@@ -472,11 +458,12 @@ describe("stepPour", () => {
 		// that in the largest drop, where the surface waves furthest
 		for (const plan of [comboPour(10, 0), comboPour(2, 98), comboPour(2, 250)]) {
 			const { steps } = play(20_000, NO_BEST, plan);
-			const amber = steps.filter(({ playback }) => playback.frame.amber > 0);
-			expect(amber.length).toBeGreaterThan(0);
-			for (const { playback } of amber) {
-				const { view, radius, jelly, amber: share } = playback.frame;
-				const surface = radius * amberLevel(share);
+			let amber = 0;
+			for (const { playback } of steps) {
+				const { view, radius, jelly } = playback.frame;
+				if (view.amberLevel === null) continue;
+				amber++;
+				const surface = radius * view.amberLevel;
 				const reach = amberWaveReach(jelly, radius);
 				for (const d of view.digits) {
 					expect(d.y + 14 * POUR_DIGIT_SCALE).toBeLessThanOrEqual(surface - reach);
@@ -487,6 +474,7 @@ describe("stepPour", () => {
 					expect(d.y - bonus.pitch * POUR_DIGIT_SCALE).toBeGreaterThanOrEqual(surface + reach);
 				}
 			}
+			expect(amber).toBeGreaterThan(0);
 		}
 	});
 

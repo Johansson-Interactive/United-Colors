@@ -18,7 +18,6 @@ import type { RunRecord } from "../../domain/types";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS, NO_AMBER } from "../mergeShader";
 import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
-	amberLevel,
 	POUR_DOT_RADIUS,
 	type PourFlight,
 	type PourInput,
@@ -138,8 +137,6 @@ export interface PourFrame {
 	view: PourView;
 	/** The drop's radius, eased after the stepper's */
 	radius: number;
-	/** The amber share, as the stepper's: it rises smoothly on its own */
-	amber: number;
 	jelly: JellyState;
 	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
 	bursts: Burst[];
@@ -195,7 +192,7 @@ export function startPour(plan: PourPlan): PourPlayback {
 		start: null,
 		sampled: -POUR_DELAY_MS,
 		body: JELLY_AT_REST,
-		frame: { view, radius: 0, amber: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
+		frame: { view, radius: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
 		status: statusOf(view, Number.POSITIVE_INFINITY),
 	};
 }
@@ -230,7 +227,6 @@ export function stepPour(
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
 	bursts = advanceBursts(bursts, now);
 	const radius = easeToward(before.radius, view.drop.radius, dt);
-	const { amber } = view;
 	const status = statusOf(view, best);
 	const changed = !sameStatus(status, playback.status);
 	return {
@@ -238,7 +234,7 @@ export function stepPour(
 			start,
 			sampled: ms,
 			body,
-			frame: { view, radius, amber, jelly: jellyShape(body, view.drop.radius), bursts, now },
+			frame: { view, radius, jelly: jellyShape(body, view.drop.radius), bursts, now },
 			status: changed ? status : playback.status,
 		},
 		sounds: view.sounds,
@@ -256,8 +252,8 @@ export interface PourBodyInput {
 	jelly: JellyState;
 	/** Where the canvas's top edge is, from the drop's centre (px, so negative) */
 	top: number;
-	/** The combo bonus's share of the drop, as drawn */
-	amber: number;
+	/** The amber layer's surface in radii below the drop's centre (see PourView); null for none */
+	amberLevel: number | null;
 	/** The scale the pour is drawn at, so its catches fall at their size in play on screen */
 	scale: number;
 }
@@ -303,7 +299,7 @@ export function pourBody({
 	radius,
 	jelly,
 	top,
-	amber,
+	amberLevel,
 	scale,
 }: PourBodyInput): PourBody {
 	"worklet";
@@ -342,7 +338,7 @@ export function pourBody({
 	blobs.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	// The smooth-min can bulge the surface out by up to blend / 4 beyond either circle
 	const pad = blend / 4 + 1;
-	const level = amber > 0 ? radius * amberLevel(amber) : NO_AMBER;
+	const level = amberLevel === null ? NO_AMBER : radius * amberLevel;
 	if (count === 0) {
 		return { values: blobs, x: 0, y: 0, width: 0, height: 0, amber: level, beads };
 	}

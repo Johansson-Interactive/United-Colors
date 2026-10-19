@@ -165,7 +165,7 @@ export interface PourPlan {
 	seconds: number;
 	settleMs: number;
 	/**
-	 * The settled amber layer's level, in radii below the drop's centre (see amberLevel): the
+	 * The settled amber layer's level, in radii below the drop's centre: where it cuts off the
 	 * combo bonus's share of the drop, raised to hold `+N`; 1, the drop's bottom, without one
 	 */
 	level: number;
@@ -188,8 +188,11 @@ export interface PourView {
 	digits: readonly PourDigitDot[];
 	/** The clock: run time so far as `M:SS`, rounded down */
 	clock: string;
-	/** The share of the drop's area drawn amber at its bottom; 0 until settled, then rising */
-	amber: number;
+	/**
+	 * The amber layer's surface, in radii below the drop's centre: once settled, it rises from
+	 * the drop's bottom (1) to the plan's level; null before then, and without a combo bonus
+	 */
+	amberLevel: number | null;
 	/** `+N` inside the amber layer; null without a combo bonus */
 	bonus: PourBonus | null;
 	/** The drop is at rest: `NEW BEST!` and confetti may follow */
@@ -325,7 +328,6 @@ function landingBursts(c: RunCatch, spot: PourSpot, firstId: number): Burst[] {
  * from -1 to 1
  */
 function shareBelow(d: number): number {
-	"worklet";
 	return (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI;
 }
 
@@ -333,8 +335,7 @@ function shareBelow(d: number): number {
  * Where the amber layer's level sits, in radii below the drop's centre (1 is its bottom, -1 its
  * top), so that the part of the drop below it is `share` of the drop's area
  */
-export function amberLevel(share: number): number {
-	"worklet";
+function levelForShare(share: number): number {
 	let lo = -1;
 	let hi = 1;
 	for (let i = 0; i < 40; i++) {
@@ -370,7 +371,7 @@ function amberOf(bonus: number, score: number, radius: number, pitch: number) {
 	const least = roomUnder(radius, -radius, cols, rows, POUR_BONUS_MIN_PITCH);
 	// The surface can be no lower than this for the box to fit beneath it
 	const lowest = least.spare >= 0 ? least.top + least.spare - AMBER_CLEAR : -radius;
-	const level = Math.max(-1, Math.min(amberLevel(bonus / score), lowest / radius));
+	const level = Math.max(-1, Math.min(levelForShare(bonus / score), lowest / radius));
 	const surface = level * radius;
 	let bonusPitch = pitch;
 	if (roomUnder(radius, surface, cols, rows, pitch).spare < 0) {
@@ -476,6 +477,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	// The amber's surface and the tally above it rise together, easing in and out
 	const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
 	const risen = t * t * (3 - 2 * t);
+	const amberLevel = 1 + (plan.level - 1) * risen;
 	const lift = plan.lift * risen;
 	let digits = plan.digits[landed];
 	if (lift !== 0) {
@@ -493,7 +495,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		drop,
 		digits,
 		clock: formatClock(plan.seconds * clamp01((ms - POUR_START_MS) / POUR_SPAN_MS)),
-		amber: shareBelow(1 + (plan.level - 1) * risen),
+		amberLevel: amberLevel < 1 ? amberLevel : null,
 		bonus: bonus && {
 			dots: bonus.dots,
 			pitch: bonus.pitch,
