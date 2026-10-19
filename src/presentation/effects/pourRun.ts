@@ -47,8 +47,6 @@ export const POUR_MAX_RADIUS = 130;
 
 export interface PourInput {
 	record: RunRecord;
-	/** The personal best before this run */
-	best: number;
 	/** The player's final colour */
 	color: string;
 	/** Centre-to-centre spacing of the tally's dots (px) */
@@ -122,7 +120,6 @@ export interface PourPlan {
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
 	settleMs: number;
-	best: number;
 	/** The combo bonus's share of the score, and its label; 0 and null without one */
 	amber: number;
 	bonusLabel: string | null;
@@ -143,8 +140,6 @@ export interface PourView {
 	amber: number;
 	/** `+N` beside the amber layer; null until settled and without a combo bonus */
 	bonusLabel: string | null;
-	/** The `best N` caption: out once the tally has passed the old best */
-	bestShown: boolean;
 	/** The drop is at rest: `NEW BEST!` and confetti may follow */
 	settled: boolean;
 }
@@ -216,7 +211,7 @@ function landingBursts(c: RunCatch, radius: number, firstId: number): Burst[] {
 }
 
 /** Work out a run's pour */
-export function planPour({ record, best, color, pitch }: PourInput): PourPlan {
+export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
 	const times = landTimes(catches.map((c) => c.tick));
 	const drops = dropsOf(record, color);
@@ -234,7 +229,6 @@ export function planPour({ record, best, color, pitch }: PourInput): PourPlan {
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
 		seconds: runSeconds(record.ticks),
 		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,
-		best,
 		amber: bonus > 0 ? bonus / score : 0,
 		bonusLabel: bonus > 0 ? `+${bonus}` : null,
 	};
@@ -285,8 +279,6 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		clock: formatClock(plan.seconds * clamp01((ms - POUR_START_MS) / POUR_SPAN_MS)),
 		amber: settled ? plan.amber : 0,
 		bonusLabel: settled ? plan.bonusLabel : null,
-		// The tally only grows, so once past the best it stays past it
-		bestShown: drop.tally <= plan.best,
 		settled,
 	};
 }

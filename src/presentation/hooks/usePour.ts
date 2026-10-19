@@ -40,13 +40,14 @@ export interface PourFrame {
 /** What the game over's interface shows of the pour; it changes only now and then */
 export interface PourStatus {
 	clock: string;
-	bestShown: boolean;
+	/** What the catches landed so far paid */
+	tally: number;
 	settled: boolean;
 }
 
 function statusOf(view: PourView): PourStatus {
 	"worklet";
-	return { clock: view.clock, bestShown: view.bestShown, settled: view.settled };
+	return { clock: view.clock, tally: view.drop.tally, settled: view.settled };
 }
 
 /**
@@ -117,7 +118,7 @@ export function usePour(
 			const was = shown.get();
 			if (
 				view.clock !== was.clock ||
-				view.bestShown !== was.bestShown ||
+				view.drop.tally !== was.tally ||
 				view.settled !== was.settled
 			) {
 				const next = statusOf(view);

@@ -14,7 +14,6 @@ import {
 	type PourFlight,
 	type PourInput,
 	type PourPlan,
-	type PourView,
 } from "./pourRun";
 
 /** What the row under the drop shows: nothing, the `best N` caption, or NEW BEST! */
@@ -23,16 +22,21 @@ export type BestRow = { kind: "none" } | { kind: "best"; best: number } | { kind
 /**
  * The best row at a moment of the pour, once the run is judged. A run that beat the best shows
  * the best it had to beat until the tally passes it, then nothing until the drop settles into
- * NEW BEST! (and the confetti); any other run keeps the caption throughout, as it ends.
+ * NEW BEST! (and the confetti); any other run keeps the caption throughout, as it ends. The
+ * best to beat is the verdict's, the one the run was judged against, as the store's best is
+ * already the run's own by the time the verdict lands.
  */
 export function bestRow(
-	view: Pick<PourView, "bestShown" | "settled">,
+	pour: { tally: number; settled: boolean },
 	verdict: BestVerdict | null,
 ): BestRow {
 	if (verdict === null) return { kind: "none" };
 	if (!verdict.newBest) return { kind: "best", best: verdict.best };
-	if (view.settled) return { kind: "newBest" };
-	return view.bestShown ? { kind: "best", best: verdict.previous } : { kind: "none" };
+	if (pour.settled) return { kind: "newBest" };
+	// The tally only grows, so once past the best it stays past it
+	return pour.tally <= verdict.previous
+		? { kind: "best", best: verdict.previous }
+		: { kind: "none" };
 }
 
 /**
@@ -59,18 +63,11 @@ const NO_RUN: RunRecord = { catches: [], ticks: 0 };
 
 /**
  * The pour of the game over showing now, from the store as it stands when the game over
- * appears: the frame's run, the best it was judged against (the store's best until the
- * verdict lands, which only replaces it as it does), and the tally's pitch, closer from four
- * digits on
+ * appears: the frame's run, and the tally's pitch, closer from four digits on
  */
-export function pourInput(
-	state: Pick<GameStoreState, "frame" | "verdict" | "highScore">,
-	color: string,
-): PourInput {
-	const { frame, verdict, highScore } = state;
+export function pourInput({ frame }: Pick<GameStoreState, "frame">, color: string): PourInput {
 	return {
 		record: frame.run ?? NO_RUN,
-		best: verdict?.previous ?? highScore,
 		color,
 		pitch: String(frame.score).length > 3 ? 11 : 14,
 	};

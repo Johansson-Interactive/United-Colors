@@ -24,7 +24,6 @@ describe("pourFit", () => {
 				),
 				ticks: 300,
 			},
-			best: 0,
 			color: "#E53935",
 			pitch: PITCH,
 		});
@@ -61,24 +60,18 @@ describe("pourInput", () => {
 		run,
 	});
 
-	it("pours the frame's run, against the best the verdict judged it on", () => {
-		const verdict = { best: 30, newBest: true, previous: 12 };
-		const input = pourInput({ frame: frame(30), verdict, highScore: 30 }, RED);
-		expect(input).toEqual({ record: run, best: 12, color: RED, pitch: 14 });
-	});
-
-	it("takes the store's best before the verdict lands, which it has not yet replaced", () => {
-		expect(pourInput({ frame: frame(30), verdict: null, highScore: 12 }, RED).best).toBe(12);
+	it("pours the frame's run in the player's colour", () => {
+		expect(pourInput({ frame: frame(30) }, RED)).toEqual({ record: run, color: RED, pitch: 14 });
 	});
 
 	it("sets a score of four digits or more closer, as the game over always has", () => {
-		expect(pourInput({ frame: frame(999), verdict: null, highScore: 0 }, RED).pitch).toBe(14);
-		expect(pourInput({ frame: frame(1000), verdict: null, highScore: 0 }, RED).pitch).toBe(11);
+		expect(pourInput({ frame: frame(999) }, RED).pitch).toBe(14);
+		expect(pourInput({ frame: frame(1000) }, RED).pitch).toBe(11);
 	});
 
 	it("pours an empty run when the frame carries none", () => {
 		const bare = { phase: "GAME_OVER" as const, score: 0, dots: [], events: [] };
-		const input = pourInput({ frame: bare, verdict: null, highScore: 0 }, RED);
+		const input = pourInput({ frame: bare }, RED);
 		expect(input.record).toEqual({ catches: [], ticks: 0 });
 	});
 });
@@ -112,34 +105,38 @@ describe("landingKick", () => {
 	});
 });
 
-const pouring = { bestShown: true, settled: false };
-const passed = { bestShown: false, settled: false };
-const settled = { bestShown: false, settled: true };
+/** The pour at a moment, as the best row reads it */
+const at = (tally: number, settled = false) => ({ tally, settled });
 
 describe("bestRow", () => {
 	const newBest: BestVerdict = { best: 40, newBest: true, previous: 25 };
 	const notBest: BestVerdict = { best: 60, newBest: false, previous: 60 };
 
 	it("shows nothing until the run is judged", () => {
-		expect(bestRow(pouring, null)).toEqual({ kind: "none" });
-		expect(bestRow(settled, null)).toEqual({ kind: "none" });
+		expect(bestRow(at(0), null)).toEqual({ kind: "none" });
+		expect(bestRow(at(40, true), null)).toEqual({ kind: "none" });
 	});
 
-	it("shows the best to beat while the tally is under it, then nothing until it settles", () => {
-		expect(bestRow(pouring, newBest)).toEqual({ kind: "best", best: 25 });
-		expect(bestRow(passed, newBest)).toEqual({ kind: "none" });
+	it("shows the best to beat until the tally passes it, then nothing until it settles", () => {
+		expect(bestRow(at(0), newBest)).toEqual({ kind: "best", best: 25 });
+		expect(bestRow(at(25), newBest)).toEqual({ kind: "best", best: 25 });
+		expect(bestRow(at(26), newBest)).toEqual({ kind: "none" });
+		expect(bestRow(at(40), newBest)).toEqual({ kind: "none" });
+	});
+
+	it("judges the tally against the best before the run, however late the verdict lands", () => {
+		// By the time the verdict lands the store's best is already the run's own score; the
+		// caption still goes out once the tally passes the best the run beat
+		expect(bestRow(at(30), newBest)).toEqual({ kind: "none" });
 	});
 
 	it("celebrates a new best only once the drop has settled", () => {
-		expect(bestRow(settled, newBest)).toEqual({ kind: "newBest" });
+		expect(bestRow(at(40, true), newBest)).toEqual({ kind: "newBest" });
 	});
 
 	it("keeps the best caption throughout a run that did not beat it", () => {
-		expect(bestRow(pouring, notBest)).toEqual({ kind: "best", best: 60 });
-		expect(bestRow({ bestShown: true, settled: true }, notBest)).toEqual({
-			kind: "best",
-			best: 60,
-		});
+		expect(bestRow(at(10), notBest)).toEqual({ kind: "best", best: 60 });
+		expect(bestRow(at(60, true), notBest)).toEqual({ kind: "best", best: 60 });
 	});
 });
 

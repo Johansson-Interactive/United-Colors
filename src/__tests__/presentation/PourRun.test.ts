@@ -28,8 +28,8 @@ function caught(tick: number, more: Partial<RunCatch> = {}): RunCatch {
 	return { tick, value: 1, step: 1, color: RED, point: false, ...more };
 }
 
-function plan(record: RunRecord, best = 1000, color = RED): PourPlan {
-	return planPour({ record, best, color, pitch: PITCH });
+function plan(record: RunRecord, color = RED): PourPlan {
+	return planPour({ record, color, pitch: PITCH });
 }
 
 /** A score pop of `text`, to lay out */
@@ -224,7 +224,6 @@ describe("pourAt", () => {
 				],
 				ticks: 320,
 			},
-			1000,
 			GREEN,
 		);
 		const colours = landings(p).map((l) => pourAt(p, l.ms).drop.color);
@@ -233,7 +232,7 @@ describe("pourAt", () => {
 	});
 
 	it("has no drop and no catches for a run without catches", () => {
-		const p = plan({ catches: [], ticks: seconds(9) }, 1000, BLUE);
+		const p = plan({ catches: [], ticks: seconds(9) }, BLUE);
 		for (const ms of [0, POUR_START_MS, 10_000]) {
 			const view = pourAt(p, ms, ms - 100);
 			expect(view.drop).toEqual({ radius: 0, color: BLUE, tally: 0 });
@@ -351,26 +350,6 @@ describe("pourAt", () => {
 			const p = plan({ catches, ticks: 120 });
 			expect(pourAt(p, 10_000)).toMatchObject({ amber: 0, bonusLabel: null, settled: true });
 		}
-	});
-
-	it("puts the best caption out when the tally first passes the old best, for good", () => {
-		const p = plan(
-			{ catches: [caught(10), caught(50, { value: 3 }), caught(90, { value: 5 })], ticks: 120 },
-			4,
-		);
-		const [a, b, c] = landings(p).map((l) => l.ms);
-		expect(pourAt(p, 0).bestShown).toBe(true);
-		expect(pourAt(p, a).bestShown).toBe(true);
-		expect(pourAt(p, b).bestShown).toBe(true); // 4: level with it, not past it
-		expect(pourAt(p, c - 1).bestShown).toBe(true);
-		expect(pourAt(p, c).bestShown).toBe(false);
-		expect(pourAt(p, 10_000).bestShown).toBe(false);
-	});
-
-	it("keeps the best caption for a run that never passes it", () => {
-		const p = plan({ catches: [caught(10)], ticks: 30 }, 1);
-		expect(pourAt(p, 10_000).bestShown).toBe(true);
-		expect(pourAt(plan({ catches: [], ticks: 30 }, 0), 10_000).bestShown).toBe(true);
 	});
 
 	it("runs the clock up from 0:00 to the run time, reached exactly at the last landing", () => {
