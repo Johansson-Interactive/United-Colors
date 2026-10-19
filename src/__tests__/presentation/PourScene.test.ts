@@ -15,13 +15,14 @@ import {
 	easeToward,
 	landingKick,
 	POUR_DELAY_MS,
+	POUR_DIGIT_SCALE,
 	pourBody,
 	pourFit,
 	pourInput,
 	startPour,
 	stepPour,
 } from "../../presentation/effects/pourScene";
-import { mergeUniformsByName, NO_AMBER } from "../../presentation/mergeShader";
+import { amberWaveReach, mergeUniformsByName, NO_AMBER } from "../../presentation/mergeShader";
 
 describe("pourFit", () => {
 	const PITCH = 14;
@@ -356,11 +357,11 @@ describe("stepPour", () => {
 	 * Step every frame from T0 up to `untilMs` of replay time, against a best of `best`, keeping
 	 * what each step said
 	 */
-	function play(untilMs: number, best = NO_BEST) {
-		let playback = startPour(pour);
+	function play(untilMs: number, best = NO_BEST, plan = pour) {
+		let playback = startPour(plan);
 		const steps: ReturnType<typeof stepPour>[] = [];
 		for (let now = T0, last = T0; now <= frameAt(untilMs); last = now, now += FRAME) {
-			const step = stepPour(pour, playback, now, now - last, best);
+			const step = stepPour(plan, playback, now, now - last, best);
 			steps.push(step);
 			playback = step.playback;
 		}
@@ -439,6 +440,54 @@ describe("stepPour", () => {
 	it("draws the amber as it rises, not after it", () => {
 		const { steps } = play(20_000);
 		for (const { playback } of steps) expect(playback.frame.amber).toBe(playback.frame.view.amber);
+	});
+
+	it("keeps the tally above the amber's wavy surface and +N below it, however it waves", () => {
+		/** A combo of `length`, then `alone` catches on their own, ending in a combo bonus */
+		const comboPour = (length: number, alone: number) =>
+			planPour({
+				record: {
+					catches: [
+						...Array.from({ length: alone }, (_, i) => ({
+							tick: 10 + 4 * i,
+							value: 1,
+							step: 1,
+							color: RED,
+							point: false,
+						})),
+						...Array.from({ length }, (_, i) => ({
+							tick: 20 + 4 * alone + i,
+							value: 2 * i + 1,
+							step: i + 1,
+							color: RED,
+							point: false,
+						})),
+					],
+					ticks: 30 + 4 * alone + length,
+				},
+				color: RED,
+				pitch: 14,
+			});
+		// Mostly bonus, the tally standing on the amber; a small bonus, +N at its smallest; and
+		// that in the largest drop, where the surface waves furthest
+		for (const plan of [comboPour(10, 0), comboPour(2, 98), comboPour(2, 250)]) {
+			const { steps } = play(20_000, NO_BEST, plan);
+			const amber = steps.filter(({ playback }) => playback.frame.amber > 0);
+			expect(amber.length).toBeGreaterThan(0);
+			for (const { playback } of amber) {
+				const { view, radius, jelly, amber: share } = playback.frame;
+				const surface = radius * amberLevel(share);
+				const reach = amberWaveReach(jelly, radius);
+				for (const d of view.digits) {
+					expect(d.y + 14 * POUR_DIGIT_SCALE).toBeLessThanOrEqual(surface - reach);
+				}
+				const bonus = view.bonus;
+				if (bonus === null || bonus.opacity === 0) continue;
+				for (const d of bonus.dots) {
+					expect(d.y - bonus.pitch * POUR_DIGIT_SCALE).toBeGreaterThanOrEqual(surface + reach);
+				}
+			}
+		}
 	});
 
 	it("never finishes: once settled its liquid keeps stepping, so the drop keeps rippling", () => {

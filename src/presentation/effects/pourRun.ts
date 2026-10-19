@@ -49,7 +49,10 @@ export const POUR_FADE_MS = 300;
 
 /** The smallest `+N` dot spacing still readable (px): the amber layer is at least this tall */
 export const POUR_BONUS_MIN_PITCH = 4;
-/** Room the amber's surface keeps from the tally above it and from `+N` below it (px) */
+/**
+ * Room the amber's level keeps from the tally above it and from `+N` below it (px): wider than
+ * its surface waves at rest even in the largest drop (see amberWaveReach), so neither is touched
+ */
 const AMBER_CLEAR = 3;
 
 /**
