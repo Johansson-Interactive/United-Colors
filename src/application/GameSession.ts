@@ -1,3 +1,4 @@
+import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
 import type { ScreenSize, TiltZero } from "../domain/types";
@@ -8,7 +9,7 @@ import { createSceneBuilder } from "./renderScene";
 export interface GameSessionOptions {
 	store: GameStore;
 	createClock: ClockFactory;
-	/** Pixel density the dot sizes scale with */
+	/** Pixel density the dot sizes scale with; the game's own (GAME_DENSITY) by default */
 	density?: number;
 	random?: () => number;
 	/** What the game spawns; by default the game's own spawning, drawing on `random` */
@@ -19,8 +20,6 @@ export interface GameSessionOptions {
 
 /** Screen the engine assumes until the canvas reports its layout */
 const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
-/** Pixel density the dot sizes scale with unless the session is given one, as the game is */
-export const DEFAULT_DENSITY = 400;
 
 /**
  * One game on one screen: the engine, the clock that drives it, the store it publishes frames
@@ -144,7 +143,7 @@ export class GameSession {
 	private getEngine(): GameEngine {
 		if (!this.engine) {
 			this.engine = new GameEngine({
-				density: this.options.density ?? DEFAULT_DENSITY,
+				density: this.options.density ?? GAME_DENSITY,
 				screen: this.screen,
 				random: this.options.random,
 				spawner: this.options.spawner,

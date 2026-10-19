@@ -3,7 +3,6 @@
  * stepper's view and what the shell puts on screen, kept here so the React shell stays thin.
  */
 
-import { DEFAULT_DENSITY } from "../../application/GameSession";
 import type { BestVerdict, GameStoreState } from "../../application/GameStore";
 import {
 	JELLY_AT_REST,
@@ -14,7 +13,7 @@ import {
 	stepJelly,
 } from "../../application/jelly";
 import { MERGE_SHRINK } from "../../application/renderScene";
-import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
+import { GAME_DENSITY, SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunRecord } from "../../domain/types";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS, NO_AMBER } from "../mergeShader";
 import { advanceBursts, type Burst, withBurst } from "./burstFrames";
@@ -264,7 +263,7 @@ export interface PourBodyInput {
 }
 
 /** A catch falls at a free small dot's radius in play (px on screen), point dots too */
-const POUR_CATCH_RADIUS = (SMALL_DOT_SIZE_RATIO * DEFAULT_DENSITY) / 2;
+const POUR_CATCH_RADIUS = (SMALL_DOT_SIZE_RATIO * GAME_DENSITY) / 2;
 
 /** A catch drawn on its own, as a glass bead, outside the liquid body */
 interface PourBead {
