@@ -10,14 +10,7 @@ import type { GameAudio } from "../ports";
  * unsubscribe.
  */
 export function bindSoundEffects(store: GameStore, audio: GameAudio): () => void {
-	const held = new Set<ReturnType<typeof setTimeout>>();
-	const stagger = createCatchStagger((cue, ms) => {
-		const timer = setTimeout(() => {
-			held.delete(timer);
-			cue();
-		}, ms);
-		held.add(timer);
-	});
+	const stagger = createCatchStagger();
 
 	const unsubscribe = onGameEvents(store, (event) => {
 		switch (event.type) {
@@ -40,7 +33,6 @@ export function bindSoundEffects(store: GameStore, audio: GameAudio): () => void
 	});
 	return () => {
 		unsubscribe();
-		for (const timer of held) clearTimeout(timer);
-		held.clear();
+		stagger.dispose();
 	};
 }

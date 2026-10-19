@@ -7,16 +7,26 @@ describe("catchPitch", () => {
 });
 
 describe("createCatchStagger", () => {
-	/** A stagger on a clock the test sets, recording what it cues now and what it holds back */
+	/**
+	 * A stagger on a clock the test sets, recording what it cues now and what it holds back;
+	 * `fire` runs every held cue as its timer would
+	 */
 	function setup() {
 		const clock = { now: 1000 };
 		const log: string[] = [];
+		const held: (() => void)[] = [];
 		const stagger = createCatchStagger(
-			(_cue, ms) => log.push(`hold ${ms}`),
+			(cue, ms) => {
+				log.push(`hold ${ms}`);
+				held.push(cue);
+			},
 			() => clock.now,
 		);
-		const cue = (sameTick: boolean) => stagger(sameTick, () => log.push("now"));
-		return { clock, log, cue };
+		const cue = (sameTick: boolean, name = "now") => stagger(sameTick, () => log.push(name));
+		const fire = () => {
+			for (const run of held.splice(0)) run();
+		};
+		return { clock, log, cue, fire, stagger };
 	}
 
 	it("cues a catch right away unless it landed on the same tick as the one before", () => {
@@ -55,5 +65,23 @@ describe("createCatchStagger", () => {
 			`hold ${CATCH_STAGGER_MS - 33}`,
 			"now",
 		]);
+	});
+
+	it("cues a held catch when its timer fires", () => {
+		const { log, cue, fire } = setup();
+		cue(false);
+		cue(true, "later");
+		fire();
+		expect(log).toEqual(["now", `hold ${CATCH_STAGGER_MS}`, "later"]);
+	});
+
+	it("drops every waiting cue on dispose", () => {
+		const { log, cue, fire, stagger } = setup();
+		cue(false);
+		cue(true, "dropped");
+		cue(true, "dropped");
+		stagger.dispose();
+		fire();
+		expect(log).toEqual(["now", `hold ${CATCH_STAGGER_MS}`, `hold ${CATCH_STAGGER_MS * 2}`]);
 	});
 });
