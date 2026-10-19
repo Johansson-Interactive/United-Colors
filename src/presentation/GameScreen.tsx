@@ -59,6 +59,8 @@ interface GameScreenProps {
 	watchAppActive: WatchAppActive;
 	/** How the phone's glass rounds its corners, once known; the arena follows (null: square) */
 	corners: Corners | null;
+	/** The title's small print: the version and build (see versionTag) */
+	versionTag: string;
 	/** Start a run in this colour as soon as the title is up, without a press (the bench run) */
 	autoStart?: string;
 }
@@ -72,6 +74,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	sensor,
 	watchAppActive,
 	corners,
+	versionTag,
 	autoStart,
 }) => {
 	const insets = useSafeAreaInsets();
@@ -275,8 +278,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Everything lives in the stage frame, clear of the top inset (notch / Dynamic Island) and
 	// side insets, which stay black; the playfield runs under the home indicator, the
 	// interface layer keeps clear of it
-	const uiInsets = { paddingBottom: insets.bottom };
-
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
@@ -294,7 +295,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 				<FrostDim frost={frost} />
 
-				<View style={[styles.inset, uiInsets]} pointerEvents="box-none">
+				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
 						{screen.kind === "hud" && (
 							<HUD store={store} color={playerColor} onPause={handlePause} corners={corners} />
@@ -310,6 +311,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								onToggleSound={handleToggleSound}
 								onToggleMusic={handleToggleMusic}
 								sensitivity={sensitivity}
+								versionTag={versionTag}
 							/>
 						)}
 

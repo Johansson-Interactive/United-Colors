@@ -9,6 +9,7 @@ import { bindRunInPlay } from "./src/application/useCases/BindRunInPlay";
 import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
 import { AudioService } from "./src/infrastructure/AudioService";
+import { loadBuildInfo } from "./src/infrastructure/buildInfo";
 import { DeviceMotionAdapter } from "./src/infrastructure/DeviceMotionAdapter";
 import { DisplayRateService } from "./src/infrastructure/DisplayRateService";
 import { loadDisplayCorners } from "./src/infrastructure/displayCorners";
@@ -21,6 +22,7 @@ import { pinMainThreadToFastCores } from "./src/infrastructure/threadAffinity";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
+import { versionTag } from "./src/presentation/versionTag";
 
 /**
  * A bench build (built with EXPO_PUBLIC_BENCH=1, or =drips for the run that keeps drips on the
@@ -78,6 +80,9 @@ bindRunInPlay(store, (inPlay) => {
 /** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
 void pinMainThreadToFastCores();
 
+/** The title's small print, from what the installed app reports of itself */
+const VERSION_TAG = versionTag(loadBuildInfo());
+
 /** How the glass rounds its corners, asked for once at launch */
 const displayCorners = loadDisplayCorners(Platform.OS);
 
@@ -100,6 +105,7 @@ export default function App() {
 					sensor={sensor}
 					watchAppActive={watchAppActive}
 					corners={corners}
+					versionTag={VERSION_TAG}
 					autoStart={BENCH ? BENCH_COLOR : undefined}
 				/>
 			</TiltProvider>

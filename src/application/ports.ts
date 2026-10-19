@@ -94,3 +94,13 @@ export type ClockFactory = (
 	onTick: () => void,
 	onFrame: (dtMs: number, alpha: number) => void,
 ) => Clock;
+
+/** Which build this is, as the installed app reports it; null where the platform has no answer */
+export interface BuildInfo {
+	/** The marketing version, like "1.0.0" */
+	version: string | null;
+	/** The build number EAS stamped into the binary; local builds carry "1" */
+	build: string | null;
+	/** A development build, loading its JavaScript from Metro */
+	dev: boolean;
+}

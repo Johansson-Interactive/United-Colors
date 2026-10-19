@@ -19,7 +19,7 @@ import { IconDot } from "../components/IconDot";
 import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
 import { TITLE, TITLE_FOOTER_HEIGHT, titlePitch } from "../layout/bowlStage";
-import { BOWL_SIZE, TRIO } from "../theme/theme";
+import { BOWL_SIZE, DIM, TRIO } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 import { playColourAt } from "./playColour";
 
@@ -34,9 +34,15 @@ interface KioskOverlayProps {
 	onToggleMusic: () => void;
 	/** Tilt sensitivity, so the play dot rolls as fast as the player dot will */
 	sensitivity: number;
+	/** The version and build, shown as small print under the best score; empty shows none */
+	versionTag: string;
 }
 
 const PLAY_SIZE = 128;
+/** The version tag's dots: finer than any other matrix text, so it reads as small print */
+const VERSION_PITCH = 1.5;
+/** How far the version row sits above the footer's edge, clear of the best score above it */
+const VERSION_BOTTOM = 6;
 const COLOR_CYCLE_MS = 2600;
 
 /** The game colour the play dot shows at `cycle`; mid-blend it is the nearer of the two */
@@ -48,7 +54,8 @@ function heldColor(cycle: number): string {
  * Title / attract screen, drawn over the kiosk simulation. The name, one colour per letter,
  * sits right above the bowl so the two read as one group, lifted a little above centre; it
  * drifts with the tilt. The play dot is a drop of the player's liquid rolling in a bowl the
- * way the player will, and the best score waits at the bottom.
+ * way the player will, and the best score waits at the bottom, with the version and build as
+ * small print beneath it.
  */
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
@@ -59,6 +66,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	onToggleSound,
 	onToggleMusic,
 	sensitivity,
+	versionTag,
 }) => {
 	const { width } = useWindowDimensions();
 	const tiltAvailable = useTiltAvailable();
@@ -116,6 +124,11 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 				<View style={styles.best} pointerEvents="none">
 					<DotMatrixText text={`BEST ${highScore}`} pitch={4} color="rgba(244,246,251,0.6)" />
 				</View>
+				{versionTag ? (
+					<View style={styles.version} pointerEvents="none">
+						<DotMatrixText text={versionTag} pitch={VERSION_PITCH} color={DIM} />
+					</View>
+				) : null}
 				<View style={styles.level}>
 					<IconDot
 						size={44}
@@ -151,6 +164,13 @@ const styles = StyleSheet.create({
 		justifyContent: "center",
 	},
 	best: {
+		alignItems: "center",
+	},
+	version: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: VERSION_BOTTOM,
 		alignItems: "center",
 	},
 	level: {
