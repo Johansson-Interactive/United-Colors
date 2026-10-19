@@ -77,5 +77,3 @@ export function createFlowStore(game: GameStore, sinks: FlowSinks) {
 
 	return store;
 }
-
-export type FlowStore = ReturnType<typeof createFlowStore>;
