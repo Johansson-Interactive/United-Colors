@@ -87,8 +87,9 @@ interface PourSound {
 	point: boolean;
 }
 
-/** One catch's landing: where, its sound, whether or not it is heard, and its bursts */
-interface PourLanding extends PourSpot, PourSound {
+/** One catch's landing: where, whether a point dot, which knocks the drop harder, and its bursts */
+interface PourLanding extends PourSpot {
+	point: boolean;
 	/**
 	 * Its bursts on the drop's top, as it burst in play (see stageBursts): a combo catch pops
 	 * in combo amber and a point dot pops and rings in its colour; a lone small dot is quiet
@@ -136,7 +137,7 @@ interface PourBonus {
 	opacity: number;
 }
 
-interface PlannedCatch extends PourLanding {
+interface PlannedCatch extends PourLanding, PourSound {
 	landMs: number;
 	/** Its landing is heard: the loudest in its sound window (see soundingOf) */
 	heard: boolean;
@@ -457,7 +458,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	for (const c of plan.catches) {
 		if (c.landMs <= ms) landed++;
 		if (c.landMs > sinceMs && c.landMs <= ms) {
-			landings.push({ x: c.x, y: c.y, pitch: c.pitch, point: c.point, bursts: c.bursts });
+			landings.push({ x: c.x, y: c.y, point: c.point, bursts: c.bursts });
 			if (c.heard) sounds.push({ pitch: c.pitch, point: c.point });
 		}
 	}
