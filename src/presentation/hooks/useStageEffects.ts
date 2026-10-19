@@ -25,7 +25,6 @@ import {
 } from "../effects/burstFrames";
 import { INITIAL_BURST_MEMORY, type NewBurst, SHAKE, stepBursts } from "../effects/stageBursts";
 import { INK_LIFT } from "../theme/theme";
-import { createTimeoutGroup } from "./timeoutGroup";
 
 /**
  * Presentation-only reactions to what the game does: the edge wash takes the player's
@@ -94,10 +93,6 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		clockRef.current = clock;
 	}, [clock]);
 
-	// Staggered pops still waiting, cleared on unmount so none fire into a dead screen
-	const [burstTimers] = useState(createTimeoutGroup);
-	useEffect(() => () => burstTimers.clearAll(), [burstTimers]);
-
 	const addBurst = useCallback(
 		(make: (id: number) => Burst) => {
 			const burst = make(burstIds.take());
@@ -111,11 +106,12 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	);
 
 	// Bursts as the game reports what happened (see stageBursts). The frame's player dot is at its
-	// live position: the frame was published by the very move that scored.
+	// live position: the frame was published by the very move that scored. Catch pops still
+	// waiting on the stagger are dropped on unmount, so none fire into a dead screen.
 	useEffect(() => {
-		const stagger = createCatchStagger(burstTimers.schedule);
+		const stagger = createCatchStagger();
 		let memory = INITIAL_BURST_MEMORY;
-		return onGameEvents(store, (event, frame) => {
+		const unsubscribe = onGameEvents(store, (event, frame) => {
 			const player = frame.dots.find((d) => d.kind === "player");
 			if (!player) return;
 			const step = stepBursts(memory, event, player);
@@ -129,7 +125,11 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 			if (step.catchCue) stagger(step.catchCue.sameTick, show);
 			else show();
 		});
-	}, [store, addBurst, shake, burstTimers]);
+		return () => {
+			unsubscribe();
+			stagger.dispose();
+		};
+	}, [store, addBurst, shake]);
 
 	return { accent, frost, shake, bursts, burstClock };
 }
