@@ -59,11 +59,19 @@ What a run did, as the game keeps it for its game over: its catches in order (ea
 _Avoid_: history, log, "record" on its own
 
 **Pour**:
-The game over's replay of a run: its catches fall in, in their order and rhythm, and merge into one drop of the player's liquid while a clock runs up to the run time, until the drop settles with its combo bonus as an amber layer at the bottom.
+The game over's replay of a run: its catches pour in as small dots, in their order and rhythm, and merge into the drop while a clock runs up to the run time, until the drop settles and its amber layer rises in.
 _Avoid_: recap, summary animation
 
+**Drop**:
+The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land; it holds the tally and, once settled, the amber layer.
+_Avoid_: blob, ball, cup
+
+**Amber layer**:
+The combo bonus, drawn as amber liquid at the bottom of the settled drop with its `+N` in ink inside it. Its share of the drop is the combo bonus's share of the score, except that it is never too small to hold a readable `+N`: a small combo bonus is deliberately drawn larger than its true share.
+_Avoid_: bonus bar, combo fill
+
 **Tally**:
-The running total inside the pour's drop: what the catches landed so far paid. It counts up to the run's score as the last catch lands.
+The running total inside the pour's drop: what the catches landed so far paid. It counts up to the run's score as the last catch lands, then lifts clear of the amber layer as it rises.
 _Avoid_: counter, subtotal
 
 ### Ranking
