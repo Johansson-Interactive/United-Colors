@@ -28,11 +28,11 @@ export const DENT_SOFTNESS = 0.7;
 /** The amber level that draws no amber layer, as in play: far below any body (px) */
 export const NO_AMBER = 1e6;
 /** How far the amber's surface waves at rest, as a fraction of the drop's radius */
-export const AMBER_REST_WAVE = 0.02;
+const AMBER_REST_WAVE = 0.02;
 /** How much further it waves with the liquid at full slosh (stretched to JELLY_MAX_STRETCH) */
-export const AMBER_SLOSH_WAVE = 0.05;
+const AMBER_SLOSH_WAVE = 0.05;
 /** How far it tips at the drop's edge with the liquid at full sideways slosh, in radii */
-export const AMBER_TILT = 0.06;
+const AMBER_TILT = 0.06;
 
 /**
  * SkSL for the amber layer's surface in the first body, a drop of radius `r`: how far below
@@ -52,6 +52,20 @@ float amberSurface(float x, float level, float r, float3 shape) {
 		+ ${AMBER_TILT} * tilt * u);
 }
 `;
+
+/**
+ * Furthest the amber layer's surface strays from its level (px) across a drop of `radius`
+ * whose liquid has the jelly stretch `jelly`, as AMBER_SKSL waves and tips it
+ */
+export function amberWaveReach(
+	jelly: { stretchX: number; stretchY: number },
+	radius: number,
+): number {
+	"worklet";
+	const slosh = Math.hypot(jelly.stretchX, jelly.stretchY) / JELLY_MAX_STRETCH;
+	const tilt = Math.abs(jelly.stretchX) / JELLY_MAX_STRETCH;
+	return radius * (AMBER_REST_WAVE + AMBER_SLOSH_WAVE * slosh + AMBER_TILT * tilt);
+}
 
 /**
  * Metaball shader: the player and the dots merging into it as one liquid body. Each body is

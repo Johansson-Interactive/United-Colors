@@ -16,6 +16,7 @@ import {
 import type { DotView, RenderFrame } from "../../domain/types";
 import { LIQUID_WOBBLE } from "../../presentation/liquidShader";
 import {
+	amberWaveReach,
 	DENT_GAP,
 	DENT_SOFTNESS,
 	MERGE_BLEND,
@@ -212,5 +213,23 @@ describe("merge uniforms by name", () => {
 		expect(named.amber).toBe(12);
 		expect(named.amberColor).toEqual([1, 0.7, 0, 1]);
 		expect(named.color).toEqual([0.1, 0.2, 0.3, 1]);
+	});
+});
+
+describe("amberWaveReach", () => {
+	const STILL = { stretchX: 0, stretchY: 0 };
+
+	it("keeps a gentle wave at rest, never ruler-flat, in proportion to the drop", () => {
+		expect(amberWaveReach(STILL, 50)).toBeGreaterThan(0);
+		expect(amberWaveReach(STILL, 100)).toBeCloseTo(2 * amberWaveReach(STILL, 50));
+	});
+
+	it("waves further as the liquid sloshes, and further still sloshing sideways", () => {
+		const down = amberWaveReach({ stretchX: 0, stretchY: JELLY_MAX_STRETCH }, 50);
+		const across = amberWaveReach({ stretchX: JELLY_MAX_STRETCH, stretchY: 0 }, 50);
+		expect(down).toBeGreaterThan(amberWaveReach(STILL, 50));
+		expect(across).toBeGreaterThan(down);
+		// Never so far it would swamp a drop: under a sixth of its radius at full slosh
+		expect(across).toBeLessThan(50 / 6);
 	});
 });
