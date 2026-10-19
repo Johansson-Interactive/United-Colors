@@ -16,6 +16,7 @@ import { mergeUniformsByName } from "../mergeShader";
 import { recordPicture } from "../recordPicture";
 import { drawBursts, drawGlareAt, MERGE_EFFECT } from "../sceneDrawer";
 import { COMBO_AMBER, INK } from "../theme/theme";
+import { useTilt } from "../tilt/TiltProvider";
 import { BURST_COLORS } from "./burstFrames";
 import { POUR_DIGIT_SCALE, type PourFrame, pourBody } from "./pourScene";
 
@@ -40,10 +41,6 @@ for (const c of BURST_COLORS) {
 	FILLS[c] = Skia.Color(c);
 	RGBA[c] = convertToRGBA(c);
 }
-/** The light is still over the game over: the glare sits where an untilted phone puts it */
-const GLARE_X = glareOffset(0);
-const GLARE_Y = glareOffset(0);
-
 const INK_PAINT = Skia.Paint();
 INK_PAINT.setAntiAlias(true);
 INK_PAINT.setColor(Skia.Color(INK));
@@ -54,14 +51,20 @@ COLOR_PAINT.setAntiAlias(true);
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
  * the drop and the catches merging into it as one body under the merge shader, again in amber
- * below the combo bonus's level, so the layer slops with the liquid; then its glare and the
- * tally over it, ink inside the drop and in the drop's colour outside, and the landings' bursts
- * over all, as in play. Catches of another colour are drawn under it. Every frame, on the UI thread, from `frame`.
+ * below the combo bonus's level, so the layer slops with the liquid; then its glare, turned
+ * toward the tilt as AGAIN's is, and the tally over it, ink inside the drop and in the drop's
+ * colour outside, and the landings' bursts over all, as in play. Catches of another colour are drawn under it. Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;
 	const transform = [{ translateX: x }, { translateY: y }, { scale }];
 	const dotRadius = pitch * POUR_DIGIT_SCALE;
+	// The glare follows the tilt, as on the AGAIN button's drop and the dots in play
+	const tilt = useTilt();
+	const glare = useDerivedValue(() => ({
+		x: glareOffset(tilt.x.get()),
+		y: glareOffset(tilt.y.get()),
+	}));
 
 	const body = useDerivedValue(() => {
 		const { view, radius, jelly, amber } = frame.get();
@@ -85,17 +88,19 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 	const [overRecorder] = useState(() => Skia.PictureRecorder());
 	const under = useDerivedValue(() =>
 		recordPicture(underRecorder, (canvas) => {
+			const { x: gx, y: gy } = glare.get();
 			for (const bead of body.get().beads) {
 				COLOR_PAINT.setColor(FILLS[bead.color]);
 				canvas.drawCircle(bead.x, bead.y, bead.radius, COLOR_PAINT);
-				drawGlareAt(canvas, bead.x, bead.y, bead.radius, GLARE_X, GLARE_Y);
+				drawGlareAt(canvas, bead.x, bead.y, bead.radius, gx, gy);
 			}
 		}),
 	);
 	const over = useDerivedValue(() =>
 		recordPicture(overRecorder, (canvas) => {
 			const { view, radius } = frame.get();
-			if (radius > 0.5) drawGlareAt(canvas, 0, 0, radius, GLARE_X, GLARE_Y);
+			const { x: gx, y: gy } = glare.get();
+			if (radius > 0.5) drawGlareAt(canvas, 0, 0, radius, gx, gy);
 			COLOR_PAINT.setColor(FILLS[view.drop.color]);
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
