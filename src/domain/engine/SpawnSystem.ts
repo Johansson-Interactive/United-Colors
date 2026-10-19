@@ -31,9 +31,9 @@ import type { Spawner } from "./Spawner";
  * where the interval would be shorter, enough drips form at once to keep the dots arriving
  * at the interval's rate.
  *
- * Small and point dots pick colors from separate weighted pickers; point dots never
- * spawn in the player's current color. Where a point dot spawns is up to PointDotPlacement. Replicates legacy GameManager spawn logic, apart from
- * the difficulty ramp (see SMALL_DOT_RATE_GROWTH).
+ * Small and point dots pick colors from separate weighted pickers; point dots never spawn in
+ * the player's current color. Where a point dot spawns is up to PointDotPlacement. Replicates
+ * legacy GameManager spawn logic, apart from the difficulty ramp (see SMALL_DOT_RATE_GROWTH).
  */
 export class SpawnSystem implements Spawner {
 	/** Ids run from 0 in each game, so the same seed spawns the same dots */
