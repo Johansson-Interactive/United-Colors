@@ -20,7 +20,7 @@ import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
-import { type BestVerdict, handleGameOver } from "../application/useCases/GameOver";
+import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
@@ -79,9 +79,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
-	// Phase only, and the score for the game over: the HUD reads its own, dots never go through React
+	// Phase only: the HUD and the game over read their own score, dots never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
-	const gameOverScore = useStore(store, (s) => (s.frame.phase === "GAME_OVER" ? s.frame.score : 0));
 	const highScore = useStore(store, (s) => s.highScore);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
 	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
@@ -199,28 +198,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session, detectGyro, stageOpacity],
 	);
 
-	const { screen, dispatch } = useScreenFlow(store, storage, flood, perform);
+	const { screen, dispatch } = useScreenFlow(store, {
+		perform,
+		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
+		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
+	});
 
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
-
-	const judged = useEffectEvent((verdict: BestVerdict) =>
-		dispatch({ type: "bestJudged", verdict }),
-	);
-
-	// The session has halted itself; the score is in the final frame. The verdict on the best
-	// is judged once, against storage, and the game over shows that one; a verdict landing after
-	// its game over has gone belongs to no screen
-	useEffect(() => {
-		if (phase !== "GAME_OVER") return;
-		let current = true;
-		void handleGameOver(store, storage).then((verdict) => {
-			if (current) judged(verdict);
-		});
-		return () => {
-			current = false;
-		};
-	}, [phase, store, storage]);
 
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 
@@ -350,8 +335,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 						{screen.kind === "gameOver" && (
 							<GameOverOverlay
-								score={gameOverScore}
-								verdict={screen.verdict}
+								store={store}
 								color={playerColor}
 								onRetry={handleRetryPress}
 								onBack={handleLeavePress}

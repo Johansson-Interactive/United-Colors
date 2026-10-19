@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { type BenchRun, benchSessionOptions, benchTilt } from "./src/application/bench";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
+import { bindPersonalBest } from "./src/application/useCases/BindPersonalBest";
 import { bindRunInPlay } from "./src/application/useCases/BindRunInPlay";
 import type { Corners } from "./src/domain/types";
 import { AsyncStorageRepository } from "./src/infrastructure/AsyncStorageRepository";
@@ -76,6 +77,9 @@ bindRunInPlay(store, (inPlay) => {
 	keepAwake.setAwake(inPlay);
 	displayRate.setFastest(inPlay);
 });
+
+/** Each game over is judged against the stored personal best; bound for the app's lifetime */
+bindPersonalBest(store, storage);
 
 /** Keep the frame work off the little cores (Android; a tilt game gets no touch boost) */
 void pinMainThreadToFastCores();
