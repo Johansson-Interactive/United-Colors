@@ -4,8 +4,8 @@ import { bindPersonalBest } from "../../application/useCases/BindPersonalBest";
 import type { GamePhase } from "../../domain/types";
 
 /**
- * Storage holding a personal best whose loads wait for the test to release them, oldest first,
- * so each test decides when a judgement lands
+ * Storage holding a personal best. A load reads the best when it is called, then waits for the
+ * test to release it, oldest first, so each test decides when a judgement lands.
  */
 function slowStorage(stored: number) {
 	const waiting: Array<() => void> = [];
@@ -13,20 +13,24 @@ function slowStorage(stored: number) {
 		stored = score;
 	});
 	const storage: StoragePort = {
-		loadHighScore: () =>
-			new Promise<number>((resolve) => {
-				waiting.push(() => resolve(stored));
-			}),
+		loadHighScore: () => {
+			const read = stored;
+			return new Promise<number>((resolve) => {
+				waiting.push(() => resolve(read));
+			});
+		},
 		saveHighScore,
 		loadSettings: async () => {
 			throw new Error("not used");
 		},
 		saveSettings: async () => {},
 	};
-	/** Let the oldest waiting load read the stored best, and the judgement it feeds finish */
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+	/** Let the oldest load asked for land, and the judgement it feeds finish */
 	const releaseLoad = async () => {
+		await settle();
 		waiting.shift()?.();
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await settle();
 	};
 	return { storage, saveHighScore, releaseLoad };
 }
@@ -100,6 +104,30 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(store.getState().verdict).toBeNull();
 		await releaseLoad();
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
+	});
+
+	it("judges a game over against the best the one before it saved", async () => {
+		const { store, saveHighScore, releaseLoad } = setup(10);
+		setPhase(store, "GAME_OVER", 12);
+		setPhase(store, "RUNNING", 0);
+		setPhase(store, "GAME_OVER", 11);
+		await releaseLoad();
+		await releaseLoad();
+		expect(saveHighScore.mock.calls).toEqual([[12]]);
+		expect(store.getState().highScore).toBe(12);
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
+	});
+
+	it("a game over waiting its turn is judged on the score it ended with", async () => {
+		const { store, saveHighScore, releaseLoad } = setup(10);
+		setPhase(store, "GAME_OVER", 12);
+		setPhase(store, "RUNNING", 0);
+		setPhase(store, "GAME_OVER", 11);
+		setPhase(store, "GAME_OVER", 40);
+		await releaseLoad();
+		await releaseLoad();
+		expect(saveHighScore.mock.calls).toEqual([[12]]);
 		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
 	});
 
