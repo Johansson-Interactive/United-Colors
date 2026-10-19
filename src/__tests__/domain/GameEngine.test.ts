@@ -19,7 +19,9 @@ import {
 } from "../../domain/constants";
 import { GameEngine } from "../../domain/engine/GameEngine";
 import { PointDot } from "../../domain/entities/PointDot";
-import type { GameEvent } from "../../domain/types";
+import type { SmallDot } from "../../domain/entities/SmallDot";
+import { comboBonus } from "../../domain/run";
+import type { GameEvent, RunRecord } from "../../domain/types";
 import { dripAt, STAGED_SMALL_DOT_SIZE, scriptedSpawner, smallDotAt } from "./stage";
 
 const DEGREE = Math.PI / 180;
@@ -1037,6 +1039,123 @@ describe("GameEngine", () => {
 			engine.startGame();
 			expect(engine.getFrame().phase).toBe("RUNNING");
 			expect(engine.getFrame().dots.some((d) => d.reject !== undefined)).toBe(false);
+		});
+	});
+
+	describe("run record", () => {
+		function ticks(engine: GameEngine, count: number) {
+			for (let i = 0; i < count; i++) engine.tick();
+		}
+
+		/** Refuse a wrong-colour dot on the next tick and run the refusal out to the game over */
+		function refuse(engine: GameEngine, small: SmallDot[], color: string) {
+			small.push(smallDotAt(CENTRE, color, { id: "wrong" }));
+			ticks(engine, 1 + REJECT_TICKS);
+			return engine.getFrame();
+		}
+
+		it("keeps the run's catches in order, with their tick, pay, step, colour and kind", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			point.push(new PointDot("p", 0, CENTRE.x, CENTRE.y, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
+			ticks(engine, 20);
+			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
+			engine.tick();
+			const frame = refuse(engine, small, OWN);
+			expect(frame.phase).toBe("GAME_OVER");
+			expect(frame.run).toEqual({
+				catches: [
+					{ tick: 1, value: 1, step: 1, color: OWN, point: false },
+					{ tick: 2, value: 7, step: 2, color: OTHER, point: true },
+					{ tick: 23, value: 1, step: 1, color: OTHER, point: false },
+				],
+				ticks: 24,
+			});
+		});
+
+		it("run time counts only ticks the simulation ran: not paused, refusing or game over", () => {
+			const { engine, small } = stagedEngine(OWN);
+			ticks(engine, 10);
+			engine.pause();
+			ticks(engine, 50);
+			engine.resume();
+			ticks(engine, 5);
+			const frame = refuse(engine, small, OTHER);
+			ticks(engine, 30);
+			expect(frame.run?.ticks).toBe(16);
+			expect(engine.getFrame().run?.ticks).toBe(16);
+		});
+
+		it("is only on game-over frames", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			expect(engine.getFrame().run).toBeUndefined();
+			small.push(smallDotAt(CENTRE, OTHER, { id: "wrong" }));
+			engine.tick();
+			expect(engine.getFrame()).toMatchObject({ phase: "REJECTING" });
+			expect(engine.getFrame().run).toBeUndefined();
+			ticks(engine, REJECT_TICKS);
+			expect(engine.getFrame()).toMatchObject({ phase: "GAME_OVER" });
+			expect(engine.getFrame().run?.catches).toHaveLength(1);
+			engine.startKiosk();
+			expect(engine.getFrame().run).toBeUndefined();
+		});
+
+		it("starts over with each new run", () => {
+			const { engine, small } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			engine.tick();
+			refuse(engine, small, OTHER);
+			engine.startGame(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "b" }));
+			ticks(engine, 3);
+			expect(refuse(engine, small, OTHER).run).toEqual({
+				catches: [{ tick: 1, value: 1, step: 1, color: OWN, point: false }],
+				ticks: 4,
+			});
+		});
+
+		it("three small dots in one combo pay 9, of which 6 is combo bonus", () => {
+			const { engine, small } = stagedEngine(OWN);
+			for (const id of ["a", "b", "c"]) {
+				small.push(smallDotAt(CENTRE, OWN, { id }));
+				engine.tick();
+			}
+			const frame = refuse(engine, small, OTHER);
+			expect(frame.score).toBe(9);
+			expect(comboBonus(frame.run as RunRecord)).toBe(6);
+		});
+
+		it("the combo bonus is the score less what the catches are worth on their own", () => {
+			const { engine, small, point } = stagedEngine(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+			point.push(new PointDot("p", 0, CENTRE.x, CENTRE.y, OTHER, 12, POINT_DOT_VALUE));
+			engine.tick();
+			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
+			engine.tick();
+			ticks(engine, COMBO_WINDOW_TICKS + 1);
+			small.push(smallDotAt(CENTRE, OTHER, { id: "c" }));
+			engine.tick();
+			const frame = refuse(engine, small, OWN);
+			// Own values 1 + 5 + 1 + 1; paid 1 + 7 + 5 + 1
+			expect(frame.score).toBe(14);
+			expect(comboBonus(frame.run as RunRecord)).toBe(14 - 8);
+		});
+
+		it("no catches, no combo bonus", () => {
+			const { engine, small } = stagedEngine(OWN);
+			expect(comboBonus(refuse(engine, small, OTHER).run as RunRecord)).toBe(0);
+		});
+
+		it("kiosk records nothing, and a run after it starts from nothing", () => {
+			const { engine, small } = stagedEngine(OWN, true);
+			ticks(engine, 40);
+			expect(engine.getFrame().run).toBeUndefined();
+			engine.startGame(OWN);
+			expect(refuse(engine, small, OTHER).run).toEqual({ catches: [], ticks: 1 });
 		});
 	});
 });
