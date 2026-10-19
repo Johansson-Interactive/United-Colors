@@ -18,6 +18,7 @@ import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import { comboBonus, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
+import { amberWaveReach } from "../mergeShader";
 import { type Burst, layOutBurst } from "./burstFrames";
 import { NO_CATCH_SPOT, stepBursts } from "./stageBursts";
 
@@ -49,11 +50,6 @@ export const POUR_FADE_MS = 300;
 
 /** The smallest `+N` dot spacing still readable (px): the amber layer is at least this tall */
 export const POUR_BONUS_MIN_PITCH = 4;
-/**
- * Room the amber's level keeps from the tally above it and from `+N` below it (px): wider than
- * its surface waves at rest even in the largest drop (see amberWaveReach), so neither is touched
- */
-const AMBER_CLEAR = 3;
 
 /**
  * The drop's area follows the tally: its radius is this many px per root of the tally. A small
@@ -62,6 +58,11 @@ const AMBER_CLEAR = 3;
 export const POUR_DOT_RADIUS = 9;
 /** ...up to this radius (px), reached at a tally of about 200, so any score fits the screen */
 export const POUR_MAX_RADIUS = 130;
+/**
+ * Room the amber's level keeps from the tally above it and from `+N` below it (px): the whole
+ * px past how far its surface waves at rest in the largest drop, so neither is touched
+ */
+const AMBER_CLEAR = Math.ceil(amberWaveReach({ stretchX: 0, stretchY: 0 }, POUR_MAX_RADIUS));
 /** A catch lands at most this share of the drop's radius to either side of its middle */
 const SIDE_REACH = 0.7;
 
