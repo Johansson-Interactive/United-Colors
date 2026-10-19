@@ -2,6 +2,7 @@ import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { GLYPH_ROWS } from "../../presentation/dotmatrix/glyphs";
 import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
+import { burstColor, layOutBurst, type NewBurst } from "../../presentation/effects/burstFrames";
 import {
 	POUR_FALL_MS,
 	POUR_MAX_RADIUS,
@@ -10,9 +11,11 @@ import {
 	POUR_STAGGER_MS,
 	POUR_START_MS,
 	type PourPlan,
+	type PourView,
 	planPour,
 	pourAt,
 } from "../../presentation/effects/pourRun";
+import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 const RED = "#E53935";
 const BLUE = "#1E88E5";
@@ -29,12 +32,15 @@ function plan(record: RunRecord, best = 1000, color = RED): PourPlan {
 	return planPour({ record, best, color, pitch: PITCH });
 }
 
+/** A score pop of `text`, to lay out */
+const popOf = (text: string): NewBurst => ({ kind: "pop", x: 0, y: 0, text, color: RED });
+
 /** Run time in ticks at 30 Hz */
 const seconds = (s: number) => s * 30;
 
 /** When each catch lands, sampled every millisecond through the landings the stepper reports */
 function landings(p: PourPlan, untilMs = 6000) {
-	const found: { ms: number; pitch: number; point: boolean; combo: boolean }[] = [];
+	const found: ({ ms: number } & PourView["landings"][number])[] = [];
 	for (let ms = 1; ms <= untilMs; ms++) {
 		for (const landing of pourAt(p, ms, ms - 1).landings) found.push({ ms, ...landing });
 	}
@@ -272,17 +278,49 @@ describe("pourAt", () => {
 			),
 			ticks: 100,
 		});
-		const cued: { pitch: number; point: boolean; combo: boolean }[] = [];
+		const cued: { pitch: number; point: boolean }[] = [];
 		for (let ms = 0, prev = -1; prev < 6000; prev = ms, ms += 16.7 + (ms % 7)) {
-			cued.push(...pourAt(p, ms, prev).landings);
+			for (const { pitch, point } of pourAt(p, ms, prev).landings) cued.push({ pitch, point });
 		}
 		expect(cued).toEqual([
-			{ pitch: 0, point: false, combo: false },
-			{ pitch: 1, point: false, combo: true },
-			{ pitch: 2, point: false, combo: true },
-			{ pitch: 12, point: false, combo: true },
-			{ pitch: 0, point: true, combo: false },
+			{ pitch: 0, point: false },
+			{ pitch: 1, point: false },
+			{ pitch: 2, point: false },
+			{ pitch: 12, point: false },
+			{ pitch: 0, point: true },
 		]);
+	});
+
+	it("bursts a landing as the catch did in play, on the drop's top where it lands", () => {
+		const p = plan({
+			catches: [
+				caught(10),
+				caught(11, { step: 2, value: 3 }),
+				caught(200, { point: true, color: BLUE, value: 5 }),
+				caught(201, { point: true, color: GREEN, value: 7, step: 2 }),
+			],
+			ticks: 300,
+		});
+		const [lone, combo, point, comboPoint] = landings(p);
+		const top = (k: number) => -p.drops[k].radius;
+		// A lone small dot lands quietly
+		expect(lone.bursts).toEqual([]);
+		// A combo catch pops what it paid in combo amber
+		expect(combo.bursts).toEqual([
+			expect.objectContaining({ kind: "pop", x: 0, y: top(1), color: burstColor(COMBO_AMBER) }),
+		]);
+		// A point dot pops in its colour and rings in it; in a combo, its pop is amber
+		expect(point.bursts).toEqual([
+			expect.objectContaining({ kind: "pop", y: top(2), color: burstColor(BLUE) }),
+			expect.objectContaining({ kind: "ring", y: top(2), color: burstColor(BLUE) }),
+		]);
+		expect(comboPoint.bursts).toEqual([
+			expect.objectContaining({ kind: "pop", color: burstColor(COMBO_AMBER) }),
+			expect.objectContaining({ kind: "ring", color: burstColor(GREEN) }),
+		]);
+		expect(combo.bursts[0].dots).toEqual(layOutBurst(0, popOf("3")).dots);
+		const ids = [combo, point, comboPoint].flatMap((l) => l.bursts.map((b) => b.id));
+		expect(new Set(ids).size).toBe(ids.length);
 	});
 
 	it("settles only once the last catch has landed and the drop has had time to come to rest", () => {

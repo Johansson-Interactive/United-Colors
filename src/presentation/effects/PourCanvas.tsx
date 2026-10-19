@@ -37,8 +37,8 @@ COLOR_PAINT.setAntiAlias(true);
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
  * the drop and the catches merging into it as one body under the merge shader, again in amber
  * below the combo bonus's level, so the layer slops with the liquid; then its glare and the
- * tally over it, ink inside the drop and in the drop's colour outside. Catches of another colour
- * and the combo rings are drawn under it. Every frame, on the UI thread, from `frame`.
+ * tally over it, ink inside the drop and in the drop's colour outside, and the landings' bursts
+ * over all, as in play. Catches of another colour are drawn under it. Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;
@@ -67,8 +67,6 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 	const [overRecorder] = useState(() => Skia.PictureRecorder());
 	const under = useDerivedValue(() =>
 		recordPicture(underRecorder, (canvas) => {
-			const { bursts, now } = frame.get();
-			drawBursts(canvas, bursts, now);
 			for (const bead of body.get().beads) {
 				COLOR_PAINT.setColor(Skia.Color(bead.color));
 				canvas.drawCircle(bead.x, bead.y, bead.radius, COLOR_PAINT);
@@ -84,6 +82,8 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
 			}
+			const { bursts, now } = frame.get();
+			drawBursts(canvas, bursts, now);
 		}),
 	);
 

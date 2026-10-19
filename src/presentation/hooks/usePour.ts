@@ -14,17 +14,14 @@ import {
 	stepJelly,
 } from "../../application/jelly";
 import type { GameAudio } from "../../application/ports";
-import { advanceBursts, type Burst, layOutBurst, withBurst } from "../effects/burstFrames";
+import { advanceBursts, type Burst, withBurst } from "../effects/burstFrames";
 import { type PourPlan, type PourView, pourAt } from "../effects/pourRun";
 import { easeToward, landingKick } from "../effects/pourScene";
-import { COMBO_AMBER } from "../theme/theme";
 
 /** The pour's clock starts this long after the game over mounts (ms), as it fades in */
 export const POUR_DELAY_MS = 350;
 /** How loud a catch sounds in the pour, against in play */
 const POUR_VOLUME = 0.4;
-/** A combo catch's amber ring, from the drop's centre: its diameter before it grows (px) */
-const COMBO_RING_SIZE = 40;
 /** Longest frame (ms) the drop's liquid integrates, so a stall does not kick it */
 const MAX_FRAME_MS = 100;
 
@@ -35,7 +32,7 @@ export interface PourFrame {
 	radius: number;
 	amber: number;
 	jelly: JellyState;
-	/** The combo catches' amber rings, at frame time `now` (see burstFrames.ts) */
+	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
 	bursts: Burst[];
 	now: number;
 }
@@ -54,8 +51,8 @@ function statusOf(view: PourView): PourStatus {
 
 /**
  * Plays a planned pour from the game over's mount, sampling the stepper on the UI thread every
- * frame (see pourRun.ts): each landing kicks the drop's liquid, rings amber for a combo and
- * sounds quietly at its catch's pitch. The canvas draws `frame`; the interface reads `status`.
+ * frame (see pourRun.ts): each landing kicks the drop's liquid, bursts as its catch did in
+ * play and sounds quietly at its catch's pitch. The canvas draws `frame`; the interface reads `status`.
  * Leaving the game over unmounts it, and the pour stops with it. Never buzzes: a pour is a
  * recap, not play.
  */
@@ -66,9 +63,6 @@ export function usePour(
 	// Memoised by hand, as useStageEffects is: the React Compiler rebuilt the frame callback
 	// every render, and useFrameCallback re-registers on each new one
 	"use no memo";
-	const [ring] = useState(() =>
-		layOutBurst(0, { kind: "ring", x: 0, y: 0, color: COMBO_AMBER, size: COMBO_RING_SIZE }),
-	);
 	const [initial] = useState(() => pourAt(plan, -POUR_DELAY_MS));
 	const [status, setStatus] = useState(() => statusOf(initial));
 	const frame = useSharedValue<PourFrame>({
@@ -107,7 +101,7 @@ export function usePour(
 			let bursts = before.bursts;
 			for (const landing of view.landings) {
 				jelly = kickJelly(jelly, 0, landingKick(view.drop.radius, landing.point));
-				if (landing.combo) bursts = withBurst(bursts, ring);
+				for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
 			}
 			jelly = stepJelly(jelly, 0, 0, view.drop.radius, dt);
 			body.set(jelly);
@@ -131,7 +125,7 @@ export function usePour(
 				scheduleOnRN(setStatus, next);
 			}
 		},
-		[plan, ring, start, sampled, frame, body, shown, sound],
+		[plan, start, sampled, frame, body, shown, sound],
 	);
 	useFrameCallback(onFrame);
 

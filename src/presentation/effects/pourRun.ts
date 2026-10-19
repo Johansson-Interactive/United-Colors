@@ -8,7 +8,7 @@
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
  * is a worklet and a pure function of time, so the shell samples it per frame from its own
  * clock. Pass it the previous sample's time too, and it lists the catches that landed in
- * between, each exactly once, for their sound and burst. The shell owns the drawing, the
+ * between, each exactly once, for their sound and bursts. The shell owns the drawing, the
  * jelly kicked on each landing, the sounds and where things are on the screen.
  */
 
@@ -17,6 +17,8 @@ import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import { comboBonus, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
+import { type Burst, layOutBurst } from "./burstFrames";
+import { NO_CATCH_SPOT, stepBursts } from "./stageBursts";
 
 /** The first catch lands this long after the game over appears (ms) */
 export const POUR_START_MS = 500;
@@ -53,14 +55,17 @@ export interface PourInput {
 	pitch: number;
 }
 
-/** One catch's landing: the sound to cue for it and whether it bursts */
+/** One catch's landing: the sound to cue for it and its bursts */
 interface PourLanding {
 	/** Semitones the catch sound is raised (see catchPitch) */
 	pitch: number;
 	/** A point dot: the large catch sound */
 	point: boolean;
-	/** A combo catch (step above 1): bursts in combo amber */
-	combo: boolean;
+	/**
+	 * Its bursts on the drop's top, as it burst in play (see stageBursts): a combo catch pops
+	 * in combo amber and a point dot pops and rings in its colour; a lone small dot is quiet
+	 */
+	bursts: readonly Burst[];
 }
 
 /** A body of catches on its way into the drop (see PlannedBody) */
@@ -194,6 +199,22 @@ function digitsOf({ tally, radius }: PourDrop, pitch: number): PourDigitDot[] {
 	});
 }
 
+/**
+ * A catch's bursts where it lands on a drop of `radius`, laid out under ids from `firstId` on:
+ * those it showed in play, if it was a combo catch or a point dot
+ */
+function landingBursts(c: RunCatch, radius: number, firstId: number): Burst[] {
+	if (c.step === 1 && !c.point) return [];
+	const event = {
+		type: c.point ? ("collectPoint" as const) : ("collect" as const),
+		value: c.value,
+		step: c.step,
+		sameTick: false,
+	};
+	const player = { x: 0, y: -radius, color: c.color };
+	return stepBursts(NO_CATCH_SPOT, event, player).bursts.map((b, i) => layOutBurst(firstId + i, b));
+}
+
 /** Work out a run's pour */
 export function planPour({ record, best, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
@@ -201,13 +222,13 @@ export function planPour({ record, best, color, pitch }: PourInput): PourPlan {
 	const drops = dropsOf(record, color);
 	const score = drops[drops.length - 1].tally;
 	const bonus = comboBonus(record);
+	let burstId = 0;
 	return {
-		catches: catches.map((c, i) => ({
-			landMs: times[i],
-			pitch: catchPitch(c.step),
-			point: c.point,
-			combo: c.step > 1,
-		})),
+		catches: catches.map((c, i) => {
+			const bursts = landingBursts(c, drops[i].radius, burstId);
+			burstId += bursts.length;
+			return { landMs: times[i], pitch: catchPitch(c.step), point: c.point, bursts };
+		}),
 		bodies: bodiesOf(catches, times),
 		drops,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
@@ -241,7 +262,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	for (const c of plan.catches) {
 		if (c.landMs <= ms) landed++;
 		if (c.landMs > sinceMs && c.landMs <= ms) {
-			landings.push({ pitch: c.pitch, point: c.point, combo: c.combo });
+			landings.push({ pitch: c.pitch, point: c.point, bursts: c.bursts });
 		}
 	}
 	for (const b of plan.bodies) {
