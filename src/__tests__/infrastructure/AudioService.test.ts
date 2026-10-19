@@ -113,8 +113,8 @@ describe("AudioService", () => {
 	it("plays catches quieter when asked, scaling their mix level", async () => {
 		const audio = new AudioService(sources, music, host());
 		await audio.load();
-		audio.playCollect(0, 0.5);
-		audio.playLargeCollect(3, 0.5);
+		audio.playCollect(0, { volume: 0.5 });
+		audio.playLargeCollect(3, { volume: 0.5 });
 		await flush();
 		const played = players.filter((p) => p.play.mock.calls.length > 0).map((p) => p.volume);
 		expect(played).toHaveLength(2);
@@ -126,10 +126,24 @@ describe("AudioService", () => {
 		const audio = new AudioService(sources, music, host());
 		await audio.load();
 		audio.setEffectsMuted(true);
-		audio.playCollect(0, 0.5);
-		audio.playLargeCollect(0, 0.5);
+		audio.playCollect(0, { volume: 0.5 });
+		audio.playLargeCollect(0, { volume: 0.5 });
 		await flush();
 		expect(players.every((p) => p.play.mock.calls.length === 0)).toBe(true);
+	});
+
+	it("drops catches that skip when busy while their effect's players all play", async () => {
+		const audio = new AudioService(sources, music, host());
+		await audio.load();
+		for (let i = 0; i < 4; i++) audio.playCollect(0);
+		for (let i = 0; i < 3; i++) audio.playLargeCollect(0);
+		await flush();
+		audio.playCollect(5, { skipWhenBusy: true });
+		audio.playLargeCollect(5, { skipWhenBusy: true });
+		await flush();
+		const catchPlayers = players.slice(0, 7);
+		expect(catchPlayers.every((p) => p.seekTo.mock.calls.length === 1)).toBe(true);
+		expect(catchPlayers.every((p) => p.play.mock.calls.length === 1)).toBe(true);
 	});
 
 	it("loads once however often load is called", async () => {
