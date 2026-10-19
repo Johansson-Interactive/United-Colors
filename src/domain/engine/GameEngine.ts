@@ -12,6 +12,7 @@ import {
 import type { Dot } from "../entities/Dot";
 import { PlayerDot } from "../entities/PlayerDot";
 import { SmallDot } from "../entities/SmallDot";
+import { comboPay } from "../run";
 import type {
 	Catch,
 	Circle,
@@ -412,7 +413,7 @@ export class GameEngine {
 		const sameTick = this.comboStep > 0 && this.lastCatchTick === this.timeStep;
 		this.comboStep++;
 		this.lastCatchTick = this.timeStep;
-		const value = base + 2 * (this.comboStep - 1);
+		const value = base + comboPay(this.comboStep);
 		this.score += value;
 		// Without refusals no game over comes to carry the record, so keep none
 		if (this.refusals) {
