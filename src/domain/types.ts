@@ -108,7 +108,7 @@ export interface Catch {
 }
 
 /** A combo of two or more catches that ran its course */
-export interface ComboEnd {
+interface ComboEnd {
 	/** Everything it paid */
 	total: number;
 	/** Its length */

@@ -23,8 +23,8 @@ import {
 	ringBurst,
 	withBurst,
 } from "../effects/burstFrames";
-import { catchPop, comboTotalPop } from "../effects/catchPop";
-import { INK_LIFT, WHITE } from "../theme/theme";
+import { INITIAL_BURST_MEMORY, type NewBurst, SHAKE, stepBursts } from "../effects/stageBursts";
+import { INK_LIFT } from "../theme/theme";
 import { createTimeoutGroup } from "./timeoutGroup";
 
 /**
@@ -110,55 +110,39 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 		[bursts, clock, burstIds],
 	);
 
-	// Score pops and rings where things happen; shake on the final hit. The frame's player dot
-	// is at its live position: the frame was published by the very move that scored. A catch on
-	// the same tick as the one before pops a moment later, where that one did (see catchCue). A
-	// combo's total pops where its last catch landed; a new run never ends the old run's combo.
+	// Bursts as the game reports what happened (see stageBursts). The frame's player dot is at its
+	// live position: the frame was published by the very move that scored.
 	useEffect(() => {
 		const stagger = createCatchStagger(burstTimers.schedule);
-		let catchSpot = { x: 0, y: 0 };
+		let memory = INITIAL_BURST_MEMORY;
 		return onGameEvents(store, (event, frame) => {
 			const player = frame.dots.find((d) => d.kind === "player");
 			if (!player) return;
-			const { x, y, color } = player;
-			switch (event.type) {
-				case "collect":
-				case "collectPoint": {
-					if (!event.sameTick) catchSpot = { x, y };
-					const at = catchSpot;
-					stagger(event.sameTick, () => {
-						const pop = catchPop(event, color);
-						addBurst((id) => popBurst(id, at.x, at.y, pop.text, burstColor(pop.color)));
-						if (event.type === "collectPoint") {
-							addBurst((id) => ringBurst(id, at.x, at.y, burstColor(color), 80));
-						}
-					});
-					return;
+			const step = stepBursts(memory, event, player);
+			memory = step.memory;
+			const show = () => {
+				for (const burst of step.bursts) addBurst((id) => layOutBurst(id, burst));
+				if (step.shake) {
+					shake.set(withSequence(...SHAKE.map(({ to, ms }) => withTiming(to, { duration: ms }))));
 				}
-				case "comboEnd": {
-					const pop = comboTotalPop(event);
-					const { x: atX, y: atY } = catchSpot;
-					addBurst((id) => comboTotalBurst(id, atX, atY, pop.text, burstColor(pop.color)));
-					return;
-				}
-				case "gameOver":
-					addBurst((id) => ringBurst(id, x, y, burstColor(WHITE), 90));
-					shake.set(
-						withSequence(
-							withTiming(-10, { duration: 40 }),
-							withTiming(9, { duration: 50 }),
-							withTiming(-6, { duration: 50 }),
-							withTiming(3, { duration: 50 }),
-							withTiming(0, { duration: 60 }),
-						),
-					);
-					return;
-				case "pointSpawn":
-				case "spit":
-					return;
-			}
+			};
+			if (step.catchCue) stagger(step.catchCue.sameTick, show);
+			else show();
 		});
 	}, [store, addBurst, shake, burstTimers]);
 
 	return { accent, frost, shake, bursts, burstClock };
+}
+
+/** A burst from the stepper, laid out for the UI thread under `id` */
+function layOutBurst(id: number, burst: NewBurst): Burst {
+	const color = burstColor(burst.color);
+	switch (burst.kind) {
+		case "pop":
+			return popBurst(id, burst.x, burst.y, burst.text, color);
+		case "comboTotal":
+			return comboTotalBurst(id, burst.x, burst.y, burst.text, color);
+		case "ring":
+			return ringBurst(id, burst.x, burst.y, color, burst.size);
+	}
 }
