@@ -35,8 +35,11 @@ export const POUR_STAGGER_MS = Math.ceil((POUR_FALL_MS + MERGE_MS) / MERGE_MAX_D
 /** The drop comes to rest this long after the last landing (ms); then the pour is settled */
 export const POUR_SETTLE_MS = 700;
 
-/** The drop's area follows the tally: its radius is this many px per root of the tally */
-const DROP_RADIUS_PER_ROOT = 9;
+/**
+ * The drop's area follows the tally: its radius is this many px per root of the tally. A small
+ * catch falls at this radius, a drop of one
+ */
+export const POUR_DOT_RADIUS = 9;
 /** ...up to this radius (px), reached at a tally of about 200, so any score fits the screen */
 export const POUR_MAX_RADIUS = 130;
 
@@ -61,7 +64,7 @@ interface PourLanding {
 }
 
 /** A catch on its way into the drop */
-interface PourFlight {
+export interface PourFlight {
 	color: string;
 	/** A point dot, drawn at its size; otherwise a small dot */
 	point: boolean;
@@ -156,7 +159,7 @@ function dropsOf({ catches }: RunRecord, color: string): PourDrop[] {
 	const drops: PourDrop[] = [{ radius: 0, color: catches[0]?.color ?? color, tally: 0 }];
 	for (const c of catches) {
 		const tally = drops[drops.length - 1].tally + c.value;
-		const radius = Math.min(POUR_MAX_RADIUS, DROP_RADIUS_PER_ROOT * Math.sqrt(tally));
+		const radius = Math.min(POUR_MAX_RADIUS, POUR_DOT_RADIUS * Math.sqrt(tally));
 		drops.push({ radius, color: c.color, tally });
 	}
 	return drops;
