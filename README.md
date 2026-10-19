@@ -46,6 +46,11 @@ over it; the music fades in once the other audio stops. On iOS the game follows 
 Ring/Silent switch. The check comes from the local native module in `modules/other-audio`,
 so it needs a native rebuild; without it the music simply always plays.
 
+On Android the game is immersive on every screen: the navigation bar, gesture handle and
+taskbar are hidden, and a swipe from the edge shows them briefly over the game. That lives
+in the local native module `modules/system-bars`, which has no JS API, so it needs a native
+rebuild.
+
 For the stack, architecture, and quality gates, see [AGENTS.md](./AGENTS.md).
 
 ## Requirements
