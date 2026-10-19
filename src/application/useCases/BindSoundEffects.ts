@@ -15,10 +15,10 @@ export function bindSoundEffects(store: GameStore, audio: GameAudio): () => void
 	const unsubscribe = onGameEvents(store, (event) => {
 		switch (event.type) {
 			case "collect":
-				stagger(event.sameTick, () => audio.playCollect(catchPitch(event.step)));
+				stagger.cue(event.sameTick, () => audio.playCollect(catchPitch(event.step)));
 				return;
 			case "collectPoint":
-				stagger(event.sameTick, () => audio.playLargeCollect(catchPitch(event.step)));
+				stagger.cue(event.sameTick, () => audio.playLargeCollect(catchPitch(event.step)));
 				return;
 			case "pointSpawn":
 				audio.playPointSpawn();

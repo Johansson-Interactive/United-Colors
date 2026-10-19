@@ -14,9 +14,10 @@ export function catchPitch(step: number): number {
 	return Math.min(MAX_CATCH_PITCH, Math.max(0, step - 1));
 }
 
-/** Cues each catch, given whether it landed on the same tick as the catch before */
+/** Cues each catch in turn, spread out where they landed on the same tick */
 export interface CatchStagger {
-	(sameTick: boolean, cue: () => void): void;
+	/** Cue `run`, given whether its catch landed on the same tick as the catch before */
+	cue(sameTick: boolean, run: () => void): void;
 	/** Cancel every cue still waiting, e.g. when the screen or binding goes away */
 	dispose(): void;
 }
@@ -24,7 +25,8 @@ export interface CatchStagger {
 /**
  * Cue each catch's sound or pop, given whether it landed on the same tick as the catch before:
  * right away, or through `schedule` when it has to wait. A same-tick catch comes
- * CATCH_STAGGER_MS after the one before, and no catch comes before one still waiting.
+ * CATCH_STAGGER_MS after the one before, and nothing cued comes before a cue still waiting,
+ * so what follows the catches (a combo's total, the run's end) can go through here too.
  * `schedule` answers with a cancel, which dispose calls for every cue still waiting.
  */
 export function createCatchStagger(
@@ -35,25 +37,25 @@ export function createCatchStagger(
 	now: () => number = Date.now,
 ): CatchStagger {
 	let lastAt = Number.NEGATIVE_INFINITY;
-	// The cancel of each cue still waiting, by the run that will cue it
+	// The cancel of each cue still waiting, by what its timer runs
 	const waiting = new Map<() => void, () => void>();
-	const stagger = (sameTick: boolean, cue: () => void) => {
+	const cue = (sameTick: boolean, run: () => void) => {
 		const time = now();
 		const at = Math.max(time, lastAt + (sameTick ? CATCH_STAGGER_MS : 0));
 		lastAt = at;
 		if (at === time) {
-			cue();
+			run();
 			return;
 		}
-		const run = () => {
-			waiting.delete(run);
-			cue();
+		const held = () => {
+			waiting.delete(held);
+			run();
 		};
-		waiting.set(run, schedule(run, at - time));
+		waiting.set(held, schedule(held, at - time));
 	};
 	const dispose = () => {
 		for (const cancel of waiting.values()) cancel();
 		waiting.clear();
 	};
-	return Object.assign(stagger, { dispose });
+	return { cue, dispose };
 }

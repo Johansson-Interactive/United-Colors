@@ -26,7 +26,7 @@ describe("createCatchStagger", () => {
 			},
 			() => clock.now,
 		);
-		const cue = (sameTick: boolean, name = "now") => stagger(sameTick, () => log.push(name));
+		const cue = (sameTick: boolean, name = "now") => stagger.cue(sameTick, () => log.push(name));
 		const fire = () => {
 			for (const run of held.splice(0)) run();
 		};
@@ -68,6 +68,21 @@ describe("createCatchStagger", () => {
 			`hold ${CATCH_STAGGER_MS}`,
 			`hold ${CATCH_STAGGER_MS - 33}`,
 			"now",
+		]);
+	});
+
+	it("holds a cue not on the same tick behind one still waiting, and runs them in order", () => {
+		const { log, cue, fire } = setup();
+		cue(false);
+		cue(true, "held");
+		cue(false, "after");
+		fire();
+		expect(log).toEqual([
+			"now",
+			`hold ${CATCH_STAGGER_MS}`,
+			`hold ${CATCH_STAGGER_MS}`,
+			"held",
+			"after",
 		]);
 	});
 
