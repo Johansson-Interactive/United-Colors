@@ -235,8 +235,8 @@ export interface PourPlayback {
 /** What one frame of the pour does */
 export interface PourStep {
 	playback: PourPlayback;
-	/** Catches that landed this frame, for their sounds */
-	landings: PourView["landings"];
+	/** The sounds of the catches heard landing this frame */
+	sounds: PourView["sounds"];
 	/** The status, when it changed this frame; null when it did not */
 	status: PourStatus | null;
 }
@@ -301,7 +301,7 @@ export function stepPour(
 			status: changed ? status : playback.status,
 			done,
 		},
-		landings: view.landings,
+		sounds: view.sounds,
 		status: changed ? status : null,
 	};
 }

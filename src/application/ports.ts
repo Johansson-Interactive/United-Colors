@@ -36,17 +36,25 @@ export interface MusicCue {
 	volume: number;
 }
 
+/** How a catch sound plays */
+export interface CatchSoundOptions {
+	/** Quietens the catch (0..1, default 1), for replays such as the game-over pour */
+	volume?: number;
+	/**
+	 * Drop the sound when every player of the effect is busy, rather than taking one over.
+	 * Taking over a player is a round of native calls, so a flurry of these stalls frames.
+	 */
+	skipWhenBusy?: boolean;
+}
+
 /** App-lifetime audio: the game's sound effects plus the music, its lifecycle and muting */
 export interface GameAudio {
 	/** Load sounds; safe to call repeatedly and again after dispose */
 	load(): Promise<void>;
-	/**
-	 * A small dot of the player's colour was caught; `pitch` raises it, in semitones (0..12);
-	 * `volume` (0..1, default 1) quietens it, for replays such as the game-over pour
-	 */
-	playCollect(pitch: number, volume?: number): void;
-	/** A point dot was caught and recoloured the player; `pitch` and `volume` as for playCollect */
-	playLargeCollect(pitch: number, volume?: number): void;
+	/** A small dot of the player's colour was caught; `pitch` raises it, in semitones (0..12) */
+	playCollect(pitch: number, options?: CatchSoundOptions): void;
+	/** A point dot was caught and recoloured the player; `pitch` as for playCollect */
+	playLargeCollect(pitch: number, options?: CatchSoundOptions): void;
 	playPointSpawn(): void;
 	/** One-shot stinger when a run ends */
 	playGameOver(): void;
