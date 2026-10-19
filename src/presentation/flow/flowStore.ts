@@ -29,8 +29,7 @@ export interface FlowSinks {
 }
 
 export interface FlowStoreState {
-	flow: FlowState;
-	/** The screen to show for `flow` */
+	/** The screen to show */
 	screen: Screen;
 	/** Step a tap, then carry out what the step asks: calibrate, act, flood */
 	dispatch: (event: FlowEvent) => void;
@@ -42,15 +41,16 @@ export interface FlowStoreState {
  * effects; following can stop and start again, catching up on the phase each time it starts.
  */
 export function createFlowStore(game: GameStore, sinks: FlowSinks) {
+	let flow: FlowState = INITIAL_FLOW;
 	const store = createStore<FlowStoreState>(() => ({
-		flow: INITIAL_FLOW,
 		screen: screenOf(INITIAL_FLOW),
 		dispatch,
 	}));
 
 	const apply = (event: FlowEvent) => {
-		const step = stepFlow(store.getState().flow, event);
-		store.setState({ flow: step.state, screen: step.screen });
+		const step = stepFlow(flow, event);
+		flow = step.state;
+		store.setState({ screen: step.screen });
 		return step;
 	};
 
@@ -68,7 +68,7 @@ export function createFlowStore(game: GameStore, sinks: FlowSinks) {
 	}
 
 	const toPhase = (phase: GamePhase) => {
-		if (phase !== store.getState().flow.phase) apply({ type: "phaseChanged", phase });
+		if (phase !== flow.phase) apply({ type: "phaseChanged", phase });
 	};
 	toPhase(game.getState().frame.phase);
 
