@@ -218,12 +218,7 @@ describe("pourBody", () => {
 		...more,
 	});
 	/** The body's circles, the drop's first, and its bead catches, drawn at `scale` */
-	function draw(
-		flights: PourFlight[],
-		radius = 40,
-		amberLevel: number | null = null,
-		scale = 1,
-	) {
+	function draw(flights: PourFlight[], radius = 40, amberLevel: number | null = null, scale = 1) {
 		const input = { flights, color: RED, radius, jelly: STILL, top: TOP, amberLevel, scale };
 		const body = pourBody(input);
 		const { blobs, count, blend, jelly } = mergeUniformsByName(body.values, [0, 0, 0, 1]);
@@ -236,7 +231,15 @@ describe("pourBody", () => {
 
 	it("is the drop at the centre with its jelly, and nothing else between catches", () => {
 		const jelly = { stretchX: 0.1, stretchY: 0, wobble: 3 };
-		const input = { flights: [], color: RED, radius: 40, jelly, top: TOP, amberLevel: null, scale: 1 };
+		const input = {
+			flights: [],
+			color: RED,
+			radius: 40,
+			jelly,
+			top: TOP,
+			amberLevel: null,
+			scale: 1,
+		};
 		const body = pourBody(input);
 		const named = mergeUniformsByName(body.values, [0, 0, 0, 1]);
 		expect(named.count).toBe(1);

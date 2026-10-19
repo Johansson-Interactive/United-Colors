@@ -456,7 +456,11 @@ describe("pourAt", () => {
 	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
 			const p = plan({ catches, ticks: 120 });
-			expect(pourAt(p, 10_000)).toMatchObject({ amberLevel: null, bonusLabel: null, settled: true });
+			expect(pourAt(p, 10_000)).toMatchObject({
+				amberLevel: null,
+				bonusLabel: null,
+				settled: true,
+			});
 		}
 	});
 
