@@ -1,16 +1,19 @@
 import type React from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from "react-native-reanimated";
-import type { BestVerdict } from "../../application/GameStore";
+import { useStore } from "zustand";
+import type { GameStore } from "../../application/GameStore";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { Confetti } from "../effects/Confetti";
 import { CAPTION, WHITE } from "../theme/theme";
 
 interface GameOverOverlayProps {
-	score: number;
-	/** How the run stands against the best; the best row shows once it is judged */
-	verdict: BestVerdict | null;
+	/**
+	 * The run's score and its verdict on the personal best are read here; the best row shows
+	 * once the run is judged
+	 */
+	store: GameStore;
 	/** The player's final colour; the result and the retry drop of their liquid wear it */
 	color: string;
 	onRetry: (point: PressPoint) => void;
@@ -20,12 +23,13 @@ interface GameOverOverlayProps {
 const TITLE_COLS = 51; // "GAME OVER"
 
 export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
-	score,
-	verdict,
+	store,
 	color,
 	onRetry,
 	onBack,
 }) => {
+	const score = useStore(store, (s) => s.frame.score);
+	const verdict = useStore(store, (s) => s.verdict);
 	const { width } = useWindowDimensions();
 	const isNewBest = verdict?.newBest ?? false;
 	const titlePitch = Math.max(5, Math.min(7, Math.floor((width - 48) / TITLE_COLS)));

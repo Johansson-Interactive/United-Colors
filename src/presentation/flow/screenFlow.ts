@@ -5,10 +5,9 @@
  * setting the level pose; the settled dot then floods into play. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
  * comes in as an event too, and every step answers with the one screen to show. While the bowl
- * is open over the title the kiosk halts, and the game over shows the run's verdict on the best.
+ * is open over the title the kiosk halts.
  */
 
-import type { BestVerdict } from "../../application/GameStore";
 import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
@@ -34,8 +33,6 @@ export interface FlowState {
 	speed: SpeedRequest | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
-	/** How the run over stands against the best, once judged */
-	verdict: BestVerdict | null;
 }
 
 export const INITIAL_FLOW: FlowState = {
@@ -43,7 +40,6 @@ export const INITIAL_FLOW: FlowState = {
 	settle: null,
 	speed: null,
 	flooding: false,
-	verdict: null,
 };
 
 /** The one screen over the playfield; the HUD is the screen of a run in play */
@@ -53,7 +49,7 @@ export type Screen =
 	| { kind: "pause" }
 	| { kind: "speed"; color: string }
 	| { kind: "settle"; color: string }
-	| { kind: "gameOver"; verdict: BestVerdict | null };
+	| { kind: "gameOver" };
 
 export type FlowEvent =
 	/** PLAY on the title, in the colour the play dot held; `hasZero`: a level pose is set */
@@ -78,9 +74,7 @@ export type FlowEvent =
 	/** The flood covers the screen; whatever was under it can go */
 	| { type: "covered" }
 	/** The game moved to another phase */
-	| { type: "phaseChanged"; phase: GamePhase }
-	/** The run over was judged against the stored best */
-	| { type: "bestJudged"; verdict: BestVerdict };
+	| { type: "phaseChanged"; phase: GamePhase };
 
 /** What the game does: straight away, or once a flood covers the screen */
 export type FlowAction =
@@ -134,7 +128,7 @@ export function screenOf(state: FlowState): Screen {
 		case "REJECTING":
 			return { kind: "hud" };
 		case "GAME_OVER":
-			return { kind: "gameOver", verdict: state.verdict };
+			return { kind: "gameOver" };
 	}
 }
 
@@ -158,17 +152,8 @@ export function stepFlow(state: FlowState, event: FlowEvent): FlowStep {
 }
 
 function bareStep(state: FlowState, event: FlowEvent): BareStep {
-	// The phase is the game's to report, flood or not; a verdict belongs to the game over it
-	// was judged in
-	if (event.type === "phaseChanged") {
-		const verdict = event.phase === "GAME_OVER" ? state.verdict : null;
-		return { state: { ...state, phase: event.phase, verdict } };
-	}
-	// The verdict lands under a flood too; the first one on a run stands
-	if (event.type === "bestJudged") {
-		if (state.phase !== "GAME_OVER" || state.verdict) return { state };
-		return { state: { ...state, verdict: event.verdict } };
-	}
+	// The phase is the game's to report, flood or not
+	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
 	switch (event.type) {

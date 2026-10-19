@@ -20,10 +20,6 @@ const open = (from: "start" | "pause" | "menu", color = PINK): FlowState => ({
 
 const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
 
-/** A run that beat the best, and one that fell short of a best that loaded late */
-const NEW_BEST = { best: 40, newBest: true };
-const LATE_BEST = { best: 50, newBest: false };
-
 /** A step that only leaves the flow in `state`, showing its screen */
 const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
 
@@ -282,38 +278,6 @@ describe("screen flow", () => {
 		});
 	});
 
-	it("the game over shows no verdict on the best until it is judged, then shows that one", () => {
-		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" });
-		expect(over.screen).toEqual({ kind: "gameOver", verdict: null });
-		const judged = stepFlow(over.state, { type: "bestJudged", verdict: LATE_BEST });
-		expect(judged.screen).toEqual({ kind: "gameOver", verdict: LATE_BEST });
-	});
-
-	it("the first verdict on a run stands", () => {
-		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" }).state;
-		const judged = stepFlow(over, { type: "bestJudged", verdict: NEW_BEST }).state;
-		expect(stepFlow(judged, { type: "bestJudged", verdict: LATE_BEST }).screen).toEqual({
-			kind: "gameOver",
-			verdict: NEW_BEST,
-		});
-	});
-
-	it("a verdict arriving outside the game over is dropped", () => {
-		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
-		expect(stepFlow(running, { type: "bestJudged", verdict: NEW_BEST })).toEqual(rests(running));
-	});
-
-	it("a verdict lands under the retry flood, and the next run starts without it", () => {
-		const over = stepFlow(INITIAL_FLOW, { type: "phaseChanged", phase: "GAME_OVER" }).state;
-		const flooding = stepFlow(over, { type: "retryPressed", color: BLUE, at: AT }).state;
-		const judged = stepFlow(flooding, { type: "bestJudged", verdict: NEW_BEST });
-		expect(judged.screen).toEqual({ kind: "gameOver", verdict: NEW_BEST });
-		const covered = stepFlow(judged.state, { type: "covered" }).state;
-		const running = stepFlow(covered, { type: "phaseChanged", phase: "RUNNING" }).state;
-		const next = stepFlow(running, { type: "phaseChanged", phase: "GAME_OVER" });
-		expect(next.screen).toEqual({ kind: "gameOver", verdict: null });
-	});
-
 	it("every step answers with the screen of the state it leaves", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "levelPressed", from: "menu", color: BLUE });
 		expect(step.screen).toEqual({ kind: "settle", color: BLUE });
@@ -330,7 +294,7 @@ describe("which screen shows", () => {
 	const title: Screen = { kind: "title" };
 	const hud: Screen = { kind: "hud" };
 	const pause: Screen = { kind: "pause" };
-	const gameOver: Screen = { kind: "gameOver", verdict: null };
+	const gameOver: Screen = { kind: "gameOver" };
 	const bowl: Screen = { kind: "settle", color: PINK };
 	const speed: Screen = { kind: "speed", color: BLUE };
 
@@ -385,7 +349,6 @@ describe("which screen shows", () => {
 						settle: from ? { from, color: PINK } : null,
 						speed: withSpeed ? { color: BLUE } : null,
 						flooding,
-						verdict: null,
 					};
 					const expected = EXPECTED[phase][from ?? "none"][withSpeed ? 1 : 0];
 					it(`${phase}, bowl ${from ?? "closed"}, speed ${withSpeed ? "open" : "closed"}${flooding ? ", flooding" : ""}: ${expected.kind}`, () => {
