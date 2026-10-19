@@ -18,8 +18,8 @@ _Avoid_: enemy, ball
 A small dot while it is still forming on its wall, before it shoots off.
 
 **Point dot**:
-A large, pulsing, stationary dot worth more than a small dot; catching it recolours the player.
-_Avoid_: "points" (when meaning the dot), bonus dot
+A large, pulsing, stationary dot worth more than a small dot; catching it recolours the player. It never appears close to the player, and tends to appear away from where the last few appeared.
+_Avoid_: "points" (when meaning the dot), bonus dot, switch-color dot
 
 ### Play
 
