@@ -33,6 +33,23 @@ function sameLayout(layout: Layout, screen: ScreenSize, density: number): boolea
 }
 
 /**
+ * With no room clear of the player (only on a screen far smaller than a phone's), the corner of
+ * the spawn area farthest from it, so a point dot of diameter `size` still spawns on time
+ */
+function farthestCorner(
+	screen: ScreenSize,
+	size: number,
+	player: PlayerSpot,
+): { x: number; y: number } {
+	const right = Math.max(size, screen.width - size);
+	const bottom = Math.max(size, screen.height - size);
+	return {
+		x: player.x < (size + right) / 2 ? right : size,
+		y: player.y < (size + bottom) / 2 ? bottom : size,
+	};
+}
+
+/**
  * Where point dots spawn (ADR 0002). A point dot's centre goes in the spawn area, a dot's
  * width in from the screen's edges, in one weighted draw from a grid of cells over it. Cells
  * touching the circle POINT_DOT_CLEAR_SPACE_RATIO clear of the player are blocked, so no point
@@ -69,24 +86,13 @@ export class PointDotPlacement {
 		const clear = player.size / 2 + POINT_DOT_CLEAR_SPACE_RATIO * density + size / 2;
 		weights.recover(POINT_DOT_WEIGHT_RECOVERY);
 		weights.block(player.x, player.y, clear);
-		if (weights.pick(this.random, this.picked)) {
-			const reach = POINT_DOT_SUPPRESS_RADIUS_RATIO * density;
-			weights.suppress(this.picked.x, this.picked.y, reach, POINT_DOT_SUPPRESS_STRENGTH);
-		} else {
-			this.farthestCorner(screen, size, player);
+		if (!weights.pick(this.random, this.picked)) {
+			const corner = farthestCorner(screen, size, player);
+			return holdInside(screen, corner.x, corner.y, size);
 		}
+		const reach = POINT_DOT_SUPPRESS_RADIUS_RATIO * density;
+		weights.suppress(this.picked.x, this.picked.y, reach, POINT_DOT_SUPPRESS_STRENGTH);
 		return holdInside(screen, this.picked.x, this.picked.y, size);
-	}
-
-	/**
-	 * With no room clear of the player (only on a screen far smaller than a phone's), the
-	 * corner of the spawn area farthest from it, so a point dot still spawns on time
-	 */
-	private farthestCorner(screen: ScreenSize, size: number, player: PlayerSpot): void {
-		const right = Math.max(size, screen.width - size);
-		const bottom = Math.max(size, screen.height - size);
-		this.picked.x = player.x < (size + right) / 2 ? right : size;
-		this.picked.y = player.y < (size + bottom) / 2 ? bottom : size;
 	}
 
 	/** The weights for this screen and density, laid out afresh if either has changed */
