@@ -3,6 +3,7 @@ import {
 	JELLY_AT_REST,
 	JELLY_MAX_STRETCH,
 	JELLY_WOBBLE_PERIOD_S,
+	jellyAtRest,
 	jellyShape,
 	kickJelly,
 	stepJelly,
@@ -104,5 +105,21 @@ describe("jelly", () => {
 		expect(Math.max(...stretches)).toBeGreaterThan(0.05);
 		expect(Math.min(...stretches)).toBeLessThan(-0.01);
 		expect(Math.abs(stretches[stretches.length - 1])).toBeLessThan(0.002);
+	});
+
+	it("comes to rest once a kick's slosh has died down too far to see", () => {
+		let body = stepJelly(JELLY_AT_REST, 100, 100, RADIUS, FRAME_MS);
+		expect(jellyAtRest(body, RADIUS)).toBe(true);
+		body = kickJelly(body, 0, 20 * RADIUS);
+		expect(jellyAtRest(body, RADIUS)).toBe(false);
+		let frames = 0;
+		while (!jellyAtRest(body, RADIUS)) {
+			body = stepJelly(body, 100, 100, RADIUS, FRAME_MS);
+			frames++;
+			expect(Math.abs(jellyShape(body, RADIUS).stretchY)).toBeGreaterThan(0);
+		}
+		expect(frames).toBeGreaterThan(30);
+		expect(frames).toBeLessThan(180);
+		expect(Math.abs(jellyShape(body, RADIUS).stretchY)).toBeLessThan(0.001);
 	});
 });

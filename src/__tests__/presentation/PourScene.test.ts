@@ -1,15 +1,23 @@
 import type { BestVerdict } from "../../application/GameStore";
 import type { RunCatch } from "../../domain/types";
-import { POUR_DOT_RADIUS, POUR_MAX_RADIUS, planPour } from "../../presentation/effects/pourRun";
+import {
+	POUR_DOT_RADIUS,
+	POUR_MAX_RADIUS,
+	POUR_START_MS,
+	planPour,
+} from "../../presentation/effects/pourRun";
 import {
 	amberLevel,
 	bestRow,
 	bonusSpot,
 	easeToward,
 	landingKick,
+	POUR_DELAY_MS,
 	pourBody,
 	pourFit,
 	pourInput,
+	startPour,
+	stepPour,
 } from "../../presentation/effects/pourScene";
 import { mergeUniformsByName } from "../../presentation/mergeShader";
 
@@ -245,5 +253,94 @@ describe("pourBody", () => {
 		const none = draw([], 40, 0).body;
 		expect(none.amberY).toBeGreaterThanOrEqual(none.y + none.height);
 		expect(draw([], 40, 0.5).body.amberY).toBeCloseTo(0);
+	});
+});
+
+describe("stepPour", () => {
+	const RED = "#E53935";
+	const FRAME = 1000 / 60;
+	const T0 = 5000;
+	const pour = planPour({
+		record: {
+			catches: [
+				{ tick: 10, value: 1, step: 1, color: RED, point: false },
+				{ tick: 11, value: 3, step: 2, color: RED, point: false },
+				{ tick: 90, value: 1, step: 1, color: RED, point: false },
+			],
+			ticks: 120,
+		},
+		color: RED,
+		pitch: 14,
+	});
+	/** Replay time `ms` as a UI frame time, the first frame at T0 */
+	const frameAt = (ms: number) => T0 + POUR_DELAY_MS + ms;
+
+	/** Step every frame from T0 up to `untilMs` of replay time, keeping what each step said */
+	function play(untilMs: number) {
+		let playback = startPour(pour);
+		const steps: NonNullable<ReturnType<typeof stepPour>>[] = [];
+		for (let now = T0, last = T0; now <= frameAt(untilMs); last = now, now += FRAME) {
+			const step = stepPour(pour, playback, now, now - last);
+			if (!step) break;
+			steps.push(step);
+			playback = step.playback;
+		}
+		return { playback, steps };
+	}
+
+	it("starts its clock on the first frame, the delay before the replay", () => {
+		const first = stepPour(pour, startPour(pour), T0, 0);
+		expect(first?.playback.frame.view.clock).toBe("0:00");
+		expect(first?.playback.frame.view.drop.tally).toBe(0);
+		expect(play(POUR_START_MS + FRAME).playback.frame.view.drop.tally).toBe(1);
+	});
+
+	it("cues each landing once, kicks the drop down and adds the landing's bursts", () => {
+		const { steps } = play(POUR_START_MS + 200);
+		const landed = steps.flatMap((s) => s.landings);
+		expect(landed.map((l) => l.pitch)).toEqual([0, 1]);
+		const second = steps.findIndex((s) => s.landings.some((l) => l.pitch === 1));
+		const before = steps[second - 1].playback;
+		const after = steps[second].playback;
+		expect(after.body.lagVY).toBeGreaterThan(before.body.lagVY);
+		expect(after.frame.bursts.length).toBe(before.frame.bursts.length + 1);
+		expect(after.frame.bursts.at(-1)?.kind).toBe("pop");
+	});
+
+	it("eases the drawn drop toward the stepper's", () => {
+		const { playback } = play(POUR_START_MS + FRAME);
+		expect(playback.frame.radius).toBeGreaterThan(0);
+		expect(playback.frame.radius).toBeLessThan(playback.frame.view.drop.radius);
+	});
+
+	it("integrates no more than a short frame's worth of a stall", () => {
+		const { playback } = play(POUR_START_MS + 100);
+		const now = frameAt(POUR_START_MS + 100) + 400;
+		const stalled = stepPour(pour, playback, now, 400);
+		const short = stepPour(pour, playback, now, 100);
+		expect(stalled?.playback.body).toEqual(short?.playback.body);
+	});
+
+	it("reports the status only when what the interface shows changes", () => {
+		const { steps } = play(POUR_START_MS + 300);
+		const first = startPour(pour).status;
+		expect(first).toEqual({ clock: "0:00", tally: 0, settled: false });
+		const reported = [first, ...steps.filter((s) => s.status !== null).map((s) => s.status)];
+		for (let i = 1; i < reported.length; i++) expect(reported[i]).not.toEqual(reported[i - 1]);
+		expect(reported.map((s) => s?.tally)).toContain(4);
+		expect(reported.length).toBeLessThan(steps.length);
+	});
+
+	it("stops once settled, its liquid at rest and its bursts over, and stays stopped", () => {
+		const { playback, steps } = play(20_000);
+		const last = steps.at(-1)?.playback;
+		expect(last?.done).toBe(true);
+		expect(last?.frame.view.settled).toBe(true);
+		expect(last?.frame.bursts).toEqual([]);
+		expect(last?.status.settled).toBe(true);
+		// It runs on past the settling only until the slosh dies down
+		expect(steps.length * FRAME).toBeGreaterThan(POUR_DELAY_MS + pour.settleMs);
+		expect(steps.length * FRAME).toBeLessThan(POUR_DELAY_MS + pour.settleMs + 3000);
+		expect(stepPour(pour, playback, frameAt(30_000), FRAME)).toBeNull();
 	});
 });

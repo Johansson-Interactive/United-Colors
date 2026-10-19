@@ -113,6 +113,20 @@ export function kickJelly(body: JellyBody, vx: number, vy: number): JellyBody {
 	return { ...body, lagVX: body.lagVX + vx, lagVY: body.lagVY + vy };
 }
 
+/** A slosh under this many radii, as far as it would swing, is too small to see */
+const JELLY_REST_RADII = 0.005;
+
+/**
+ * Whether `body`'s mass is at rest on a drop of radius `radius`: as far as its lag and its
+ * speed would swing it, the slosh is too small to see. A worklet.
+ */
+export function jellyAtRest(body: JellyBody, radius: number): boolean {
+	"worklet";
+	const omega = 2 * Math.PI * JELLY_HZ;
+	const swing = Math.hypot(body.lagX, body.lagY) + Math.hypot(body.lagVX, body.lagVY) / omega;
+	return swing < JELLY_REST_RADII * Math.max(radius, 1);
+}
+
 /** The shape to draw for `body` on a drop of radius `radius` */
 export function jellyShape(body: JellyBody, radius: number): JellyState {
 	"worklet";

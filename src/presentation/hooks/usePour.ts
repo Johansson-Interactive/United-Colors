@@ -6,56 +6,19 @@ import {
 	useSharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import {
-	JELLY_AT_REST,
-	type JellyState,
-	jellyShape,
-	kickJelly,
-	stepJelly,
-} from "../../application/jelly";
 import type { GameAudio } from "../../application/ports";
-import { advanceBursts, type Burst, withBurst } from "../effects/burstFrames";
-import { type PourPlan, type PourView, pourAt } from "../effects/pourRun";
-import { easeToward, landingKick } from "../effects/pourScene";
+import type { PourPlan, PourView } from "../effects/pourRun";
+import { type PourFrame, type PourStatus, startPour, stepPour } from "../effects/pourScene";
 
-/** The pour's clock starts this long after the game over mounts (ms), as it fades in */
-export const POUR_DELAY_MS = 350;
 /** How loud a catch sounds in the pour, against in play */
 const POUR_VOLUME = 0.4;
-/** Longest frame (ms) the drop's liquid integrates, so a stall does not kick it */
-const MAX_FRAME_MS = 100;
-
-/** One frame of the pour as the canvas draws it, from the drop's centre */
-export interface PourFrame {
-	view: PourView;
-	/** The drop's radius and the amber share, eased after the stepper's */
-	radius: number;
-	amber: number;
-	jelly: JellyState;
-	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
-	bursts: Burst[];
-	now: number;
-}
-
-/** What the game over's interface shows of the pour; it changes only now and then */
-export interface PourStatus {
-	clock: string;
-	/** What the catches landed so far paid */
-	tally: number;
-	settled: boolean;
-}
-
-function statusOf(view: PourView): PourStatus {
-	"worklet";
-	return { clock: view.clock, tally: view.drop.tally, settled: view.settled };
-}
 
 /**
- * Plays a planned pour from the game over's mount, sampling the stepper on the UI thread every
- * frame (see pourRun.ts): each landing kicks the drop's liquid, bursts as its catch did in
- * play and sounds quietly at its catch's pitch. The canvas draws `frame`; the interface reads `status`.
+ * Plays a planned pour from the game over's mount, stepping it on the UI thread every frame
+ * (see stepPour) and sounding each landing quietly at its catch's pitch. The canvas draws
+ * `frame`; the interface reads `status`. Once the pour is done, the frames do nothing more.
  * Leaving the game over unmounts it, and the pour stops with it. Never buzzes: a pour is a
- * recap, not play.
+ * replay, not play.
  */
 export function usePour(
 	plan: PourPlan,
@@ -64,20 +27,10 @@ export function usePour(
 	// Memoised by hand, as useStageEffects is: the React Compiler rebuilt the frame callback
 	// every render, and useFrameCallback re-registers on each new one
 	"use no memo";
-	const [initial] = useState(() => pourAt(plan, -POUR_DELAY_MS));
-	const [status, setStatus] = useState(() => statusOf(initial));
-	const frame = useSharedValue<PourFrame>({
-		view: initial,
-		radius: 0,
-		amber: 0,
-		jelly: { stretchX: 0, stretchY: 0, wobble: 0 },
-		bursts: [],
-		now: 0,
-	});
-	const start = useSharedValue(-1);
-	const sampled = useSharedValue(-POUR_DELAY_MS);
-	const body = useSharedValue(JELLY_AT_REST);
-	const shown = useSharedValue(statusOf(initial));
+	const [first] = useState(() => startPour(plan));
+	const [status, setStatus] = useState(first.status);
+	const playback = useSharedValue(first);
+	const frame = useSharedValue(first.frame);
 
 	const sound = useCallback(
 		(landings: PourView["landings"]) => {
@@ -92,41 +45,14 @@ export function usePour(
 	const onFrame = useCallback(
 		(info: FrameInfo) => {
 			"worklet";
-			if (start.get() < 0) start.set(info.timestamp);
-			const ms = info.timestamp - start.get() - POUR_DELAY_MS;
-			const dt = Math.min(MAX_FRAME_MS, info.timeSincePreviousFrame ?? 0);
-			const view = pourAt(plan, ms, sampled.get());
-			sampled.set(ms);
-			const before = frame.get();
-			let jelly = body.get();
-			let bursts = before.bursts;
-			for (const landing of view.landings) {
-				jelly = kickJelly(jelly, 0, landingKick(view.drop.radius, landing.point));
-				for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
-			}
-			jelly = stepJelly(jelly, 0, 0, view.drop.radius, dt);
-			body.set(jelly);
-			frame.set({
-				view,
-				radius: easeToward(before.radius, view.drop.radius, dt),
-				amber: easeToward(before.amber, view.amber, dt),
-				jelly: jellyShape(jelly, view.drop.radius),
-				bursts: advanceBursts(bursts, info.timestamp),
-				now: info.timestamp,
-			});
-			if (view.landings.length > 0) scheduleOnRN(sound, view.landings);
-			const was = shown.get();
-			if (
-				view.clock !== was.clock ||
-				view.drop.tally !== was.tally ||
-				view.settled !== was.settled
-			) {
-				const next = statusOf(view);
-				shown.set(next);
-				scheduleOnRN(setStatus, next);
-			}
+			const step = stepPour(plan, playback.get(), info.timestamp, info.timeSincePreviousFrame ?? 0);
+			if (step === null) return;
+			playback.set(step.playback);
+			frame.set(step.playback.frame);
+			if (step.landings.length > 0) scheduleOnRN(sound, step.landings);
+			if (step.status !== null) scheduleOnRN(setStatus, step.status);
 		},
-		[plan, start, sampled, frame, body, shown, sound],
+		[plan, playback, frame, sound],
 	);
 	useFrameCallback(onFrame);
 

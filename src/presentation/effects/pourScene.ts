@@ -4,16 +4,28 @@
  */
 
 import type { BestVerdict, GameStoreState } from "../../application/GameStore";
-import { JELLY_MAX_STRETCH, type JellyState } from "../../application/jelly";
+import {
+	JELLY_AT_REST,
+	JELLY_MAX_STRETCH,
+	type JellyBody,
+	type JellyState,
+	jellyAtRest,
+	jellyShape,
+	kickJelly,
+	stepJelly,
+} from "../../application/jelly";
 import { MERGE_SHRINK } from "../../application/renderScene";
 import type { RunRecord } from "../../domain/types";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
+import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
 	POUR_DOT_RADIUS,
 	type PourFlight,
 	type PourInput,
 	type PourPlan,
+	type PourView,
+	pourAt,
 } from "./pourRun";
 
 /** What the row under the drop shows: nothing, the `best N` caption, or NEW BEST! */
@@ -122,6 +134,131 @@ const KICK_POINT = 30;
 export function landingKick(radius: number, point: boolean): number {
 	"worklet";
 	return radius * (point ? KICK_POINT : KICK_SMALL);
+}
+
+/** The pour's clock starts this long after the game over mounts (ms), as it fades in */
+export const POUR_DELAY_MS = 350;
+/** Longest frame (ms) the drop's liquid integrates, so a stall does not kick it */
+const MAX_FRAME_MS = 100;
+/** How close (px, and share) the drawn drop must be to the stepper's to count as there */
+const EASED_PX = 0.01;
+const EASED_SHARE = 1e-4;
+
+/** One frame of the pour as the canvas draws it, from the drop's centre */
+export interface PourFrame {
+	view: PourView;
+	/** The drop's radius and the amber share, eased after the stepper's */
+	radius: number;
+	amber: number;
+	jelly: JellyState;
+	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
+	bursts: Burst[];
+	now: number;
+}
+
+/** What the game over's interface shows of the pour; it changes only now and then */
+export interface PourStatus {
+	clock: string;
+	/** What the catches landed so far paid */
+	tally: number;
+	settled: boolean;
+}
+
+function statusOf(view: PourView): PourStatus {
+	"worklet";
+	return { clock: view.clock, tally: view.drop.tally, settled: view.settled };
+}
+
+function sameStatus(a: PourStatus, b: PourStatus): boolean {
+	"worklet";
+	return a.clock === b.clock && a.tally === b.tally && a.settled === b.settled;
+}
+
+/** The pour played so far, carried from frame to frame on the UI thread */
+export interface PourPlayback {
+	/** The frame time the pour's clock started at; null before the first frame */
+	start: number | null;
+	/** The replay time last sampled (ms) */
+	sampled: number;
+	body: JellyBody;
+	frame: PourFrame;
+	/** The status last reported, or the one the pour starts with */
+	status: PourStatus;
+	/** Settled, its liquid at rest and its bursts over: nothing left to draw */
+	done: boolean;
+}
+
+/** What one frame of the pour does */
+export interface PourStep {
+	playback: PourPlayback;
+	/** Catches that landed this frame, for their sounds */
+	landings: PourView["landings"];
+	/** The status, when it changed this frame; null when it did not */
+	status: PourStatus | null;
+}
+
+/** A planned pour before its first frame */
+export function startPour(plan: PourPlan): PourPlayback {
+	const view = pourAt(plan, -POUR_DELAY_MS);
+	return {
+		start: null,
+		sampled: -POUR_DELAY_MS,
+		body: JELLY_AT_REST,
+		frame: { view, radius: 0, amber: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
+		status: statusOf(view),
+		done: false,
+	};
+}
+
+/**
+ * The pour at UI frame time `now`, `dtMs` after the frame before: the stepper sampled since the
+ * last frame, each landing kicking the drop's liquid down and adding its bursts, the drawn drop
+ * eased toward the stepper's and the liquid stepped. Null once the pour is done, as nothing
+ * changes after.
+ */
+export function stepPour(
+	plan: PourPlan,
+	playback: PourPlayback,
+	now: number,
+	dtMs: number,
+): PourStep | null {
+	"worklet";
+	if (playback.done) return null;
+	const start = playback.start ?? now;
+	const ms = now - start - POUR_DELAY_MS;
+	const dt = Math.min(MAX_FRAME_MS, dtMs);
+	const view = pourAt(plan, ms, playback.sampled);
+	const before = playback.frame;
+	let body = playback.body;
+	let bursts = before.bursts;
+	for (const landing of view.landings) {
+		body = kickJelly(body, 0, landingKick(view.drop.radius, landing.point));
+		for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
+	}
+	body = stepJelly(body, 0, 0, view.drop.radius, dt);
+	bursts = advanceBursts(bursts, now);
+	const radius = easeToward(before.radius, view.drop.radius, dt);
+	const amber = easeToward(before.amber, view.amber, dt);
+	const status = statusOf(view);
+	const changed = !sameStatus(status, playback.status);
+	const done =
+		view.settled &&
+		bursts.length === 0 &&
+		jellyAtRest(body, view.drop.radius) &&
+		Math.abs(radius - view.drop.radius) < EASED_PX &&
+		Math.abs(amber - view.amber) < EASED_SHARE;
+	return {
+		playback: {
+			start,
+			sampled: ms,
+			body,
+			frame: { view, radius, amber, jelly: jellyShape(body, view.drop.radius), bursts, now },
+			status: changed ? status : playback.status,
+			done,
+		},
+		landings: view.landings,
+		status: changed ? status : null,
+	};
 }
 
 /** What pourBody draws from: the moment's catches in flight and the drop as drawn */

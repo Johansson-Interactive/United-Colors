@@ -7,8 +7,14 @@ import { DotMatrixText } from "../components/DotMatrixText";
 import { layoutDotMatrix, matrixBox, pitchToFit } from "../dotmatrix/layout";
 import { PourCanvas } from "../effects/PourCanvas";
 import type { PourPlan } from "../effects/pourRun";
-import { type BestRow, bonusSpot, type PourFit, pourFit } from "../effects/pourScene";
-import type { PourFrame, PourStatus } from "../hooks/usePour";
+import {
+	type BestRow,
+	bonusSpot,
+	type PourFit,
+	type PourFrame,
+	type PourStatus,
+	pourFit,
+} from "../effects/pourScene";
 import { CAPTION, COMBO_AMBER, WHITE } from "../theme/theme";
 
 interface GameOverPourProps {

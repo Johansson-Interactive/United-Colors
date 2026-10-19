@@ -1,15 +1,23 @@
-import { Canvas, Group, Picture, Rect, Shader, Skia } from "@shopify/react-native-skia";
+import {
+	Canvas,
+	Group,
+	Picture,
+	Rect,
+	Shader,
+	type SkColor,
+	Skia,
+} from "@shopify/react-native-skia";
 import type React from "react";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 import { convertToRGBA, type SharedValue, useDerivedValue } from "react-native-reanimated";
 import { glareOffset } from "../dotSprites";
-import type { PourFrame } from "../hooks/usePour";
 import { mergeUniformsByName } from "../mergeShader";
 import { recordPicture } from "../recordPicture";
 import { drawBursts, drawGlareAt, MERGE_EFFECT } from "../sceneDrawer";
 import { COMBO_AMBER, INK } from "../theme/theme";
-import { POUR_DIGIT_SCALE, pourBody } from "./pourScene";
+import { BURST_COLORS } from "./burstFrames";
+import { POUR_DIGIT_SCALE, type PourFrame, pourBody } from "./pourScene";
 
 interface PourCanvasProps {
 	frame: SharedValue<PourFrame>;
@@ -22,6 +30,16 @@ interface PourCanvasProps {
 }
 
 const AMBER = Skia.Color(COMBO_AMBER);
+/**
+ * Every colour the pour draws in (the game's, as its catches have), parsed once: as Skia
+ * colours for the paints and as RGBA for the merge shader
+ */
+const FILLS: Record<string, SkColor> = {};
+const RGBA: Record<string, number[]> = {};
+for (const c of BURST_COLORS) {
+	FILLS[c] = Skia.Color(c);
+	RGBA[c] = convertToRGBA(c);
+}
 /** The light is still over the game over: the glare sits where an untilted phone puts it */
 const GLARE_X = glareOffset(0);
 const GLARE_Y = glareOffset(0);
@@ -49,7 +67,7 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 		const { view, radius, jelly, amber } = frame.get();
 		return pourBody({ flights: view.flights, color: view.drop.color, radius, jelly, top, amber });
 	});
-	const color = useDerivedValue(() => convertToRGBA(frame.get().view.drop.color));
+	const color = useDerivedValue(() => RGBA[frame.get().view.drop.color]);
 	const uniforms = useDerivedValue(() => mergeUniformsByName(body.get().values, color.get()));
 	const amberUniforms = useDerivedValue(() => mergeUniformsByName(body.get().values, AMBER));
 	const bodyX = useDerivedValue(() => body.get().x);
@@ -68,7 +86,7 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 	const under = useDerivedValue(() =>
 		recordPicture(underRecorder, (canvas) => {
 			for (const bead of body.get().beads) {
-				COLOR_PAINT.setColor(Skia.Color(bead.color));
+				COLOR_PAINT.setColor(FILLS[bead.color]);
 				canvas.drawCircle(bead.x, bead.y, bead.radius, COLOR_PAINT);
 				drawGlareAt(canvas, bead.x, bead.y, bead.radius, GLARE_X, GLARE_Y);
 			}
@@ -78,7 +96,7 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 		recordPicture(overRecorder, (canvas) => {
 			const { view, radius } = frame.get();
 			if (radius > 0.5) drawGlareAt(canvas, 0, 0, radius, GLARE_X, GLARE_Y);
-			COLOR_PAINT.setColor(Skia.Color(view.drop.color));
+			COLOR_PAINT.setColor(FILLS[view.drop.color]);
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
 			}

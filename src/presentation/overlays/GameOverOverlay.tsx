@@ -9,8 +9,8 @@ import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { Confetti } from "../effects/Confetti";
 import { planPour } from "../effects/pourRun";
-import { bestRow, pourInput } from "../effects/pourScene";
-import { POUR_DELAY_MS, usePour } from "../hooks/usePour";
+import { bestRow, POUR_DELAY_MS, pourInput } from "../effects/pourScene";
+import { usePour } from "../hooks/usePour";
 import { WHITE } from "../theme/theme";
 import { GameOverPour } from "./GameOverPour";
 
