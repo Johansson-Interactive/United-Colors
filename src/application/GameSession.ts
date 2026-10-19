@@ -19,7 +19,8 @@ export interface GameSessionOptions {
 
 /** Screen the engine assumes until the canvas reports its layout */
 const DEFAULT_SCREEN: ScreenSize = { width: 400, height: 800 };
-const DEFAULT_DENSITY = 400;
+/** Pixel density the dot sizes scale with unless the session is given one, as the game is */
+export const DEFAULT_DENSITY = 400;
 
 /**
  * One game on one screen: the engine, the clock that drives it, the store it publishes frames

@@ -65,7 +65,8 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 
 	const body = useDerivedValue(() => {
 		const { view, radius, jelly, amber } = frame.get();
-		return pourBody({ flights: view.flights, color: view.drop.color, radius, jelly, top, amber });
+		const { flights, drop } = view;
+		return pourBody({ flights, color: drop.color, radius, jelly, top, amber, scale });
 	});
 	const color = useDerivedValue(() => RGBA[frame.get().view.drop.color]);
 	const uniforms = useDerivedValue(() => mergeUniformsByName(body.get().values, color.get()));

@@ -3,6 +3,7 @@
  * stepper's view and what the shell puts on screen, kept here so the React shell stays thin.
  */
 
+import { DEFAULT_DENSITY } from "../../application/GameSession";
 import type { BestVerdict, GameStoreState } from "../../application/GameStore";
 import {
 	JELLY_AT_REST,
@@ -14,6 +15,7 @@ import {
 	stepJelly,
 } from "../../application/jelly";
 import { MERGE_SHRINK } from "../../application/renderScene";
+import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunRecord } from "../../domain/types";
 import { layoutDotMatrix, matrixBox, pitchToFit } from "../dotmatrix/layout";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
@@ -305,7 +307,12 @@ export interface PourBodyInput {
 	top: number;
 	/** The combo bonus's share of the drop, as drawn */
 	amber: number;
+	/** The scale the pour is drawn at, so its catches fall at their size in play on screen */
+	scale: number;
 }
+
+/** A catch falls at a free small dot's radius in play (px on screen), point dots too */
+const POUR_CATCH_RADIUS = (SMALL_DOT_SIZE_RATIO * DEFAULT_DENSITY) / 2;
 
 /** A catch drawn on its own, as a glass bead, outside the liquid body */
 interface PourBead {
@@ -333,11 +340,20 @@ export interface PourBody {
 
 /**
  * The pour at one moment as the merge shader draws it, the way a caught dot merges into the
- * player in play: each catch falls from out of sight above the canvas, speeding up, onto the
- * drop's top, then slides into its centre, shrinking as it goes. A catch of another colour
- * (a point dot, before it recolours the drop) is a bead of its own.
+ * player in play: each catch falls as a small dot, straight down from out of sight above the
+ * canvas, speeding up, onto its spot on the drop's top, then slides into its centre, shrinking
+ * as it goes. A catch of another colour (a point dot, before it recolours the drop) is a bead
+ * of its own.
  */
-export function pourBody({ flights, color, radius, jelly, top, amber }: PourBodyInput): PourBody {
+export function pourBody({
+	flights,
+	color,
+	radius,
+	jelly,
+	top,
+	amber,
+	scale,
+}: PourBodyInput): PourBody {
 	"worklet";
 	// The drop is the first body, its liquid; before the first catch lands there is none, and
 	// that catch is the first body until it does
@@ -346,19 +362,24 @@ export function pourBody({ flights, color, radius, jelly, top, amber }: PourBody
 	const reach = radius * LIQUID_REACH;
 	let side = reach;
 	let highest = -reach;
+	const r = POUR_CATCH_RADIUS / scale;
 	for (const f of flights) {
-		const r = f.point ? 2 * POUR_DOT_RADIUS : POUR_DOT_RADIUS;
+		// It comes to rest touching the drop at its spot, out along the line through it from
+		// the drop's centre (straight above it on a drop with no size yet)
+		const out = Math.hypot(f.x, f.y);
+		const landedX = out > 0 ? (f.x / out) * (radius + r) : 0;
+		const landedY = out > 0 ? (f.y / out) * (radius + r) : -(radius + r);
 		const from = top - r;
-		const landed = -(radius + r);
 		const slide = f.merge * f.merge;
-		const y = f.merge > 0 ? landed * (1 - slide) : from + (landed - from) * f.fall * f.fall;
+		const x = landedX * (1 - slide);
+		const y = f.merge > 0 ? landedY * (1 - slide) : from + (landedY - from) * f.fall * f.fall;
 		const shrunk = r * (1 - (1 - MERGE_SHRINK) * slide);
 		if (f.color !== color) {
-			beads.push({ x: 0, y, radius: shrunk, color: f.color });
+			beads.push({ x, y, radius: shrunk, color: f.color });
 			continue;
 		}
-		blobs.push(0, y, shrunk);
-		side = Math.max(side, shrunk);
+		blobs.push(x, y, shrunk);
+		side = Math.max(side, Math.abs(x) + shrunk);
 		highest = Math.min(highest, y - shrunk);
 	}
 	const count = blobs.length / 3;
