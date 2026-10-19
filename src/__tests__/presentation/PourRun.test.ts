@@ -4,8 +4,12 @@ import { GLYPH_ROWS } from "../../presentation/dotmatrix/glyphs";
 import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
 import { burstColor, layOutBurst, type NewBurst } from "../../presentation/effects/burstFrames";
 import {
+	amberLevel,
+	POUR_BONUS_MIN_PITCH,
+	POUR_FADE_MS,
 	POUR_FALL_MS,
 	POUR_MAX_RADIUS,
+	POUR_RISE_MS,
 	POUR_SETTLE_MS,
 	POUR_SPAN_MS,
 	POUR_STAGGER_MS,
@@ -333,22 +337,10 @@ describe("pourAt", () => {
 		}
 	});
 
-	it("shows the combo bonus once settled: its share of the drop and a +N label", () => {
-		// Three small dots in one combo pay 9, of which 6 is combo bonus
-		const p = plan({
-			catches: [caught(10), caught(12, { step: 2, value: 3 }), caught(14, { step: 3, value: 5 })],
-			ticks: 60,
-		});
-		const settleAt = POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS;
-		expect(pourAt(p, settleAt - 1)).toMatchObject({ amber: 0, bonusLabel: null });
-		expect(pourAt(p, settleAt).amber).toBeCloseTo(6 / 9);
-		expect(pourAt(p, settleAt).bonusLabel).toBe("+6");
-	});
-
-	it("has no combo mark when the run earned no combo bonus, or no score", () => {
+	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
 			const p = plan({ catches, ticks: 120 });
-			expect(pourAt(p, 10_000)).toMatchObject({ amber: 0, bonusLabel: null, settled: true });
+			expect(pourAt(p, 10_000)).toMatchObject({ amber: 0, bonus: null, settled: true });
 		}
 	});
 
@@ -373,5 +365,127 @@ describe("pourAt", () => {
 		const p = plan({ catches: [], ticks: seconds(42) });
 		expect(pourAt(p, POUR_START_MS + POUR_SPAN_MS / 2).clock).toBe("0:21");
 		expect(pourAt(p, POUR_START_MS + POUR_SPAN_MS).clock).toBe("0:42");
+	});
+});
+
+describe("the amber layer", () => {
+	const SETTLE_AT = POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS;
+	const RESTED = SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS;
+
+	/** A combo of `length` small dots, then `alone` more on their own: length² + alone scored */
+	function comboRun(length: number, alone: number): RunRecord {
+		const combo = Array.from({ length }, (_, i) =>
+			caught(10 + i, { step: i + 1, value: 2 * i + 1 }),
+		);
+		const lone = Array.from({ length: alone }, (_, i) => caught(100 + 20 * i));
+		return { catches: [...combo, ...lone], ticks: 130 + 20 * alone };
+	}
+
+	/** The amber surface's height from the drop's centre (px, down) */
+	const surfaceOf = (view: PourView) => amberLevel(view.amber) * view.drop.radius;
+
+	/** The `+N` of a view, which must have one */
+	function bonusOf(view: PourView) {
+		if (view.bonus === null) throw new Error("no +N");
+		return view.bonus;
+	}
+
+	/** Every dot of `+N`, with the half pitch around it, lies in the drop and under the amber */
+	function expectInAmber(view: PourView) {
+		const { dots, pitch } = bonusOf(view);
+		const surface = surfaceOf(view);
+		for (const { x, y } of dots) {
+			expect(y - pitch / 2).toBeGreaterThanOrEqual(surface);
+			expect(Math.hypot(Math.abs(x) + pitch / 2, Math.abs(y) + pitch / 2)).toBeLessThanOrEqual(
+				view.drop.radius + 1e-6,
+			);
+		}
+	}
+
+	/** The top and bottom of the tally's dots with the half pitch around them, and its middle */
+	function tallyBox({ digits }: PourView) {
+		const ys = digits.map((d) => d.y);
+		const top = Math.min(...ys) - PITCH / 2;
+		const bottom = Math.max(...ys) + PITCH / 2;
+		return { top, bottom, middle: (top + bottom) / 2 };
+	}
+
+	it("raises a small combo bonus's share so the layer holds +N at the smallest readable size", () => {
+		// A +2 combo bonus in a score of 102: under 2% of the drop
+		const view = pourAt(plan(comboRun(2, 98)), RESTED);
+		expect(view.drop.tally).toBe(102);
+		expect(view.amber).toBeGreaterThan(5 * (2 / 102));
+		const bonus = bonusOf(view);
+		expect(bonus.dots).toHaveLength(layoutDotMatrix("+2").dots.length);
+		expect(bonus.pitch).toBeCloseTo(POUR_BONUS_MIN_PITCH, 2);
+		expectInAmber(view);
+	});
+
+	it("draws a larger combo bonus at its true share, +N growing with the layer", () => {
+		// A combo of five pays 25, 20 of it bonus, in a score of 75
+		const view = pourAt(plan(comboRun(5, 50)), RESTED);
+		expect(view.drop.tally).toBe(75);
+		expect(view.amber).toBeCloseTo(20 / 75);
+		const { pitch, dots } = bonusOf(view);
+		expect(dots).toHaveLength(layoutDotMatrix("+20").dots.length);
+		expect(pitch).toBeGreaterThan(POUR_BONUS_MIN_PITCH);
+		expect(pitch).toBeLessThan(PITCH);
+		expectInAmber(view);
+	});
+
+	it("never draws +N larger than the tally's dots", () => {
+		// A combo of ten pays 100, 90 of it bonus, its tally set close
+		const view = pourAt(planPour({ record: comboRun(10, 0), color: RED, pitch: 6 }), RESTED);
+		expect(view.amber).toBeCloseTo(0.9);
+		expect(bonusOf(view).pitch).toBe(6);
+		expectInAmber(view);
+	});
+
+	it("pours the amber in from the bottom over about half a second, then fades +N in", () => {
+		const p = plan(comboRun(10, 0));
+		expect(POUR_RISE_MS).toBeGreaterThanOrEqual(400);
+		expect(POUR_RISE_MS).toBeLessThanOrEqual(600);
+		expect(pourAt(p, SETTLE_AT - 1).amber).toBe(0);
+		expect(pourAt(p, SETTLE_AT).amber).toBe(0);
+		let last = 0;
+		for (let ms = SETTLE_AT; ms <= SETTLE_AT + POUR_RISE_MS; ms += 10) {
+			const view = pourAt(p, ms);
+			expect(view.amber).toBeGreaterThanOrEqual(last);
+			last = view.amber;
+			expect(bonusOf(view).opacity).toBe(0);
+		}
+		const halfway = pourAt(p, SETTLE_AT + POUR_RISE_MS / 2).amber;
+		expect(halfway).toBeGreaterThan(0.1);
+		expect(halfway).toBeLessThan(0.8);
+		expect(pourAt(p, SETTLE_AT + POUR_RISE_MS).amber).toBeCloseTo(0.9);
+		const fading = bonusOf(pourAt(p, SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
+		expect(fading).toBeGreaterThan(0);
+		expect(fading).toBeLessThan(1);
+		expect(bonusOf(pourAt(p, RESTED)).opacity).toBe(1);
+	});
+
+	it("centres the settled tally in the player's colour, between the amber and the drop's top", () => {
+		const view = pourAt(plan(comboRun(5, 50)), RESTED);
+		expect(tallyBox(view).middle).toBeCloseTo((surfaceOf(view) - view.drop.radius) / 2);
+	});
+
+	it("lifts the tally just clear of the amber when there's no room, out of the drop's top", () => {
+		const view = pourAt(plan(comboRun(10, 0)), RESTED);
+		const { top, bottom } = tallyBox(view);
+		expect(bottom).toBeLessThanOrEqual(surfaceOf(view));
+		expect(bottom).toBeGreaterThan(surfaceOf(view) - PITCH);
+		expect(top).toBeLessThan(-view.drop.radius);
+		// Dots out of the drop are drawn in its colour, as before it settled
+		for (const d of view.digits) expect(d.ink).toBe(Math.hypot(d.x, d.y) < view.drop.radius);
+		expect(view.digits.some((d) => !d.ink)).toBe(true);
+	});
+
+	it("lifts the tally with the amber as it rises, always clear of it", () => {
+		const p = plan(comboRun(10, 0));
+		expect(tallyBox(pourAt(p, SETTLE_AT - 1)).middle).toBeCloseTo(0);
+		for (let ms = SETTLE_AT; ms <= RESTED; ms += 10) {
+			const view = pourAt(p, ms);
+			expect(tallyBox(view).bottom).toBeLessThanOrEqual(surfaceOf(view) + 1e-6);
+		}
 	});
 });

@@ -15,11 +15,13 @@ import {
 } from "../../application/jelly";
 import { MERGE_SHRINK } from "../../application/renderScene";
 import type { RunRecord } from "../../domain/types";
-import { layoutDotMatrix, matrixBox, pitchToFit } from "../dotmatrix/layout";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
 import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
+	amberLevel,
 	POUR_DOT_RADIUS,
+	POUR_FADE_MS,
+	POUR_RISE_MS,
 	type PourFlight,
 	type PourInput,
 	type PourPlan,
@@ -50,25 +52,6 @@ export function bestRow(
 		: { kind: "none" };
 }
 
-/**
- * Where the amber layer's level sits, in radii below the drop's centre (1 is its bottom, -1 its
- * top), so that the part of the drop below it is `share` of the drop's area
- */
-export function amberLevel(share: number): number {
-	"worklet";
-	// The part of a unit circle below a line `d` under its centre, over the circle's area,
-	// falls from 1 to 0 as `d` runs from -1 to 1
-	const below = (d: number) => (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI;
-	let lo = -1;
-	let hi = 1;
-	for (let i = 0; i < 40; i++) {
-		const mid = (lo + hi) / 2;
-		if (below(mid) > share) lo = mid;
-		else hi = mid;
-	}
-	return (lo + hi) / 2;
-}
-
 /** No catches, no time: what a game over without a run record pours */
 const NO_RUN: RunRecord = { catches: [], ticks: 0 };
 
@@ -91,41 +74,6 @@ export function pourInput({ frame }: Pick<GameStoreState, "frame">, color: strin
 	};
 }
 
-/** Space between the drop and the `+N` label (px) */
-const BONUS_GAP = 10;
-/** The `+N` label's dot spacing (px), closed up only to keep it on the screen */
-const BONUS_PITCH = 3;
-/** Space the `+N` label keeps from the screen's edge (px) */
-const BONUS_EDGE = 8;
-
-/** Where the `+N` label's box goes in the pour's area, and its dot spacing (px) */
-export interface BonusSpot {
-	left: number;
-	top: number;
-	width: number;
-	height: number;
-	pitch: number;
-}
-
-/**
- * The `+N` label in an area of `box` with the drop at its centre, drawn at the fit's scale:
- * beside the settled drop, its middle halfway down the amber layer, closed up to stay on the
- * screen. The plan must have a combo bonus.
- */
-export function bonusSpot(
-	plan: PourPlan,
-	box: { width: number; height: number },
-	fit: PourFit,
-): BonusSpot {
-	const { radius } = plan.settledDrop;
-	const left = box.width / 2 + (radius + BONUS_GAP) * fit.scale;
-	const middle = box.height / 2 + ((radius * amberLevel(plan.amber) + radius) / 2) * fit.scale;
-	const layout = layoutDotMatrix(plan.bonusLabel ?? "");
-	const pitch = pitchToFit(layout, box.width - left - BONUS_EDGE, BONUS_PITCH);
-	const { width, height, pad } = matrixBox(layout, pitch, false, false);
-	return { left: left - pad, top: middle - height / 2, width, height, pitch };
-}
-
 /** A tally dot's radius as a fraction of the pitch, as DotMatrixText draws it */
 export const POUR_DIGIT_SCALE = 0.38;
 
@@ -137,13 +85,13 @@ export interface PourFit {
 
 /**
  * The pour's slot between the clock and the best row: high enough for the settled drop (as
- * far as its slosh reaches) and the score's dots at `pitch`, scaled down to fit `available` px
- * when that is not
+ * far as its slosh reaches) and the score's dots at `pitch`, lifted clear of the amber,
+ * scaled down to fit `available` px when that is not
  */
 export function pourFit(plan: PourPlan, pitch: number, available: number): PourFit {
 	let extent = plan.settledDrop.radius * LIQUID_REACH;
 	for (const dot of plan.digits[plan.digits.length - 1]) {
-		extent = Math.max(extent, Math.abs(dot.y) + pitch * POUR_DIGIT_SCALE);
+		extent = Math.max(extent, Math.abs(dot.y + plan.lift) + pitch * POUR_DIGIT_SCALE);
 	}
 	const scale = Math.min(1, available / (2 * extent));
 	return { scale, half: extent * scale };
@@ -172,15 +120,15 @@ export function landingKick(radius: number, point: boolean): number {
 export const POUR_DELAY_MS = 350;
 /** Longest frame (ms) the drop's liquid integrates, so a stall does not kick it */
 const MAX_FRAME_MS = 100;
-/** How close (px, and share) the drawn drop must be to the stepper's to count as there */
+/** How close (px) the drawn drop must be to the stepper's to count as there */
 const EASED_PX = 0.01;
-const EASED_SHARE = 1e-4;
 
 /** One frame of the pour as the canvas draws it, from the drop's centre */
 export interface PourFrame {
 	view: PourView;
-	/** The drop's radius and the amber share, eased after the stepper's */
+	/** The drop's radius, eased after the stepper's */
 	radius: number;
+	/** The amber share, as the stepper's: it rises smoothly on its own */
 	amber: number;
 	jelly: JellyState;
 	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
@@ -216,7 +164,7 @@ export interface PourPlayback {
 	frame: PourFrame;
 	/** The status last reported, or the one the pour starts with */
 	status: PourStatus;
-	/** Settled, its liquid at rest and its bursts over: nothing left to draw */
+	/** Settled, its amber risen, `+N` in, its liquid at rest and its bursts over: nothing left to draw */
 	done: boolean;
 }
 
@@ -270,15 +218,14 @@ export function stepPour(
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
 	bursts = advanceBursts(bursts, now);
 	const radius = easeToward(before.radius, view.drop.radius, dt);
-	const amber = easeToward(before.amber, view.amber, dt);
+	const { amber } = view;
 	const status = statusOf(view);
 	const changed = !sameStatus(status, playback.status);
 	const done =
-		view.settled &&
+		ms >= plan.settleMs + POUR_RISE_MS + POUR_FADE_MS &&
 		bursts.length === 0 &&
 		jellyAtRest(body, view.drop.radius) &&
-		Math.abs(radius - view.drop.radius) < EASED_PX &&
-		Math.abs(amber - view.amber) < EASED_SHARE;
+		Math.abs(radius - view.drop.radius) < EASED_PX;
 	return {
 		playback: {
 			start,

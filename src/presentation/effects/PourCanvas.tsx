@@ -47,6 +47,10 @@ const GLARE_Y = glareOffset(0);
 const INK_PAINT = Skia.Paint();
 INK_PAINT.setAntiAlias(true);
 INK_PAINT.setColor(Skia.Color(INK));
+/** The `+N` in the amber, in ink as it fades in */
+const BONUS_PAINT = Skia.Paint();
+BONUS_PAINT.setAntiAlias(true);
+BONUS_PAINT.setColor(Skia.Color(INK));
 /** A bead's body, and a tally dot outside the drop, in their colour each frame */
 const COLOR_PAINT = Skia.Paint();
 COLOR_PAINT.setAntiAlias(true);
@@ -54,9 +58,10 @@ COLOR_PAINT.setAntiAlias(true);
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
  * the drop and the catches merging into it as one body under the merge shader, again in amber
- * below the combo bonus's level, so the layer slops with the liquid; then its glare and the
- * tally over it, ink inside the drop and in the drop's colour outside, and the landings' bursts
- * over all, as in play. Catches of another colour are drawn under it. Every frame, on the UI thread, from `frame`.
+ * below the combo bonus's level, so the layer slops with the liquid; then its glare, the tally
+ * over it, ink inside the drop and in the drop's colour outside, and the `+N` in ink in the
+ * amber, and the landings' bursts over all, as in play. Catches of another colour are drawn
+ * under it. Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;
@@ -99,6 +104,12 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 			COLOR_PAINT.setColor(FILLS[view.drop.color]);
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
+			}
+			const { bonus } = view;
+			if (bonus !== null && bonus.opacity > 0) {
+				BONUS_PAINT.setAlphaf(bonus.opacity);
+				const bonusRadius = bonus.pitch * POUR_DIGIT_SCALE;
+				for (const dot of bonus.dots) canvas.drawCircle(dot.x, dot.y, bonusRadius, BONUS_PAINT);
 			}
 			const { bursts, now } = frame.get();
 			drawBursts(canvas, bursts, now);

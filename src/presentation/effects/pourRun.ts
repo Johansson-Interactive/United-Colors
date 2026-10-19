@@ -2,7 +2,8 @@
  * Pure stepper behind the game over's pour: the run replayed as its catches falling in, in the
  * order and rhythm they happened, and merging into one drop of the player's liquid, while a
  * clock runs up to the run time. Every run pours in the same span (POUR_SPAN_MS), whatever its
- * length; once it settles, the combo bonus shows as an amber share of the drop and a `+N`.
+ * length; once it settles, the combo bonus rises in as an amber layer at the drop's bottom, the
+ * tally lifting clear of it, and its `+N` fades in inside it.
  *
  * planPour works a run's pour out once, on the JS thread; pourAt then samples it at a replay
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
@@ -36,6 +37,15 @@ const MERGE_MS = 260;
 export const POUR_STAGGER_MS = Math.ceil((POUR_FALL_MS + MERGE_MS) / MERGE_MAX_DOTS) + 1;
 /** The drop comes to rest this long after the last landing (ms); then the pour is settled */
 export const POUR_SETTLE_MS = 700;
+/** Once settled, the amber layer rises from the drop's bottom to its level over this (ms)... */
+export const POUR_RISE_MS = 500;
+/** ...then its `+N` fades in over this (ms) */
+export const POUR_FADE_MS = 300;
+
+/** The smallest `+N` dot spacing still readable (px): the amber layer is at least this tall */
+export const POUR_BONUS_MIN_PITCH = 4;
+/** Room the amber's surface keeps from the tally above it and from `+N` below it (px) */
+const AMBER_CLEAR = 3;
 
 /**
  * The drop's area follows the tally: its radius is this many px per root of the tally. A small
@@ -95,6 +105,16 @@ interface PourDigitDot {
 	ink: boolean;
 }
 
+/** The combo bonus's `+N`, drawn in ink inside the amber layer */
+interface PourBonus {
+	/** Its dots, from the drop's centre (px) */
+	dots: readonly { x: number; y: number }[];
+	/** Their spacing (px), never more than the tally's */
+	pitch: number;
+	/** 0 until the amber has risen, then fading in to 1 */
+	opacity: number;
+}
+
 interface PlannedCatch extends PourLanding {
 	landMs: number;
 }
@@ -122,9 +142,15 @@ export interface PourPlan {
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
 	settleMs: number;
-	/** The combo bonus's share of the score, and its label; 0 and null without one */
-	amber: number;
-	bonusLabel: string | null;
+	/**
+	 * The settled amber layer's level, in radii below the drop's centre (see amberLevel): the
+	 * combo bonus's share of the drop, raised to hold `+N`; 1, the drop's bottom, without one
+	 */
+	level: number;
+	/** How far the settled tally sits from the drop's centre (px, so negative: up) */
+	lift: number;
+	/** The settled `+N`; null without a combo bonus */
+	bonus: Omit<PourBonus, "opacity"> | null;
 }
 
 /** What the shell draws at one moment of the pour */
@@ -134,14 +160,14 @@ export interface PourView {
 	/** Bodies falling or merging, in landing order; never more than MERGE_MAX_DOTS */
 	flights: PourFlight[];
 	drop: PourDrop;
-	/** The tally's dots */
+	/** The tally's dots, lifted with the amber as it rises */
 	digits: readonly PourDigitDot[];
 	/** The clock: run time so far as `M:SS`, rounded down */
 	clock: string;
-	/** The combo bonus's share of the drop's area, drawn amber at its bottom; 0 until settled */
+	/** The share of the drop's area drawn amber at its bottom; 0 until settled, then rising */
 	amber: number;
-	/** `+N` beside the amber layer; null until settled and without a combo bonus */
-	bonusLabel: string | null;
+	/** `+N` inside the amber layer; null without a combo bonus */
+	bonus: PourBonus | null;
 	/** The drop is at rest: `NEW BEST!` and confetti may follow */
 	settled: boolean;
 }
@@ -212,14 +238,98 @@ function landingBursts(c: RunCatch, radius: number, firstId: number): Burst[] {
 	return stepBursts(NO_CATCH_SPOT, event, player).bursts.map((b, i) => layOutBurst(firstId + i, b));
 }
 
+/**
+ * The part of a drop's area below a level `d` radii under its centre: the part of a unit circle
+ * below a line `d` under its centre, over the circle's area, falling from 1 to 0 as `d` runs
+ * from -1 to 1
+ */
+function shareBelow(d: number): number {
+	"worklet";
+	return (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI;
+}
+
+/**
+ * Where the amber layer's level sits, in radii below the drop's centre (1 is its bottom, -1 its
+ * top), so that the part of the drop below it is `share` of the drop's area
+ */
+export function amberLevel(share: number): number {
+	"worklet";
+	let lo = -1;
+	let hi = 1;
+	for (let i = 0; i < 40; i++) {
+		const mid = (lo + hi) / 2;
+		if (shareBelow(mid) > share) lo = mid;
+		else hi = mid;
+	}
+	return (lo + hi) / 2;
+}
+
+/**
+ * Where a box `cols` by `rows` cells at `pitch` can go in a drop of `radius` under a surface
+ * `surface` px below its centre, clear of it: the highest its top can be, and the height to
+ * spare under the box from there, as the drop's outline narrows away from its middle; negative
+ * when it does not fit
+ */
+function roomUnder(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+	const half = (cols * pitch) / 2;
+	// How far from the centre the drop is still as wide as the box
+	const reach = half < radius ? Math.sqrt(radius * radius - half * half) : 0;
+	const top = Math.max(-reach, surface + AMBER_CLEAR);
+	return { top, spare: reach - top - rows * pitch };
+}
+
+/**
+ * The settled amber layer, `bonus` of `score`, in a drop of `radius` whose tally's dots are
+ * `pitch` apart: its level, raised where needed to hold `+N` at POUR_BONUS_MIN_PITCH, and `+N`
+ * centred in it, as large as the layer holds up to `pitch`
+ */
+function amberOf(bonus: number, score: number, radius: number, pitch: number) {
+	const layout = layoutDotMatrix(`+${bonus}`);
+	const { cols, rows } = layout;
+	const least = roomUnder(radius, -radius, cols, rows, POUR_BONUS_MIN_PITCH);
+	// The surface can be no lower than this for the box to fit beneath it
+	const lowest = least.spare >= 0 ? least.top + least.spare - AMBER_CLEAR : -radius;
+	const level = Math.max(-1, Math.min(amberLevel(bonus / score), lowest / radius));
+	const surface = level * radius;
+	let bonusPitch = pitch;
+	if (roomUnder(radius, surface, cols, rows, pitch).spare < 0) {
+		let lo = 0;
+		let hi = pitch;
+		for (let i = 0; i < 30; i++) {
+			const mid = (lo + hi) / 2;
+			if (roomUnder(radius, surface, cols, rows, mid).spare >= 0) lo = mid;
+			else hi = mid;
+		}
+		bonusPitch = lo;
+	}
+	const { top, spare } = roomUnder(radius, surface, cols, rows, bonusPitch);
+	const dots = layout.dots.map(({ col, row }) => ({
+		x: (col + 0.5 - cols / 2) * bonusPitch,
+		y: top + spare / 2 + (row + 0.5) * bonusPitch,
+	}));
+	return { level, bonus: { dots, pitch: bonusPitch } };
+}
+
+/**
+ * How far the settled tally, `height` px tall, sits from the drop's centre over an amber
+ * surface `surface` px below it: centred in the player's colour above it where that holds it,
+ * otherwise just clear of the amber, out of the drop's top if need be
+ */
+function tallyLift(radius: number, surface: number, height: number): number {
+	if (surface + radius >= height + 2 * AMBER_CLEAR) return (surface - radius) / 2;
+	return surface - AMBER_CLEAR - height / 2;
+}
+
 /** Work out a run's pour */
 export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
 	const times = landTimes(catches.map((c) => c.tick));
 	const drops = dropsOf(record, color);
 	const settledDrop = drops[drops.length - 1];
-	const score = settledDrop.tally;
+	const { radius, tally: score } = settledDrop;
 	const bonus = comboBonus(record);
+	const amber = bonus > 0 ? amberOf(bonus, score, radius, pitch) : null;
+	const tallyHeight = layoutDotMatrix(String(score)).rows * pitch;
 	let burstId = 0;
 	return {
 		catches: catches.map((c, i) => {
@@ -233,8 +343,9 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
 		seconds: runSeconds(record.ticks),
 		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,
-		amber: bonus > 0 ? bonus / score : 0,
-		bonusLabel: bonus > 0 ? `+${bonus}` : null,
+		level: amber?.level ?? 1,
+		lift: amber ? tallyLift(radius, amber.level * radius, tallyHeight) : 0,
+		bonus: amber?.bonus ?? null,
 	};
 }
 
@@ -275,14 +386,31 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	}
 	const drop = plan.drops[landed];
 	const settled = ms >= plan.settleMs;
+	// The amber's surface and the tally above it rise together, easing in and out
+	const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
+	const risen = t * t * (3 - 2 * t);
+	const lift = plan.lift * risen;
+	let digits = plan.digits[landed];
+	if (lift !== 0) {
+		const lifted: PourDigitDot[] = [];
+		for (const { x, y } of digits) {
+			lifted.push({ x, y: y + lift, ink: Math.hypot(x, y + lift) < drop.radius });
+		}
+		digits = lifted;
+	}
+	const { bonus } = plan;
 	return {
 		landings,
 		flights,
 		drop,
-		digits: plan.digits[landed],
+		digits,
 		clock: formatClock(plan.seconds * clamp01((ms - POUR_START_MS) / POUR_SPAN_MS)),
-		amber: settled ? plan.amber : 0,
-		bonusLabel: settled ? plan.bonusLabel : null,
+		amber: shareBelow(1 + (plan.level - 1) * risen),
+		bonus: bonus && {
+			dots: bonus.dots,
+			pitch: bonus.pitch,
+			opacity: clamp01((ms - plan.settleMs - POUR_RISE_MS) / POUR_FADE_MS),
+		},
 		settled,
 	};
 }
