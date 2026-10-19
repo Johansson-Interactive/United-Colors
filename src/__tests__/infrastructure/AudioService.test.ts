@@ -110,6 +110,28 @@ describe("AudioService", () => {
 		expect(volumes).toEqual([0.95, 0.95, 0.95, 0.95, 0.45, 0.45, 0.45, 0.6, 0.6, 1]);
 	});
 
+	it("plays catches quieter when asked, scaling their mix level", async () => {
+		const audio = new AudioService(sources, music, host());
+		await audio.load();
+		audio.playCollect(0, 0.5);
+		audio.playLargeCollect(3, 0.5);
+		await flush();
+		const played = players.filter((p) => p.play.mock.calls.length > 0).map((p) => p.volume);
+		expect(played).toHaveLength(2);
+		expect(played[0]).toBeCloseTo(0.475);
+		expect(played[1]).toBeCloseTo(0.225);
+	});
+
+	it("keeps quiet catches silent while effects are muted", async () => {
+		const audio = new AudioService(sources, music, host());
+		await audio.load();
+		audio.setEffectsMuted(true);
+		audio.playCollect(0, 0.5);
+		audio.playLargeCollect(0, 0.5);
+		await flush();
+		expect(players.every((p) => p.play.mock.calls.length === 0)).toBe(true);
+	});
+
 	it("loads once however often load is called", async () => {
 		const audio = new AudioService(sources, music, host());
 		await Promise.all([audio.load(), audio.load()]);

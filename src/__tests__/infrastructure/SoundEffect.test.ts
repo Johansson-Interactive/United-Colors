@@ -9,6 +9,7 @@ function fakeVoice() {
 		pauses: 0,
 		removed: false,
 		shouldCorrectPitch: true,
+		volume: 1,
 		setPlaybackRate: vi.fn(),
 		seekTo: vi.fn(
 			() =>
@@ -62,6 +63,36 @@ describe("SoundEffect", () => {
 		a.voice.playing = false;
 		effect.play(7);
 		expect(a.voice.setPlaybackRate.mock.lastCall?.[0]).toBeCloseTo(1.4983);
+	});
+
+	it("plays at its mix level, scaled by the volume asked", async () => {
+		const a = fakeVoice();
+		const effect = new SoundEffect([a.asVoice], 0.8);
+		expect(a.voice.volume).toBe(0.8);
+		effect.play(0, 0.5);
+		expect(a.voice.volume).toBeCloseTo(0.4);
+		await a.finishSeeks();
+		expect(a.voice.plays).toBe(1);
+	});
+
+	it("a quiet play doesn't leave its voice quiet for the next full play", async () => {
+		const a = fakeVoice();
+		const effect = new SoundEffect([a.asVoice], 0.8);
+		effect.play(0, 0.5);
+		await a.finishSeeks();
+		a.voice.playing = false;
+		effect.play();
+		expect(a.voice.volume).toBe(0.8);
+	});
+
+	it("a quiet play stays silent while muted", async () => {
+		const a = fakeVoice();
+		const effect = new SoundEffect([a.asVoice], 0.8);
+		effect.setMuted(true);
+		effect.play(0, 0.5);
+		await a.finishSeeks();
+		expect(a.voice.seekTo).not.toHaveBeenCalled();
+		expect(a.voice.plays).toBe(0);
 	});
 
 	it("overlapping plays use separate voices", async () => {
