@@ -18,6 +18,20 @@ interface PlayerSpot {
 	size: number;
 }
 
+/** What the weights are laid out for: the screen's size and the density (which sizes the dots) */
+interface Layout {
+	width: number;
+	height: number;
+	density: number;
+}
+
+/** Whether `layout` is the one for this screen and density */
+function sameLayout(layout: Layout, screen: ScreenSize, density: number): boolean {
+	return (
+		layout.width === screen.width && layout.height === screen.height && layout.density === density
+	);
+}
+
 /**
  * Where point dots spawn (ADR 0002). A point dot's centre goes in the spawn area, a dot's
  * width in from the screen's edges, in one weighted draw from a grid of cells over it. Cells
@@ -35,11 +49,8 @@ interface PlayerSpot {
 export class PointDotPlacement {
 	private random: () => number;
 	private weights: SpawnWeights | null = null;
-	/** The screen, dot size and density the weights were laid out for */
-	private width = 0;
-	private height = 0;
-	private size = 0;
-	private density = 0;
+	/** What `weights` were laid out for */
+	private layout: Layout = { width: 0, height: 0, density: 0 };
 	private readonly picked = { x: 0, y: 0 };
 
 	constructor(random: () => number) {
@@ -54,7 +65,7 @@ export class PointDotPlacement {
 	/** The centre of the next point dot, at `density`, with the player where it is now */
 	place(screen: ScreenSize, player: PlayerSpot, density: number): { x: number; y: number } {
 		const size = POINT_DOT_SIZE_RATIO * density;
-		const weights = this.weightsFor(screen, size, density);
+		const weights = this.weightsFor(screen, density);
 		const clear = player.size / 2 + POINT_DOT_CLEAR_SPACE_RATIO * density + size / 2;
 		weights.recover(POINT_DOT_WEIGHT_RECOVERY);
 		weights.block(player.x, player.y, clear);
@@ -78,21 +89,11 @@ export class PointDotPlacement {
 		this.picked.y = player.y < (size + bottom) / 2 ? bottom : size;
 	}
 
-	/** The weights for this screen, dot size and density, laid out afresh if any has changed */
-	private weightsFor(screen: ScreenSize, size: number, density: number): SpawnWeights {
-		if (
-			this.weights &&
-			this.width === screen.width &&
-			this.height === screen.height &&
-			this.size === size &&
-			this.density === density
-		) {
-			return this.weights;
-		}
-		this.width = screen.width;
-		this.height = screen.height;
-		this.size = size;
-		this.density = density;
+	/** The weights for this screen and density, laid out afresh if either has changed */
+	private weightsFor(screen: ScreenSize, density: number): SpawnWeights {
+		if (this.weights && sameLayout(this.layout, screen, density)) return this.weights;
+		this.layout = { width: screen.width, height: screen.height, density };
+		const size = POINT_DOT_SIZE_RATIO * density;
 		this.weights = new SpawnWeights(
 			size,
 			size,
