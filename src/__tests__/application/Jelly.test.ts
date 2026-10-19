@@ -4,6 +4,7 @@ import {
 	JELLY_MAX_STRETCH,
 	JELLY_WOBBLE_PERIOD_S,
 	jellyShape,
+	kickJelly,
 	stepJelly,
 } from "../../application/jelly";
 
@@ -84,5 +85,24 @@ describe("jelly", () => {
 			body = next;
 			expect(jellyShape(body, RADIUS)).toEqual(step(100 + 12 * i, 100, RADIUS, FRAME_MS));
 		}
+	});
+
+	it("sloshes along a kick, as from a catch landing on a still drop, then settles", () => {
+		let body = stepJelly(JELLY_AT_REST, 100, 100, RADIUS, FRAME_MS);
+		const before = { ...body };
+		const kicked = kickJelly(body, 0, 20 * RADIUS);
+		expect(body).toEqual(before);
+		body = kicked;
+		const stretches: number[] = [];
+		for (let i = 0; i < 240; i++) {
+			body = stepJelly(body, 100, 100, RADIUS, FRAME_MS);
+			const shape = jellyShape(body, RADIUS);
+			expect(Math.abs(shape.stretchX)).toBeLessThan(1e-9);
+			expect(Math.abs(shape.stretchY)).toBeLessThanOrEqual(JELLY_MAX_STRETCH);
+			stretches.push(shape.stretchY);
+		}
+		expect(Math.max(...stretches)).toBeGreaterThan(0.05);
+		expect(Math.min(...stretches)).toBeLessThan(-0.01);
+		expect(Math.abs(stretches[stretches.length - 1])).toBeLessThan(0.002);
 	});
 });
