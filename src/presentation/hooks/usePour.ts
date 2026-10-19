@@ -35,8 +35,8 @@ export function usePour(
 	const sound = useCallback(
 		(landings: PourView["landings"]) => {
 			for (const { point, pitch } of landings) {
-				if (point) audio.playLargeCollect(pitch, POUR_VOLUME);
-				else audio.playCollect(pitch, POUR_VOLUME);
+				if (point) audio.playLargeCollect(pitch, { volume: POUR_VOLUME });
+				else audio.playCollect(pitch, { volume: POUR_VOLUME });
 			}
 		},
 		[audio],

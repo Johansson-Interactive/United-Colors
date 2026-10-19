@@ -69,7 +69,7 @@ describe("SoundEffect", () => {
 		const a = fakeVoice();
 		const effect = new SoundEffect([a.asVoice], 0.8);
 		expect(a.voice.volume).toBe(0.8);
-		effect.play(0, 0.5);
+		effect.play(0, { volume: 0.5 });
 		expect(a.voice.volume).toBeCloseTo(0.4);
 		await a.finishSeeks();
 		expect(a.voice.plays).toBe(1);
@@ -78,7 +78,7 @@ describe("SoundEffect", () => {
 	it("a quiet play doesn't leave its voice quiet for the next full play", async () => {
 		const a = fakeVoice();
 		const effect = new SoundEffect([a.asVoice], 0.8);
-		effect.play(0, 0.5);
+		effect.play(0, { volume: 0.5 });
 		await a.finishSeeks();
 		a.voice.playing = false;
 		effect.play();
@@ -89,7 +89,7 @@ describe("SoundEffect", () => {
 		const a = fakeVoice();
 		const effect = new SoundEffect([a.asVoice], 0.8);
 		effect.setMuted(true);
-		effect.play(0, 0.5);
+		effect.play(0, { volume: 0.5 });
 		await a.finishSeeks();
 		expect(a.voice.seekTo).not.toHaveBeenCalled();
 		expect(a.voice.plays).toBe(0);
@@ -118,6 +118,45 @@ describe("SoundEffect", () => {
 		await b.finishSeeks();
 		expect(a.voice.seekTo).toHaveBeenCalledTimes(2);
 		expect(b.voice.seekTo).toHaveBeenCalledTimes(1);
+	});
+
+	it("drops a play that skips when busy while every voice is busy, touching none", async () => {
+		const a = fakeVoice();
+		const b = fakeVoice();
+		const effect = new SoundEffect([a.asVoice, b.asVoice], 0.8);
+		effect.play();
+		await a.finishSeeks();
+		effect.play(0, { volume: 0.5 });
+		effect.play(12, { volume: 0.25, skipWhenBusy: true });
+		await a.finishSeeks();
+		await b.finishSeeks();
+		for (const { voice } of [a, b]) {
+			expect(voice.seekTo).toHaveBeenCalledTimes(1);
+			expect(voice.setPlaybackRate).toHaveBeenCalledTimes(1);
+			expect(voice.plays).toBe(1);
+		}
+		expect(b.voice.volume).toBeCloseTo(0.4);
+	});
+
+	it("plays a play that skips when busy on a free voice", async () => {
+		const a = fakeVoice();
+		const b = fakeVoice();
+		const effect = new SoundEffect([a.asVoice, b.asVoice]);
+		effect.play();
+		effect.play(0, { skipWhenBusy: true });
+		await a.finishSeeks();
+		await b.finishSeeks();
+		expect(b.voice.plays).toBe(1);
+	});
+
+	it("a play that skips when busy stays silent while muted", async () => {
+		const a = fakeVoice();
+		const effect = new SoundEffect([a.asVoice]);
+		effect.setMuted(true);
+		effect.play(0, { skipWhenBusy: true });
+		await a.finishSeeks();
+		expect(a.voice.seekTo).not.toHaveBeenCalled();
+		expect(a.voice.plays).toBe(0);
 	});
 
 	it("stays silent while muted and plays again after unmuting", async () => {
