@@ -64,6 +64,25 @@ export const POINT_DOT_FADE_TIME = 150;
 export const POINT_DOT_PULSE_SPEED = 12;
 
 /**
+ * Point dot placement (see PointDotPlacement and ADR 0002). A point dot's edge stays this far
+ * from the player's edge when it spawns: two player widths, so it is never caught by accident
+ */
+export const POINT_DOT_CLEAR_SPACE_RATIO = 0.25;
+/** It is placed from a grid of cells this wide over the spawn area: half a player width */
+export const POINT_DOT_CELL_RATIO = 0.0625;
+/**
+ * Each spawn makes the cells around it less likely for the next ones, out to this far from it
+ * (three player widths), by up to POINT_DOT_SUPPRESS_STRENGTH of the way down to the floor
+ * weight right where it landed, falling off smoothly to nothing at the edge
+ */
+export const POINT_DOT_SUPPRESS_RADIUS_RATIO = 0.375;
+export const POINT_DOT_SUPPRESS_STRENGTH = 0.7;
+/** The least a cell's weight sinks to (from 1), so a recent spot is unlikely, never ruled out */
+export const POINT_DOT_WEIGHT_FLOOR = 0.03;
+/** Before each spawn every weight moves this fraction of the way back to 1 */
+export const POINT_DOT_WEIGHT_RECOVERY = 0.25;
+
+/**
  * Combo rules: a catch at most this many ticks after the one before carries the combo on
  * (533 ms at 30 Hz). Each catch pays its own value plus two for every catch before it in the
  * combo, without limit, so a combo of small dots alone totals its length squared
