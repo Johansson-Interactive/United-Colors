@@ -20,6 +20,7 @@ import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
+import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
@@ -197,7 +198,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session, detectGyro, stageOpacity],
 	);
 
-	const { screen, dispatch } = useScreenFlow(store, storage, flood, perform);
+	const { screen, dispatch } = useScreenFlow(store, {
+		perform,
+		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
+		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
+	});
 
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
