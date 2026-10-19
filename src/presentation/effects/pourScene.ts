@@ -32,21 +32,25 @@ export type BestRow = { kind: "none" } | { kind: "best"; best: number } | { kind
 /**
  * The best row at a moment of the pour, once the run is judged. A run that beat the best shows
  * the best it had to beat until the tally passes it, then nothing until the drop settles into
- * NEW BEST! (and the confetti); any other run keeps the caption throughout, as it ends. The
- * best to beat is the verdict's, the one the run was judged against, as the store's best is
- * already the run's own by the time the verdict lands.
+ * NEW BEST! (and the confetti); any other run keeps the caption throughout, as it ends.
  */
 export function bestRow(
-	pour: { tally: number; settled: boolean },
+	pour: Pick<PourStatus, "passedBest" | "settled">,
 	verdict: BestVerdict | null,
 ): BestRow {
 	if (verdict === null) return { kind: "none" };
 	if (!verdict.newBest) return { kind: "best", best: verdict.best };
 	if (pour.settled) return { kind: "newBest" };
-	// The tally only grows, so once past the best it stays past it
-	return pour.tally <= verdict.previous
-		? { kind: "best", best: verdict.previous }
-		: { kind: "none" };
+	return pour.passedBest ? { kind: "none" } : { kind: "best", best: verdict.previous };
+}
+
+/**
+ * The best the pour's tally is measured against (see PourStatus): the verdict's, the one the
+ * run was judged against, as the store's best is already the run's own by the time the verdict
+ * lands. Only a new best is ever passed.
+ */
+export function bestToBeat(verdict: BestVerdict | null): number {
+	return verdict?.newBest ? verdict.previous : Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -184,22 +188,25 @@ export interface PourFrame {
 	now: number;
 }
 
-/** What the game over's interface shows of the pour; it changes only now and then */
+/**
+ * What the game over's interface shows of the pour; it changes only now and then. The tally
+ * is not in it, as the canvas draws it: the interface does not re-render as it counts up.
+ */
 export interface PourStatus {
 	clock: string;
-	/** What the catches landed so far paid */
-	tally: number;
 	settled: boolean;
+	/** What the catches landed so far paid is past the best to beat (see bestToBeat) */
+	passedBest: boolean;
 }
 
-function statusOf(view: PourView): PourStatus {
+function statusOf(view: PourView, best: number): PourStatus {
 	"worklet";
-	return { clock: view.clock, tally: view.drop.tally, settled: view.settled };
+	return { clock: view.clock, settled: view.settled, passedBest: view.drop.tally > best };
 }
 
 function sameStatus(a: PourStatus, b: PourStatus): boolean {
 	"worklet";
-	return a.clock === b.clock && a.tally === b.tally && a.settled === b.settled;
+	return a.clock === b.clock && a.settled === b.settled && a.passedBest === b.passedBest;
 }
 
 /** The pour played so far, carried from frame to frame on the UI thread */
@@ -231,12 +238,13 @@ export function startPour(plan: PourPlan): PourPlayback {
 		sampled: -POUR_DELAY_MS,
 		body: JELLY_AT_REST,
 		frame: { view, radius: 0, amber: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
-		status: statusOf(view),
+		status: statusOf(view, Number.POSITIVE_INFINITY),
 	};
 }
 
 /**
- * The pour at UI frame time `now`, `dtMs` after the frame before: the stepper sampled since the
+ * The pour at UI frame time `now`, `dtMs` after the frame before, its tally measured against
+ * `best` (see bestToBeat): the stepper sampled since the
  * last frame, each landing kicking the drop's liquid down and adding its bursts, the drawn drop
  * eased toward the stepper's and the liquid stepped. It never finishes: once settled, the
  * liquid keeps stepping so the drop keeps rippling, as the AGAIN button's does.
@@ -246,6 +254,7 @@ export function stepPour(
 	playback: PourPlayback,
 	now: number,
 	dtMs: number,
+	best: number,
 ): PourStep {
 	"worklet";
 	const start = playback.start ?? now;
@@ -263,7 +272,7 @@ export function stepPour(
 	bursts = advanceBursts(bursts, now);
 	const radius = easeToward(before.radius, view.drop.radius, dt);
 	const amber = easeToward(before.amber, view.amber, dt);
-	const status = statusOf(view);
+	const status = statusOf(view, best);
 	const changed = !sameStatus(status, playback.status);
 	return {
 		playback: {

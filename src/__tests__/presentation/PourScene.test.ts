@@ -9,6 +9,7 @@ import {
 import {
 	amberLevel,
 	bestRow,
+	bestToBeat,
 	bonusSpot,
 	easeToward,
 	landingKick,
@@ -138,38 +139,46 @@ describe("landingKick", () => {
 	});
 });
 
+/** A best no tally passes */
+const NO_BEST = Number.POSITIVE_INFINITY;
+
 /** The pour at a moment, as the best row reads it */
-const at = (tally: number, settled = false) => ({ tally, settled });
+const at = (passedBest: boolean, settled = false) => ({ passedBest, settled });
 
 describe("bestRow", () => {
 	const newBest: BestVerdict = { best: 40, newBest: true, previous: 25 };
 	const notBest: BestVerdict = { best: 60, newBest: false, previous: 60 };
 
 	it("shows nothing until the run is judged", () => {
-		expect(bestRow(at(0), null)).toEqual({ kind: "none" });
-		expect(bestRow(at(40, true), null)).toEqual({ kind: "none" });
+		expect(bestRow(at(false), null)).toEqual({ kind: "none" });
+		expect(bestRow(at(true, true), null)).toEqual({ kind: "none" });
 	});
 
 	it("shows the best to beat until the tally passes it, then nothing until it settles", () => {
-		expect(bestRow(at(0), newBest)).toEqual({ kind: "best", best: 25 });
-		expect(bestRow(at(25), newBest)).toEqual({ kind: "best", best: 25 });
-		expect(bestRow(at(26), newBest)).toEqual({ kind: "none" });
-		expect(bestRow(at(40), newBest)).toEqual({ kind: "none" });
-	});
-
-	it("judges the tally against the best before the run, however late the verdict lands", () => {
-		// By the time the verdict lands the store's best is already the run's own score; the
-		// caption still goes out once the tally passes the best the run beat
-		expect(bestRow(at(30), newBest)).toEqual({ kind: "none" });
+		expect(bestRow(at(false), newBest)).toEqual({ kind: "best", best: 25 });
+		expect(bestRow(at(true), newBest)).toEqual({ kind: "none" });
 	});
 
 	it("celebrates a new best only once the drop has settled", () => {
-		expect(bestRow(at(40, true), newBest)).toEqual({ kind: "newBest" });
+		expect(bestRow(at(true, true), newBest)).toEqual({ kind: "newBest" });
 	});
 
 	it("keeps the best caption throughout a run that did not beat it", () => {
-		expect(bestRow(at(10), notBest)).toEqual({ kind: "best", best: 60 });
-		expect(bestRow(at(60, true), notBest)).toEqual({ kind: "best", best: 60 });
+		expect(bestRow(at(false), notBest)).toEqual({ kind: "best", best: 60 });
+		expect(bestRow(at(false, true), notBest)).toEqual({ kind: "best", best: 60 });
+	});
+});
+
+describe("bestToBeat", () => {
+	it("is the best before the run, however late the verdict lands", () => {
+		// By the time the verdict lands the store's best is already the run's own score; the
+		// caption still goes out once the tally passes the best the run beat
+		expect(bestToBeat({ best: 40, newBest: true, previous: 25 })).toBe(25);
+	});
+
+	it("is never passed before the run is judged, or by a run that did not beat it", () => {
+		expect(bestToBeat(null)).toBe(NO_BEST);
+		expect(bestToBeat({ best: 60, newBest: false, previous: 60 })).toBe(NO_BEST);
 	});
 });
 
@@ -300,12 +309,15 @@ describe("stepPour", () => {
 	/** Replay time `ms` as a UI frame time, the first frame at T0 */
 	const frameAt = (ms: number) => T0 + POUR_DELAY_MS + ms;
 
-	/** Step every frame from T0 up to `untilMs` of replay time, keeping what each step said */
-	function play(untilMs: number) {
+	/**
+	 * Step every frame from T0 up to `untilMs` of replay time, against a best of `best`, keeping
+	 * what each step said
+	 */
+	function play(untilMs: number, best = NO_BEST) {
 		let playback = startPour(pour);
 		const steps: ReturnType<typeof stepPour>[] = [];
 		for (let now = T0, last = T0; now <= frameAt(untilMs); last = now, now += FRAME) {
-			const step = stepPour(pour, playback, now, now - last);
+			const step = stepPour(pour, playback, now, now - last, best);
 			steps.push(step);
 			playback = step.playback;
 		}
@@ -313,7 +325,7 @@ describe("stepPour", () => {
 	}
 
 	it("starts its clock on the first frame, the delay before the replay", () => {
-		const first = stepPour(pour, startPour(pour), T0, 0);
+		const first = stepPour(pour, startPour(pour), T0, 0, NO_BEST);
 		expect(first.playback.frame.view.clock).toBe("0:00");
 		expect(first.playback.frame.view.drop.tally).toBe(0);
 		expect(play(POUR_START_MS + FRAME).playback.frame.view.drop.tally).toBe(1);
@@ -341,19 +353,30 @@ describe("stepPour", () => {
 	it("integrates no more than a short frame's worth of a stall", () => {
 		const { playback } = play(POUR_START_MS + 100);
 		const now = frameAt(POUR_START_MS + 100) + 400;
-		const stalled = stepPour(pour, playback, now, 400);
-		const short = stepPour(pour, playback, now, 100);
+		const stalled = stepPour(pour, playback, now, 400, NO_BEST);
+		const short = stepPour(pour, playback, now, 100, NO_BEST);
 		expect(stalled.playback.body).toEqual(short.playback.body);
 	});
 
-	it("reports the status only when what the interface shows changes", () => {
-		const { steps } = play(POUR_START_MS + 300);
-		const first = startPour(pour).status;
-		expect(first).toEqual({ clock: "0:00", tally: 0, settled: false });
-		const reported = [first, ...steps.filter((s) => s.status !== null).map((s) => s.status)];
-		for (let i = 1; i < reported.length; i++) expect(reported[i]).not.toEqual(reported[i - 1]);
-		expect(reported.map((s) => s?.tally)).toContain(4);
-		expect(reported.length).toBeLessThan(steps.length);
+	it("reports the status only when what the interface shows changes, not as the tally counts", () => {
+		const { steps } = play(20_000);
+		expect(startPour(pour).status).toEqual({ clock: "0:00", settled: false, passedBest: false });
+		const reported = [startPour(pour).status, ...steps.flatMap((s) => s.status ?? [])];
+		for (let i = 1; i < reported.length; i++) {
+			const [before, after] = [reported[i - 1], reported[i]];
+			expect(after.clock !== before.clock || after.settled !== before.settled).toBe(true);
+		}
+		// The run of 120 ticks lasted four seconds
+		expect(reported.at(-1)).toEqual({ clock: "0:04", settled: true, passedBest: false });
+	});
+
+	it("reports once the tally has passed the best to beat", () => {
+		// The first two catches pay 4, past a best of 3; the third, 5 in all, is past a best of 4
+		const passed = (best: number) =>
+			play(20_000, best).steps.findIndex((s) => s.status?.passedBest === true);
+		expect(passed(3)).toBeGreaterThan(0);
+		expect(passed(4)).toBeGreaterThan(passed(3));
+		expect(passed(5)).toBe(-1);
 	});
 
 	it("never finishes: once settled its liquid keeps stepping, so the drop keeps rippling", () => {
@@ -361,7 +384,7 @@ describe("stepPour", () => {
 		expect(playback.frame.view.settled).toBe(true);
 		expect(playback.frame.bursts).toEqual([]);
 		expect(playback.status.settled).toBe(true);
-		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME);
+		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME, NO_BEST);
 		expect(later.playback.body.wobble).toBeCloseTo(playback.body.wobble + FRAME / 1000);
 		expect(later.playback.frame.jelly).not.toEqual(playback.frame.jelly);
 	});
