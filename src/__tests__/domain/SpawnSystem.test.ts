@@ -1,4 +1,4 @@
-import { arenaContacts, cornerExtent } from "../../domain/arena";
+import { arenaContacts, cornerExtent, holdInside } from "../../domain/arena";
 import {
 	DOT_LIMIT,
 	GAME_COLORS,
@@ -368,6 +368,28 @@ describe("SpawnSystem", () => {
 			dots.forEach((dot, i) => {
 				expect(gap(dot, players[i % players.length])).toBeGreaterThanOrEqual(clearSpace);
 			});
+		});
+
+		it("keeps the clear space on phones with rounded corners, where dots are pushed off the curves", () => {
+			let seed = 1;
+			for (const screen of ROUNDED_PHONES) {
+				// Where the player can be: a corner spot is held in off the curve, like the player
+				const players = centreEdgesAndCorners(screen).map((spot) => {
+					const at = holdInside(screen, spot.x, spot.y, PLAYER_SIZE / 2);
+					return new PlayerDot(at.x, at.y, GAME_COLORS[0], PLAYER_SIZE, 0);
+				});
+				for (const player of players) {
+					const system = new SpawnSystem(seededRandom(seed++));
+					for (const dot of pointDots(system, () => player, screen, 60)) {
+						expect(gap(dot, player)).toBeGreaterThanOrEqual(clearSpace);
+					}
+				}
+				const moving = new SpawnSystem(seededRandom(seed++));
+				const dots = pointDots(moving, (i) => players[i % players.length], screen, 90);
+				dots.forEach((dot, i) => {
+					expect(gap(dot, players[i % players.length])).toBeGreaterThanOrEqual(clearSpace);
+				});
+			}
 		});
 	});
 
