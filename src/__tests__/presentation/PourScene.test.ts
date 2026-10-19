@@ -320,11 +320,12 @@ describe("stepPour", () => {
 		expect(play(POUR_START_MS + FRAME).playback.frame.view.drop.tally).toBe(1);
 	});
 
-	it("cues each landing once, kicks the drop down and adds the landing's bursts", () => {
+	it("cues each heard landing once, kicks the drop down and adds the landing's bursts", () => {
 		const { steps } = play(POUR_START_MS + 200);
-		const landed = steps.flatMap((s) => s.landings);
-		expect(landed.map((l) => l.pitch)).toEqual([0, 1]);
-		const second = steps.findIndex((s) => s.landings.some((l) => l.pitch === 1));
+		// The first two catches land in one sound window: only the higher is heard
+		const heard = steps.flatMap((s) => s.sounds);
+		expect(heard.map((l) => l.pitch)).toEqual([1]);
+		const second = steps.findIndex((s) => s.sounds.some((l) => l.pitch === 1));
 		const before = steps[second - 1].playback;
 		const after = steps[second].playback;
 		expect(after.body.lagVY).toBeGreaterThan(before.body.lagVY);

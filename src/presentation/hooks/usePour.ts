@@ -15,7 +15,7 @@ const POUR_VOLUME = 0.4;
 
 /**
  * Plays a planned pour from the game over's mount, stepping it on the UI thread every frame
- * (see stepPour) and sounding each landing quietly at its catch's pitch. The canvas draws
+ * (see stepPour) and sounding each heard landing quietly at its catch's pitch. The canvas draws
  * `frame`; the interface reads `status`. Once the pour is done, the frames do nothing more.
  * Leaving the game over unmounts it, and the pour stops with it. Never buzzes: a pour is a
  * replay, not play.
@@ -33,8 +33,8 @@ export function usePour(
 	const frame = useSharedValue(first.frame);
 
 	const sound = useCallback(
-		(landings: PourView["landings"]) => {
-			for (const { point, pitch } of landings) {
+		(sounds: PourView["sounds"]) => {
+			for (const { point, pitch } of sounds) {
 				if (point) audio.playLargeCollect(pitch, POUR_VOLUME);
 				else audio.playCollect(pitch, POUR_VOLUME);
 			}
@@ -49,7 +49,7 @@ export function usePour(
 			if (step === null) return;
 			playback.set(step.playback);
 			frame.set(step.playback.frame);
-			if (step.landings.length > 0) scheduleOnRN(sound, step.landings);
+			if (step.sounds.length > 0) scheduleOnRN(sound, step.sounds);
 			if (step.status !== null) scheduleOnRN(setStatus, step.status);
 		},
 		[plan, playback, frame, sound],
