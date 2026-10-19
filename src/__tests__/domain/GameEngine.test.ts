@@ -973,7 +973,7 @@ describe("GameEngine", () => {
 				engine.tick();
 			}
 			expect(engine.getScore()).toBeGreaterThan(0);
-			// The record only leaves the engine on a game-over frame, which a bench run never
+			// The run record only leaves the engine on a game-over frame, which a bench run never
 			// reaches, so the only sign of it growing without bound is inside
 			expect((engine as unknown as { runCatches: unknown[] }).runCatches).toEqual([]);
 		});

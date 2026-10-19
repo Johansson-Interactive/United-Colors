@@ -54,9 +54,17 @@ _Avoid_: combo points, multiplier bonus
 How long a run lasted, counting only time the game was being played: not paused, and not the refusal that ends it. Shown as `M:SS`, rounded down.
 _Avoid_: duration, survival time
 
+**Run record**:
+What a run did, as the game keeps it for its game over: its catches in order (each with the tick it landed on, what it paid, its combo step, its colour and whether it was a point dot) and its run time. It is never stored, and it is not the personal best.
+_Avoid_: history, log, "record" on its own
+
 **Pour**:
 The game over's replay of a run: its catches fall in, in their order and rhythm, and merge into one drop of the player's liquid while a clock runs up to the run time, until the drop settles with its combo bonus as an amber layer at the bottom.
 _Avoid_: recap, summary animation
+
+**Tally**:
+The running total inside the pour's drop: what the catches landed so far paid. It counts up to the run's score as the last catch lands.
+_Avoid_: counter, subtotal
 
 ### Ranking
 

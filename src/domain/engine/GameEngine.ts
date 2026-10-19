@@ -415,7 +415,7 @@ export class GameEngine {
 		this.lastCatchTick = this.timeStep;
 		const value = base + comboPay(this.comboStep);
 		this.score += value;
-		// Without refusals no game over comes to carry the record, so keep none
+		// Without refusals no game over comes to carry the run record, so keep none
 		if (this.refusals) {
 			this.runCatches.push({
 				tick: this.timeStep,
