@@ -210,26 +210,31 @@ function landTimes(ticks: readonly number[]): number[] {
 }
 
 /**
- * The bodies the catches landing at `times` on `spots` fall in, at least POUR_STAGGER_MS
- * apart; each falls onto its first catch's spot
+ * The bodies the catches landing at `times` into `drops` fall in, at least POUR_STAGGER_MS
+ * apart, and the spot each catch lands on: its body's, the one its first catch lands on, so
+ * every catch of a body lands, kicks and bursts where the body is drawn landing
  */
 function bodiesOf(
 	catches: readonly RunCatch[],
 	times: readonly number[],
-	spots: readonly PourSpot[],
-): PlannedBody[] {
+	drops: readonly PourDrop[],
+): { bodies: PlannedBody[]; spots: PourSpot[] } {
 	const bodies: PlannedBody[] = [];
+	const spots: PourSpot[] = [];
 	for (let i = 0; i < catches.length; ) {
 		const landMs = times[i];
+		const spot = landingSpot(i, drops[i].radius);
 		let look = catches[i];
+		spots.push(spot);
 		let next = i + 1;
 		for (; next < catches.length && times[next] < landMs + POUR_STAGGER_MS; next++) {
 			if (catches[next].point && !look.point) look = catches[next];
+			spots.push(spot);
 		}
-		bodies.push({ color: look.color, landMs, x: spots[i].x, y: spots[i].y });
+		bodies.push({ color: look.color, landMs, ...spot });
 		i = next;
 	}
-	return bodies;
+	return { bodies, spots };
 }
 
 /**
@@ -408,7 +413,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const bonus = comboBonus(record);
 	const amber = bonus > 0 ? amberOf(bonus, score, radius, pitch) : null;
 	const tallyHeight = layoutDotMatrix(String(score)).rows * pitch;
-	const spots = catches.map((_, i) => landingSpot(i, drops[i].radius));
+	const { bodies, spots } = bodiesOf(catches, times, drops);
 	let burstId = 0;
 	return {
 		catches: catches.map((c, i) => {
@@ -416,7 +421,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 			burstId += bursts.length;
 			return { ...cues[i], ...spots[i], landMs: times[i], bursts, heard: sounding[i] };
 		}),
-		bodies: bodiesOf(catches, times, spots),
+		bodies,
 		drops,
 		settledDrop,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),

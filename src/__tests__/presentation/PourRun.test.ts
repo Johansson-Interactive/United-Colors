@@ -204,10 +204,11 @@ describe("pourAt", () => {
 	});
 
 	it("lands each catch on the drop's curved top, within 70% of its radius to either side", () => {
-		const many = Array.from({ length: 40 }, (_, i) => caught(10 + i * 20));
+		// Far enough apart that each falls as a body of its own
+		const many = Array.from({ length: 24 }, (_, i) => caught(10 + i * 20));
 		const p = plan({ catches: many, ticks: 1000 });
 		const found = landings(p);
-		expect(found).toHaveLength(40);
+		expect(found).toHaveLength(24);
 		// The first catch lands on nothing: there is no drop yet
 		expect(Math.hypot(found[0].x, found[0].y)).toBe(0);
 		for (const { ms, x, y } of found.slice(1)) {
@@ -220,7 +221,7 @@ describe("pourAt", () => {
 		const sides = found.slice(1).map((l) => l.x / pourAt(p, l.ms - 1).drop.radius);
 		expect(sides.some((s) => s < -0.35)).toBe(true);
 		expect(sides.some((s) => s > 0.35)).toBe(true);
-		expect(new Set(sides.map((s) => s.toFixed(2))).size).toBeGreaterThan(30);
+		expect(new Set(sides.map((s) => s.toFixed(2))).size).toBeGreaterThan(20);
 	});
 
 	it("pours the same run the same way every time", () => {
@@ -238,6 +239,28 @@ describe("pourAt", () => {
 			const [falling] = pourAt(p, ms - POUR_FALL_MS / 2).flights.filter((f) => f.merge === 0);
 			expect(falling).toMatchObject({ x, y });
 			expect(pourAt(p, ms + 1).flights.at(-1)).toMatchObject({ x, y });
+		}
+	});
+
+	it("lands, kicks and bursts a body's catches where the body is drawn landing", () => {
+		// Three combo catches on one tick fall as one body
+		const p = plan({
+			catches: [
+				caught(10),
+				caught(500, { step: 2, value: 3 }),
+				caught(500, { step: 3, value: 5 }),
+				caught(500, { step: 4, value: 7, point: true, color: BLUE }),
+				caught(1000),
+			],
+			ticks: 1100,
+		});
+		const found = landings(p);
+		const body = found.slice(1, 4);
+		expect(new Set(body.map((l) => l.ms)).size).toBe(1);
+		const [falling] = pourAt(p, body[0].ms - POUR_FALL_MS / 2).flights;
+		for (const { x, y, bursts } of body) {
+			expect({ x, y }).toEqual({ x: falling.x, y: falling.y });
+			for (const burst of bursts) expect(burst).toMatchObject({ x, y });
 		}
 	});
 
