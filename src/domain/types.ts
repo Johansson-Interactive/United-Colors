@@ -107,6 +107,27 @@ export interface Catch {
 	sameTick: boolean;
 }
 
+/** One catch of a run, as its run record keeps it */
+export interface RunCatch {
+	/** The run tick it landed on: ticks the simulation ran since the run started */
+	tick: number;
+	/** What it paid, its combo bonus included */
+	value: number;
+	/** Its combo step */
+	step: number;
+	/** The caught dot's colour */
+	color: string;
+	/** It was a point dot */
+	point: boolean;
+}
+
+/** What a run did: its catches in order and how long it lasted */
+export interface RunRecord {
+	catches: readonly RunCatch[];
+	/** Run time in ticks: only ticks the simulation ran (not paused, refusing or game over) */
+	ticks: number;
+}
+
 /**
  * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
  * once, with the next frame.
@@ -128,6 +149,8 @@ export interface RenderFrame {
 	dots: DotView[];
 	/** What happened since the frame before */
 	events: GameEvent[];
+	/** The run just ended; set on game-over frames only */
+	run?: RunRecord;
 }
 
 /**
