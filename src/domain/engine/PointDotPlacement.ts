@@ -2,6 +2,7 @@ import { holdInside } from "../arena";
 import {
 	POINT_DOT_CELL_RATIO,
 	POINT_DOT_CLEAR_SPACE_RATIO,
+	POINT_DOT_SIZE_RATIO,
 	POINT_DOT_SUPPRESS_RADIUS_RATIO,
 	POINT_DOT_SUPPRESS_STRENGTH,
 	POINT_DOT_WEIGHT_FLOOR,
@@ -50,13 +51,9 @@ export class PointDotPlacement {
 		this.weights?.clear();
 	}
 
-	/** The centre of the next point dot, of diameter `size`, with the player where it is now */
-	place(
-		screen: ScreenSize,
-		size: number,
-		player: PlayerSpot,
-		density: number,
-	): { x: number; y: number } {
+	/** The centre of the next point dot, at `density`, with the player where it is now */
+	place(screen: ScreenSize, player: PlayerSpot, density: number): { x: number; y: number } {
+		const size = POINT_DOT_SIZE_RATIO * density;
 		const weights = this.weightsFor(screen, size, density);
 		const clear = player.size / 2 + POINT_DOT_CLEAR_SPACE_RATIO * density + size / 2;
 		weights.recover(POINT_DOT_WEIGHT_RECOVERY);

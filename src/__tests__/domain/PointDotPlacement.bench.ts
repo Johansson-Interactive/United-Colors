@@ -1,4 +1,4 @@
-import { PLAYER_DOT_SIZE_RATIO, POINT_DOT_SIZE_RATIO } from "../../domain/constants";
+import { PLAYER_DOT_SIZE_RATIO } from "../../domain/constants";
 import { PointDotPlacement } from "../../domain/engine/PointDotPlacement";
 import { seededRandom } from "../../domain/random";
 import type { ScreenSize } from "../../domain/types";
@@ -10,7 +10,6 @@ import type { ScreenSize } from "../../domain/types";
 
 const DENSITY = 400;
 const PLAYER_SIZE = PLAYER_DOT_SIZE_RATIO * DENSITY;
-const POINT_SIZE = POINT_DOT_SIZE_RATIO * DENSITY;
 const PHONES: ScreenSize[] = [
 	{ width: 375, height: 667, corners: { radius: 0, curve: "continuous" } },
 	{ width: 390, height: 844, corners: { radius: 55, curve: "continuous" } },
@@ -37,7 +36,7 @@ test("point dot placement", async ({ bench }) => {
 		const spots = playerSpots(screen);
 		let next = 0;
 		return bench(`${screen.width} × ${screen.height}`, () => {
-			placement.place(screen, POINT_SIZE, spots[next], DENSITY);
+			placement.place(screen, spots[next], DENSITY);
 			next = (next + 1) % spots.length;
 		});
 	});

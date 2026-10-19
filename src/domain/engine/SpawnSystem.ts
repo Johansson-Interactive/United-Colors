@@ -247,7 +247,7 @@ export class SpawnSystem implements Spawner {
 		color: string,
 	): PointDot {
 		const size = POINT_DOT_SIZE_RATIO * density;
-		const { x, y } = this.pointDotPlacement.place(screen, size, player, density);
+		const { x, y } = this.pointDotPlacement.place(screen, player, density);
 		return new PointDot(this.newId(), timeStep, x, y, color, size, POINT_DOT_VALUE);
 	}
 
