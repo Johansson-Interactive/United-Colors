@@ -17,7 +17,7 @@ export function catchPitch(step: number): number {
 /** Cues each catch, given whether it landed on the same tick as the catch before */
 export interface CatchStagger {
 	(sameTick: boolean, cue: () => void): void;
-	/** Drop every cue still waiting, e.g. when the screen or binding goes away */
+	/** Cancel every cue still waiting, e.g. when the screen or binding goes away */
 	dispose(): void;
 }
 
@@ -25,13 +25,18 @@ export interface CatchStagger {
  * Cue each catch's sound or pop, given whether it landed on the same tick as the catch before:
  * right away, or through `schedule` when it has to wait. A same-tick catch comes
  * CATCH_STAGGER_MS after the one before, and no catch comes before one still waiting.
+ * `schedule` answers with a cancel, which dispose calls for every cue still waiting.
  */
 export function createCatchStagger(
-	schedule: (cue: () => void, ms: number) => void = (cue, ms) => setTimeout(cue, ms),
+	schedule: (cue: () => void, ms: number) => () => void = (cue, ms) => {
+		const timer = setTimeout(cue, ms);
+		return () => clearTimeout(timer);
+	},
 	now: () => number = Date.now,
 ): CatchStagger {
 	let lastAt = Number.NEGATIVE_INFINITY;
-	const waiting = new Set<() => void>();
+	// The cancel of each cue still waiting, by the run that will cue it
+	const waiting = new Map<() => void, () => void>();
 	const stagger = (sameTick: boolean, cue: () => void) => {
 		const time = now();
 		const at = Math.max(time, lastAt + (sameTick ? CATCH_STAGGER_MS : 0));
@@ -41,10 +46,14 @@ export function createCatchStagger(
 			return;
 		}
 		const run = () => {
-			if (waiting.delete(run)) cue();
+			waiting.delete(run);
+			cue();
 		};
-		waiting.add(run);
-		schedule(run, at - time);
+		waiting.set(run, schedule(run, at - time));
 	};
-	return Object.assign(stagger, { dispose: () => waiting.clear() });
+	const dispose = () => {
+		for (const cancel of waiting.values()) cancel();
+		waiting.clear();
+	};
+	return Object.assign(stagger, { dispose });
 }

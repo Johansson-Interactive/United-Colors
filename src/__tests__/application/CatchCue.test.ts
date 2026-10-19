@@ -8,8 +8,8 @@ describe("catchPitch", () => {
 
 describe("createCatchStagger", () => {
 	/**
-	 * A stagger on a clock the test sets, recording what it cues now and what it holds back;
-	 * `fire` runs every held cue as its timer would
+	 * A stagger on a clock the test sets, recording what it cues now, what it holds back and
+	 * which held cues it cancels; `fire` runs every held cue as its timer would, unless cancelled
 	 */
 	function setup() {
 		const clock = { now: 1000 };
@@ -19,6 +19,10 @@ describe("createCatchStagger", () => {
 			(cue, ms) => {
 				log.push(`hold ${ms}`);
 				held.push(cue);
+				return () => {
+					log.push(`cancel ${ms}`);
+					held.splice(held.indexOf(cue), 1);
+				};
 			},
 			() => clock.now,
 		);
@@ -75,13 +79,24 @@ describe("createCatchStagger", () => {
 		expect(log).toEqual(["now", `hold ${CATCH_STAGGER_MS}`, "later"]);
 	});
 
-	it("drops every waiting cue on dispose", () => {
-		const { log, cue, fire, stagger } = setup();
+	it("cancels the timer of every waiting cue on dispose, and only those", () => {
+		const { clock, log, cue, fire, stagger } = setup();
 		cue(false);
+		cue(true, "fired");
+		fire();
 		cue(true, "dropped");
+		clock.now = 1100;
 		cue(true, "dropped");
 		stagger.dispose();
 		fire();
-		expect(log).toEqual(["now", `hold ${CATCH_STAGGER_MS}`, `hold ${CATCH_STAGGER_MS * 2}`]);
+		expect(log).toEqual([
+			"now",
+			`hold ${CATCH_STAGGER_MS}`,
+			"fired",
+			`hold ${CATCH_STAGGER_MS * 2}`,
+			`hold ${CATCH_STAGGER_MS * 3 - 100}`,
+			`cancel ${CATCH_STAGGER_MS * 2}`,
+			`cancel ${CATCH_STAGGER_MS * 3 - 100}`,
+		]);
 	});
 });
