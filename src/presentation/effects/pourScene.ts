@@ -150,7 +150,7 @@ export interface PourFrame {
 export interface PourStatus {
 	clock: string;
 	settled: boolean;
-	/** What the catches landed so far paid is past the best to beat (see bestToBeat) */
+	/** The tally has passed the best to beat (see bestToBeat) */
 	passedBest: boolean;
 }
 
@@ -201,8 +201,8 @@ export function startPour(plan: PourPlan): PourPlayback {
  * The pour at UI frame time `now`, `dtMs` after the frame before, its tally measured against
  * `best` (see bestToBeat): the stepper sampled since the last frame, each landing kicking the
  * drop's liquid and adding its bursts, the drawn drop eased toward the stepper's and the liquid
- * stepped. It never finishes: once settled, the
- * liquid keeps stepping so the drop keeps rippling, as the AGAIN button's does.
+ * stepped. It never finishes: once settled, the liquid keeps stepping so the drop keeps
+ * rippling, as the AGAIN button's does.
  */
 export function stepPour(
 	plan: PourPlan,

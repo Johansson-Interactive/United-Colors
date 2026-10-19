@@ -54,12 +54,9 @@ COLOR_PAINT.setAntiAlias(true);
 
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
- * the drop and the catches merging into it as one body under the merge shader, amber below the
- * combo bonus's wavy surface, so the layer sloshes with the liquid; then its glare, turned
- * toward the tilt as AGAIN's is, the tally over it, ink inside the drop and in the drop's
- * colour outside, and the `+N` in ink in the amber, and the landings' bursts over all, as in
- * play. Catches of another colour are drawn under it. Every frame, on the UI thread, from
- * `frame`.
+ * catches of another colour; then the drop and the catches merging into it as one body under
+ * the merge shader, amber under its wavy surface; then the glare, the tally, `+N` and the
+ * landings' bursts over it. Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;
