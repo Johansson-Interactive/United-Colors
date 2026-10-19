@@ -30,7 +30,7 @@ describe("handleGameOver", () => {
 		const result = await handleGameOver(store, storage);
 		expect(saveHighScore).toHaveBeenCalledWith(12);
 		expect(store.getState().highScore).toBe(12);
-		expect(result).toEqual({ best: 12, newBest: true });
+		expect(result).toEqual({ best: 12, newBest: true, previous: 10 });
 	});
 
 	it("keeps the stored best when the score is lower, but still sets the store", async () => {
@@ -40,7 +40,7 @@ describe("handleGameOver", () => {
 		const result = await handleGameOver(store, storage);
 		expect(saveHighScore).not.toHaveBeenCalled();
 		expect(store.getState().highScore).toBe(10);
-		expect(result).toEqual({ best: 10, newBest: false });
+		expect(result).toEqual({ best: 10, newBest: false, previous: 10 });
 	});
 
 	it("does not rewrite an equal score", async () => {
@@ -49,7 +49,7 @@ describe("handleGameOver", () => {
 		endWithScore(store, 10);
 		const result = await handleGameOver(store, storage);
 		expect(saveHighScore).not.toHaveBeenCalled();
-		expect(result).toEqual({ best: 10, newBest: false });
+		expect(result).toEqual({ best: 10, newBest: false, previous: 10 });
 		expect(store.getState().highScore).toBe(10);
 	});
 
@@ -68,9 +68,20 @@ describe("handleGameOver", () => {
 		const { storage, saveHighScore } = fakeStorage(50);
 		endWithScore(store, 30);
 		const result = await handleGameOver(store, storage);
-		expect(result).toEqual({ best: 50, newBest: false });
+		expect(result).toEqual({ best: 50, newBest: false, previous: 50 });
 		expect(saveHighScore).not.toHaveBeenCalled();
 		expect(store.getState().highScore).toBe(50);
+	});
+});
+
+describe("handleGameOver's verdict", () => {
+	it("carries the best before the run, which the game over's pour counts past", async () => {
+		const store = createGameStore();
+		const { storage } = fakeStorage(10);
+		endWithScore(store, 12);
+		expect((await handleGameOver(store, storage)).previous).toBe(10);
+		endWithScore(store, 7);
+		expect((await handleGameOver(store, storage)).previous).toBe(12);
 	});
 });
 

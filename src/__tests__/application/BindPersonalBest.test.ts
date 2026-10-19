@@ -54,7 +54,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(saveHighScore).toHaveBeenCalledWith(12);
 		expect(store.getState().highScore).toBe(12);
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: true });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: true, previous: 10 });
 	});
 
 	it("a lower run publishes the personal best to beat and saves nothing", async () => {
@@ -64,7 +64,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(saveHighScore).not.toHaveBeenCalled();
 		expect(store.getState().highScore).toBe(10);
-		expect(store.getState().verdict).toEqual({ best: 10, newBest: false });
+		expect(store.getState().verdict).toEqual({ best: 10, newBest: false, previous: 10 });
 	});
 
 	it("a run ending before the personal best has loaded is judged against the stored one", async () => {
@@ -73,7 +73,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(saveHighScore).not.toHaveBeenCalled();
 		expect(store.getState().highScore).toBe(50);
-		expect(store.getState().verdict).toEqual({ best: 50, newBest: false });
+		expect(store.getState().verdict).toEqual({ best: 50, newBest: false, previous: 50 });
 	});
 
 	it("has no verdict until the judgement lands, and leaving the game over clears it", async () => {
@@ -81,7 +81,7 @@ describe("bindPersonalBest", () => {
 		setPhase(store, "GAME_OVER", 12);
 		expect(store.getState().verdict).toBeNull();
 		await releaseLoad();
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: true });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: true, previous: 10 });
 		setPhase(store, "RUNNING", 0);
 		expect(store.getState().verdict).toBeNull();
 	});
@@ -104,7 +104,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(store.getState().verdict).toBeNull();
 		await releaseLoad();
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: false, previous: 12 });
 	});
 
 	it("judges a game over against the best the one before it saved", async () => {
@@ -116,7 +116,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		expect(saveHighScore.mock.calls).toEqual([[12]]);
 		expect(store.getState().highScore).toBe(12);
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: false, previous: 12 });
 	});
 
 	it("a game over waiting its turn is judged on the score it ended with", async () => {
@@ -128,7 +128,7 @@ describe("bindPersonalBest", () => {
 		await releaseLoad();
 		await releaseLoad();
 		expect(saveHighScore.mock.calls).toEqual([[12]]);
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: false });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: false, previous: 12 });
 	});
 
 	it("the first verdict on a game over stands while its frames keep coming", async () => {
@@ -138,7 +138,7 @@ describe("bindPersonalBest", () => {
 		setPhase(store, "GAME_OVER", 40);
 		await releaseLoad();
 		expect(saveHighScore).toHaveBeenCalledTimes(1);
-		expect(store.getState().verdict).toEqual({ best: 12, newBest: true });
+		expect(store.getState().verdict).toEqual({ best: 12, newBest: true, previous: 10 });
 	});
 
 	it("stops judging on unsubscribe, dropping a judgement still on its way", async () => {
