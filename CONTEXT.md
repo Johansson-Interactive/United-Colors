@@ -41,3 +41,21 @@ _Avoid_: streak, chain, multiplier
 
 **Combo step**:
 A catch's place in its combo: 1 for the first (or a catch on its own), 2 for the next, and so on. A catch pays its own value plus two for every catch before it in the combo, so a combo of small dots alone totals its length squared.
+
+### Ranking
+
+**Personal best**:
+The highest score this install has reached under the current scoring version; a new scoring version starts it over.
+_Avoid_: high score, record
+
+**Leaderboard**:
+The shared list, across all players everywhere, ranking each player by their personal best; a player appears on it at most once. Each scoring version has its own leaderboard.
+_Avoid_: high score list, ranking, scoreboard
+
+**Scoring version**:
+Which scoring rules a score was earned under. It changes only when scoring changes enough that old and new scores can't fairly be compared, and that change starts a fresh leaderboard.
+_Avoid_: season, game version
+
+**Tag**:
+The short name, one to eight letters and digits, a player is shown by on the leaderboard. A player picks it the first time they set a personal best.
+_Avoid_: username, nickname, initials
