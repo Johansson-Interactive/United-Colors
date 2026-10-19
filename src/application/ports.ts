@@ -40,10 +40,13 @@ export interface MusicCue {
 export interface GameAudio {
 	/** Load sounds; safe to call repeatedly and again after dispose */
 	load(): Promise<void>;
-	/** A small dot of the player's colour was caught; `pitch` raises it, in semitones (0..12) */
-	playCollect(pitch: number): void;
-	/** A point dot was caught and recoloured the player; `pitch` as for playCollect */
-	playLargeCollect(pitch: number): void;
+	/**
+	 * A small dot of the player's colour was caught; `pitch` raises it, in semitones (0..12);
+	 * `volume` (0..1, default 1) quietens it, for replays such as the game-over pour
+	 */
+	playCollect(pitch: number, volume?: number): void;
+	/** A point dot was caught and recoloured the player; `pitch` and `volume` as for playCollect */
+	playLargeCollect(pitch: number, volume?: number): void;
 	playPointSpawn(): void;
 	/** One-shot stinger when a run ends */
 	playGameOver(): void;
