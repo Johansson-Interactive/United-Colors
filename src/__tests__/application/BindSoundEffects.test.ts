@@ -30,14 +30,13 @@ function report(store: GameStore, events: GameEvent[]) {
 }
 
 describe("bindSoundEffects", () => {
-	it("plays a sound for each catch, spawn and the game over; the spit and a combo's end are silent", () => {
+	it("plays a sound for each catch, spawn and the game over; the spit is silent", () => {
 		const store = createGameStore();
 		const { audio, calls } = fakeAudio();
 		bindSoundEffects(store, audio);
 		report(store, [{ type: "pointSpawn" }]);
 		report(store, [{ type: "collect", ...caught(1) }]);
 		report(store, [{ type: "collectPoint", ...caught(5) }]);
-		report(store, [{ type: "comboEnd", total: 16, catches: 4 }]);
 		report(store, [{ type: "spit" }]);
 		report(store, [{ type: "gameOver" }]);
 		expect(calls).toEqual(["spawn", "collect 0", "large 0", "gameOver"]);

@@ -26,7 +26,7 @@ export interface CatchStagger {
  * Cue each catch's sound or pop, given whether it landed on the same tick as the catch before:
  * right away, or through `schedule` when it has to wait. A same-tick catch comes
  * CATCH_STAGGER_MS after the one before, and nothing cued comes before a cue still waiting,
- * so what follows the catches (a combo's total, the run's end) can go through here too.
+ * so what follows the catches (the run's end) can go through here too.
  * `schedule` answers with a cancel, which dispose calls for every cue still waiting.
  */
 export function createCatchStagger(

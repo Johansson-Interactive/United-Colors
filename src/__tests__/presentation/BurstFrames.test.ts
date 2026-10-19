@@ -20,8 +20,6 @@ import {
 	type Burst,
 	burstColor,
 	burstSprites,
-	COMBO_TOTAL_LIFETIME_MS,
-	COMBO_TOTAL_SCALE,
 	createBurstIds,
 	layOutBurst,
 	MAX_BURSTS,
@@ -89,8 +87,6 @@ function oldPopDots(text: string, age: number, x: number, y: number) {
 /** Bursts laid out as the stage adds them, coloured by index into BURST_COLORS */
 const popBurst = (id: number, x: number, y: number, text: string, color: number) =>
 	layOutBurst(id, { kind: "pop", x, y, text, color: BURST_COLORS[color] });
-const comboTotalBurst = (id: number, x: number, y: number, text: string, color: number) =>
-	layOutBurst(id, { kind: "comboTotal", x, y, text, color: BURST_COLORS[color] });
 const ringBurst = (id: number, x: number, y: number, color: number, size = 60) =>
 	layOutBurst(id, { kind: "ring", x, y, color: BURST_COLORS[color], size });
 
@@ -148,11 +144,11 @@ describe("the ring's curves", () => {
 
 describe("packBursts", () => {
 	it("puts a pop's dots and glows where the view drew them, at every age", () => {
-		const pop = popBurst(0, 140, 300, "+12", 0);
+		const pop = popBurst(0, 140, 300, "12", 0);
 		const out = burstSprites(plainKit());
 		for (const age of AGES) {
 			packBursts([started(pop, 1000)], 1000 + age, COLORS, out);
-			const expected = oldPopDots("+12", age, 140, 300);
+			const expected = oldPopDots("12", age, 140, 300);
 			expect(out.dots.count).toBe(expected.length);
 			expect(out.glows.count).toBe(expected.length);
 			const n = out.dots.count;
@@ -175,7 +171,7 @@ describe("packBursts", () => {
 	});
 
 	it("tints a pop's dots and glows in its colour at its opacity", () => {
-		const pop = popBurst(0, 0, 0, "+1", 3);
+		const pop = popBurst(0, 0, 0, "1", 3);
 		const out = burstSprites(plainKit());
 		packBursts([started(pop, 0)], 600, COLORS, out);
 		const n = out.dots.count;
@@ -204,8 +200,8 @@ describe("packBursts", () => {
 
 	it("draws a burst not yet stamped as at its start, and none past its lifetime", () => {
 		const out = burstSprites(plainKit());
-		const fresh = popBurst(0, 0, 0, "+1", 0);
-		const old = started(popBurst(1, 0, 0, "+100", 0), 0);
+		const fresh = popBurst(0, 0, 0, "1", 0);
+		const old = started(popBurst(1, 0, 0, "100", 0), 0);
 		const ring = started(ringBurst(2, 0, 0, 0), 0);
 		packBursts([old, ring, fresh], BURST_LIFETIME_MS, COLORS, out);
 		expect(out.dots.count).toBe(fresh.dots.length / 2);
@@ -215,8 +211,8 @@ describe("packBursts", () => {
 
 	it("draws several pops, every glow below every dot, each in its own tint", () => {
 		const out = burstSprites(plainKit());
-		const a = started(popBurst(0, 0, 0, "+1", 0), 0);
-		const b = started(popBurst(1, 0, 0, "+2", 1), 0);
+		const a = started(popBurst(0, 0, 0, "1", 0), 0);
+		const b = started(popBurst(1, 0, 0, "2", 1), 0);
 		packBursts([a, b], 100, COLORS, out);
 		const n = out.dots.count;
 		expect(n).toBe((a.dots.length + b.dots.length) / 2);
@@ -226,7 +222,7 @@ describe("packBursts", () => {
 
 	it("reuses its arrays and objects from frame to frame", () => {
 		const out = burstSprites(plainKit());
-		const list = [started(popBurst(0, 0, 0, "+5", 0), 0)];
+		const list = [started(popBurst(0, 0, 0, "5", 0), 0)];
 		packBursts(list, 10, COLORS, out);
 		const n = out.dots.count;
 		const placements = out.dots.placements[n];
@@ -241,8 +237,8 @@ describe("packBursts", () => {
 
 describe("layOutBurst", () => {
 	it("lays its text out once, as offsets from the text's centre", () => {
-		const pop = popBurst(7, 10, 20, "+3", 1);
-		const layout = layoutDotMatrix("+3");
+		const pop = popBurst(7, 10, 20, "3", 1);
+		const layout = layoutDotMatrix("3");
 		expect(pop).toMatchObject({ id: 7, kind: "pop", x: 10, y: 20, color: 1, start: NOT_STARTED });
 		expect(pop.dots).toHaveLength(layout.dots.length * 2);
 		const xs = pop.dots.filter((_, i) => i % 2 === 0);
@@ -337,52 +333,5 @@ describe("burst ids", () => {
 		const ids = createBurstIds();
 		ids.take();
 		expect(ids.isNewest(-1)).toBe(false);
-	});
-});
-
-describe("the combo total's pop", () => {
-	it("runs the pop's curves over a longer lifetime than a catch's pop", () => {
-		expect(COMBO_TOTAL_LIFETIME_MS).toBeGreaterThan(BURST_LIFETIME_MS);
-		for (const age of [0, 100, 450, 900, 1200]) {
-			expect(popProgress(age, COMBO_TOTAL_LIFETIME_MS)).toBeCloseTo(
-				outCubic(Math.min(1, age / COMBO_TOTAL_LIFETIME_MS)),
-				12,
-			);
-		}
-	});
-
-	it("stays on screen after a catch's pop is gone, until its own lifetime is up", () => {
-		let list = withBurst([], popBurst(0, 0, 0, "+7", 0));
-		list = withBurst(list, comboTotalBurst(1, 0, 0, "16", 0));
-		advanceBursts(list, 0);
-		const held = advanceBursts(list, BURST_LIFETIME_MS);
-		expect(held.map((b) => b.id)).toEqual([1]);
-		expect(advanceBursts(held, COMBO_TOTAL_LIFETIME_MS - 1)).toBe(held);
-		expect(advanceBursts(held, COMBO_TOTAL_LIFETIME_MS)).toEqual([]);
-
-		const out = burstSprites(plainKit());
-		packBursts(held, BURST_LIFETIME_MS, COLORS, out);
-		expect(out.dots.count).toBe(held[0].dots.length / 2);
-		packBursts(held, COMBO_TOTAL_LIFETIME_MS, COLORS, out);
-		expect(out.dots.count).toBe(0);
-	});
-
-	it("is drawn larger than a catch's pop of the same text, about the same spot", () => {
-		const out = burstSprites(plainKit());
-		const radiusAndSpan = (burst: Burst, age: number) => {
-			packBursts([started(burst, 0)], age, COLORS, out);
-			const n = out.dots.count;
-			const xs = out.dots.placements[n].slice(0, n).map((p) => place(p, 0, 0)[0]);
-			return { radius: out.dots.placements[n][0].scos, span: Math.max(...xs) - Math.min(...xs) };
-		};
-		// Both past their swell, at the same point of their curves
-		const pop = radiusAndSpan(popBurst(0, 100, 200, "16", 4), 450);
-		const total = radiusAndSpan(
-			comboTotalBurst(1, 100, 200, "16", 4),
-			(450 * COMBO_TOTAL_LIFETIME_MS) / BURST_LIFETIME_MS,
-		);
-		expect(total.radius / pop.radius).toBeCloseTo(COMBO_TOTAL_SCALE, 9);
-		expect(total.span / pop.span).toBeCloseTo(COMBO_TOTAL_SCALE, 9);
-		expect(COMBO_TOTAL_SCALE).toBeGreaterThan(1);
 	});
 });

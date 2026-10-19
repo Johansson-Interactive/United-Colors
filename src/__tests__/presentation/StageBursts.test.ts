@@ -16,19 +16,19 @@ const collect = (value: number, step: number, sameTick = false): GameEvent => ({
 describe("stage bursts", () => {
 	it("pops what a small-dot catch paid at the player, in the player's colour", () => {
 		const step = stepBursts(NO_CATCH_SPOT, collect(5, 1), PLAYER);
-		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "+5", color: PINK }]);
+		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "5", color: PINK }]);
 		expect(step.shake).toBe(false);
 	});
 
 	it("pops in combo amber from the second catch of a combo on", () => {
 		const step = stepBursts(NO_CATCH_SPOT, collect(3, 2), PLAYER);
-		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "+3", color: AMBER }]);
+		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "3", color: AMBER }]);
 	});
 
 	it("pops a point-dot catch and rings it in the player's colour at the same spot", () => {
 		const point: GameEvent = { type: "collectPoint", value: 10, step: 1, sameTick: false };
 		expect(stepBursts(NO_CATCH_SPOT, point, PLAYER).bursts).toEqual([
-			{ kind: "pop", x: 120, y: 340, text: "+10", color: PINK },
+			{ kind: "pop", x: 120, y: 340, text: "10", color: PINK },
 			{ kind: "ring", x: 120, y: 340, color: PINK, size: 80 },
 		]);
 	});
@@ -37,17 +37,8 @@ describe("stage bursts", () => {
 		const first = stepBursts(NO_CATCH_SPOT, collect(1, 1), PLAYER);
 		const moved = { ...PLAYER, x: 130, y: 350 };
 		const second = stepBursts(first.catchSpot, collect(3, 2, true), moved);
-		expect(second.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "+3", color: AMBER }]);
+		expect(second.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "3", color: AMBER }]);
 		expect(second.catchSpot).toEqual(first.catchSpot);
-	});
-
-	it("pops a combo's bare total, larger and in amber, where its last catch landed", () => {
-		const last = stepBursts(NO_CATCH_SPOT, collect(5, 3), PLAYER);
-		const moved = { ...PLAYER, x: 200, y: 90 };
-		const end: GameEvent = { type: "comboEnd", total: 16, catches: 4 };
-		const step = stepBursts(last.catchSpot, end, moved);
-		expect(step.bursts).toEqual([{ kind: "comboTotal", x: 120, y: 340, text: "16", color: AMBER }]);
-		expect(step.shake).toBe(false);
 	});
 
 	it("rings the game over in white at the player and shakes the stage", () => {
@@ -73,7 +64,6 @@ describe("stage bursts", () => {
 		const sameTick = (event: GameEvent) => stepBursts(NO_CATCH_SPOT, event, PLAYER).sameTick;
 		expect(sameTick(collect(1, 1))).toBe(false);
 		expect(sameTick({ type: "collectPoint", value: 10, step: 2, sameTick: true })).toBe(true);
-		expect(sameTick({ type: "comboEnd", total: 4, catches: 2 })).toBe(false);
 		expect(sameTick({ type: "gameOver" })).toBe(false);
 	});
 });
