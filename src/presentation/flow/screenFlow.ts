@@ -8,7 +8,7 @@
  * is open over the title the kiosk halts, and the game over shows the run's verdict on the best.
  */
 
-import type { BestVerdict } from "../../application/useCases/GameOver";
+import type { BestVerdict } from "../../application/GameStore";
 import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";

@@ -5,7 +5,7 @@ import { useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
-import type { GameStore } from "../application/GameStore";
+import type { BestVerdict, GameStore } from "../application/GameStore";
 import type {
 	GameAudio,
 	GameHaptics,
@@ -20,7 +20,7 @@ import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
 import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
 import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
-import { type BestVerdict, handleGameOver } from "../application/useCases/GameOver";
+import { handleGameOver } from "../application/useCases/GameOver";
 import { loadHighScore } from "../application/useCases/LoadHighScore";
 import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";

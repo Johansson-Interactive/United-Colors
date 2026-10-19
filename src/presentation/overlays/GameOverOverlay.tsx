@@ -1,7 +1,7 @@
 import type React from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from "react-native-reanimated";
-import type { BestVerdict } from "../../application/useCases/GameOver";
+import type { BestVerdict } from "../../application/GameStore";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { Confetti } from "../effects/Confetti";
