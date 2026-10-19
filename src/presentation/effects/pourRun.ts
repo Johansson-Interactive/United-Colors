@@ -15,7 +15,7 @@
 import { catchPitch } from "../../application/catchCue";
 import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import { comboBonus, runSeconds } from "../../domain/run";
-import type { RunRecord } from "../../domain/types";
+import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
 
 /** The first catch lands this long after the game over appears (ms) */
@@ -26,10 +26,10 @@ export const POUR_SPAN_MS = 2200;
 export const POUR_FALL_MS = 420;
 const MERGE_MS = 260;
 /**
- * Catches land at least this far apart (ms), about five frames, so that no more than
+ * Bodies start falling at least this far apart (ms), about five frames, so that no more than
  * MERGE_MAX_DOTS are falling or merging at once: a millisecond over the share of that limit,
- * so one catch's merge is over before the catch MERGE_MAX_DOTS after it starts falling. A run
- * too dense for this over the span pours faster instead, falls, merges and stagger alike.
+ * so one body's merge is over before the body MERGE_MAX_DOTS after it starts falling. Catches
+ * of a flurry landing closer than this to the first of them fall with it, as one body.
  */
 export const POUR_STAGGER_MS = Math.ceil((POUR_FALL_MS + MERGE_MS) / MERGE_MAX_DOTS) + 1;
 /** The drop comes to rest this long after the last landing (ms); then the pour is settled */
@@ -63,7 +63,7 @@ interface PourLanding {
 	combo: boolean;
 }
 
-/** A catch on its way into the drop */
+/** A body of catches on its way into the drop (see PlannedBody) */
 export interface PourFlight {
 	color: string;
 	/** A point dot, drawn at its size; otherwise a small dot */
@@ -93,19 +93,27 @@ interface PourDigitDot {
 }
 
 interface PlannedCatch extends PourLanding {
+	landMs: number;
+}
+
+/**
+ * One body falling into the drop: a catch, or a flurry's catches landing within
+ * POUR_STAGGER_MS of the first of them. It looks like its first point dot, or its first catch,
+ * and lands with its first catch; the others land into it as it merges, at their own times.
+ */
+interface PlannedBody {
 	color: string;
+	point: boolean;
 	landMs: number;
 }
 
 /** A run's pour, worked out once; sample it with pourAt */
 export interface PourPlan {
 	catches: readonly PlannedCatch[];
+	bodies: readonly PlannedBody[];
 	/** The drop and its tally's dots once `k` catches have landed, by `k` */
 	drops: readonly PourDrop[];
 	digits: readonly (readonly PourDigitDot[])[];
-	/** How long each catch falls and merges: shortened on a run too dense for the span */
-	fallMs: number;
-	mergeMs: number;
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
 	settleMs: number;
@@ -119,7 +127,7 @@ export interface PourPlan {
 export interface PourView {
 	/** Catches that landed after the previous sample, up to this one, in order */
 	landings: PourLanding[];
-	/** Catches falling or merging, in landing order; never more than MERGE_MAX_DOTS */
+	/** Bodies falling or merging, in landing order; never more than MERGE_MAX_DOTS */
 	flights: PourFlight[];
 	drop: PourDrop;
 	/** The tally's dots */
@@ -138,20 +146,31 @@ export interface PourView {
 
 /**
  * When each catch lands: its run tick mapped onto the span, the first at its start and the
- * last at its end (all at the end when they share one tick), then pulled apart to `gap`.
- * Late catches are moved earlier, never past the end, so the last still lands with the clock.
+ * last at its end (all at the end when they share one tick), so the run keeps its rhythm
  */
-function landTimes(ticks: readonly number[], gap: number): number[] {
+function landTimes(ticks: readonly number[]): number[] {
 	const first = ticks[0];
 	const runSpan = ticks[ticks.length - 1] - first;
 	const end = POUR_START_MS + POUR_SPAN_MS;
-	const times = ticks.map((tick) =>
+	return ticks.map((tick) =>
 		runSpan > 0 ? POUR_START_MS + (POUR_SPAN_MS * (tick - first)) / runSpan : end,
 	);
-	for (let i = 1; i < times.length; i++) times[i] = Math.max(times[i], times[i - 1] + gap);
-	times[times.length - 1] = Math.min(times[times.length - 1], end);
-	for (let i = times.length - 2; i >= 0; i--) times[i] = Math.min(times[i], times[i + 1] - gap);
-	return times;
+}
+
+/** The bodies the catches landing at `times` fall in, at least POUR_STAGGER_MS apart */
+function bodiesOf(catches: readonly RunCatch[], times: readonly number[]): PlannedBody[] {
+	const bodies: PlannedBody[] = [];
+	for (let i = 0; i < catches.length; ) {
+		const landMs = times[i];
+		let look = catches[i];
+		let next = i + 1;
+		for (; next < catches.length && times[next] < landMs + POUR_STAGGER_MS; next++) {
+			if (catches[next].point && !look.point) look = catches[next];
+		}
+		bodies.push({ color: look.color, point: look.point, landMs });
+		i = next;
+	}
+	return bodies;
 }
 
 /** The drop as each catch lands; before any, empty in the first catch's colour or `color` */
@@ -178,26 +197,20 @@ function digitsOf({ tally, radius }: PourDrop, pitch: number): PourDigitDot[] {
 /** Work out a run's pour */
 export function planPour({ record, best, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
-	const pace = Math.min(1, POUR_SPAN_MS / (Math.max(1, catches.length - 1) * POUR_STAGGER_MS));
-	const times = landTimes(
-		catches.map((c) => c.tick),
-		POUR_STAGGER_MS * pace,
-	);
+	const times = landTimes(catches.map((c) => c.tick));
 	const drops = dropsOf(record, color);
 	const score = drops[drops.length - 1].tally;
 	const bonus = comboBonus(record);
 	return {
 		catches: catches.map((c, i) => ({
 			landMs: times[i],
-			color: c.color,
 			pitch: catchPitch(c.step),
 			point: c.point,
 			combo: c.step > 1,
 		})),
+		bodies: bodiesOf(catches, times),
 		drops,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
-		fallMs: POUR_FALL_MS * pace,
-		mergeMs: MERGE_MS * pace,
 		seconds: runSeconds(record.ticks),
 		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,
 		best,
@@ -222,7 +235,6 @@ function formatClock(seconds: number): string {
 /** The pour at `ms` since the game over appeared, with the landings since `sinceMs` */
 export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	"worklet";
-	const { fallMs, mergeMs } = plan;
 	const landings: PourLanding[] = [];
 	const flights: PourFlight[] = [];
 	let landed = 0;
@@ -231,12 +243,14 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		if (c.landMs > sinceMs && c.landMs <= ms) {
 			landings.push({ pitch: c.pitch, point: c.point, combo: c.combo });
 		}
-		if (ms >= c.landMs - fallMs && ms < c.landMs + mergeMs) {
+	}
+	for (const b of plan.bodies) {
+		if (ms >= b.landMs - POUR_FALL_MS && ms < b.landMs + MERGE_MS) {
 			flights.push({
-				color: c.color,
-				point: c.point,
-				fall: clamp01((ms - c.landMs + fallMs) / fallMs),
-				merge: clamp01((ms - c.landMs) / mergeMs),
+				color: b.color,
+				point: b.point,
+				fall: clamp01((ms - b.landMs + POUR_FALL_MS) / POUR_FALL_MS),
+				merge: clamp01((ms - b.landMs) / MERGE_MS),
 			});
 		}
 	}

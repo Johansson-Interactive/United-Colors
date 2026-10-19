@@ -41,6 +41,24 @@ function landings(p: PourPlan, untilMs = 6000) {
 	return found;
 }
 
+/**
+ * When each body falling into the drop starts its fall, sampled every millisecond, checking on
+ * the way that every fall takes POUR_FALL_MS and ends on a catch's landing (`landed`, in ms)
+ */
+function fallStarts(p: PourPlan, landed: readonly number[]): number[] {
+	const starts = new Set<number>();
+	for (let ms = 0; ms <= 6000; ms++) {
+		for (const f of pourAt(p, ms).flights) {
+			if (f.merge > 0 || f.fall >= 1) continue;
+			const start = ms - f.fall * POUR_FALL_MS;
+			const lands = start + POUR_FALL_MS;
+			expect(landed.some((l) => l >= lands - 1e-6 && l < lands + 1)).toBe(true);
+			starts.add(Math.round(start * 1000) / 1000);
+		}
+	}
+	return [...starts].sort((a, b) => a - b);
+}
+
 describe("pourAt", () => {
 	it("pours a 20 s run and a 5 min run in the same fixed span", () => {
 		const short = plan({ catches: [caught(30), caught(200), caught(560)], ticks: seconds(20) });
@@ -54,21 +72,86 @@ describe("pourAt", () => {
 		}
 	});
 
-	it("lands catches in order, staggering those that would land too close together", () => {
-		// A combo of ten on the run's last ticks, two of them on one tick, after a lone catch
-		const combo = Array.from({ length: 10 }, (_, i) =>
-			caught(900 + Math.max(1, i), { step: i + 1, value: 2 * i + 1 }),
+	it("lands every catch in order at its real time in the run, mapped onto the span", () => {
+		// Slow stretches, then a flurry of thirty, two to a tick, then slow again
+		const flurry = Array.from({ length: 30 }, (_, i) =>
+			caught(400 + Math.floor(i / 2), { step: i + 1, value: 2 * i + 1 }),
 		);
-		const p = plan({ catches: [caught(10), ...combo], ticks: 1000 });
+		const ticks = [10, 110, 210, 310, ...flurry.map((c) => c.tick), 510, 610, 1010];
+		const p = plan({
+			catches: [
+				caught(10),
+				caught(110),
+				caught(210),
+				caught(310),
+				...flurry,
+				...[510, 610, 1010].map((t) => caught(t)),
+			],
+			ticks: 1100,
+		});
 		const found = landings(p);
-		expect(found.map((l) => l.pitch)).toEqual([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-		const times = found.map((l) => l.ms);
-		for (let i = 1; i < times.length; i++) {
-			expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(POUR_STAGGER_MS - 1);
+		expect(found.map((l) => l.pitch)).toEqual([
+			0,
+			0,
+			0,
+			0,
+			...flurry.map((c) => Math.min(12, c.step - 1)),
+			0,
+			0,
+			0,
+		]);
+		found.forEach(({ ms }, i) => {
+			const real = POUR_START_MS + (POUR_SPAN_MS * (ticks[i] - 10)) / 1000;
+			expect(ms).toBeGreaterThanOrEqual(real);
+			expect(ms).toBeLessThan(real + 1);
+		});
+	});
+
+	it("falls a flurry's catches as a few bodies, at least the stagger apart, at full speed", () => {
+		const flurry = Array.from({ length: 30 }, (_, i) => caught(400 + Math.floor(i / 2)));
+		const p = plan({ catches: [caught(10), ...flurry, caught(1010)], ticks: 1100 });
+		const found = landings(p).map((l) => l.ms);
+		const starts = fallStarts(p, found);
+		expect(starts.length).toBeGreaterThan(1);
+		expect(starts.length).toBeLessThan(found.length);
+		for (let i = 1; i < starts.length; i++) {
+			expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(POUR_STAGGER_MS - 1);
 		}
-		expect(times.at(-1)).toBe(POUR_START_MS + POUR_SPAN_MS);
 		expect(POUR_STAGGER_MS).toBeGreaterThanOrEqual(2 * FRAME_MS);
 		expect(POUR_STAGGER_MS).toBeLessThanOrEqual(8 * FRAME_MS);
+	});
+
+	it("keeps a long run's rhythm, its falls and the body limit, in the same span", () => {
+		// Five minutes of catches, mostly a second or more apart, with a flurry now and then
+		let seed = 7;
+		const random = () => {
+			seed = (seed * 9301 + 49297) % 233280;
+			return seed / 233280;
+		};
+		const catches: RunCatch[] = [];
+		for (let tick = 5; catches.length < 600; ) {
+			catches.push(caught(tick));
+			tick += random() < 0.3 ? Math.floor(random() * 2) : 5 + Math.floor(random() * 40);
+		}
+		const first = catches[0].tick;
+		const runSpan = catches[catches.length - 1].tick - first;
+		const p = plan({ catches, ticks: catches[catches.length - 1].tick + 30 });
+		const found = landings(p);
+		expect(found).toHaveLength(600);
+		found.forEach(({ ms }, i) => {
+			const real = POUR_START_MS + (POUR_SPAN_MS * (catches[i].tick - first)) / runSpan;
+			expect(ms).toBeGreaterThanOrEqual(real);
+			expect(ms).toBeLessThan(real + 1);
+		});
+		let most = 0;
+		for (let ms = 0; ms <= 4000; ms++) most = Math.max(most, pourAt(p, ms).flights.length);
+		expect(most).toBeLessThanOrEqual(MERGE_MAX_DOTS);
+		expect(
+			fallStarts(
+				p,
+				found.map((l) => l.ms),
+			).length,
+		).toBeGreaterThan(MERGE_MAX_DOTS);
 	});
 
 	it("never has more catches in flight than the merge shader draws, however dense the run", () => {
@@ -77,7 +160,7 @@ describe("pourAt", () => {
 			const p = plan({ catches: flurry, ticks: seconds(60) });
 			let most = 0;
 			for (let ms = 0; ms <= 6000; ms += 2) most = Math.max(most, pourAt(p, ms).flights.length);
-			expect(most).toBeGreaterThan(1);
+			expect(most).toBeGreaterThan(0);
 			expect(most).toBeLessThanOrEqual(MERGE_MAX_DOTS);
 			expect(landings(p)).toHaveLength(count);
 			expect(landings(p).at(-1)?.ms).toBe(POUR_START_MS + POUR_SPAN_MS);
