@@ -164,10 +164,20 @@ export function easeToward(current: number, target: number, dtMs: number): numbe
 const KICK_SMALL = 20;
 const KICK_POINT = 30;
 
-/** The speed (px/s, downward) a catch landing knocks the drop's mass into (see kickJelly) */
-export function landingKick(radius: number, point: boolean): number {
+/**
+ * The velocity (px/s) a catch landing on its spot knocks the drop's mass into (see
+ * kickJelly): in from the spot toward the drop's centre, so an off-centre landing pushes
+ * sideways as well as down, and straight down onto a drop with no size yet
+ */
+export function landingKick(
+	landing: { x: number; y: number; point: boolean },
+	radius: number,
+): { x: number; y: number } {
 	"worklet";
-	return radius * (point ? KICK_POINT : KICK_SMALL);
+	const speed = radius * (landing.point ? KICK_POINT : KICK_SMALL);
+	const out = Math.hypot(landing.x, landing.y);
+	if (out === 0) return { x: 0, y: speed };
+	return { x: (-landing.x / out) * speed, y: (-landing.y / out) * speed };
 }
 
 /** The pour's clock starts this long after the game over mounts (ms), as it fades in */
@@ -266,7 +276,8 @@ export function stepPour(
 	let body = playback.body;
 	let bursts = before.bursts;
 	for (const landing of view.landings) {
-		body = kickJelly(body, landingKick(view.drop.radius, landing.point));
+		const kick = landingKick(landing, view.drop.radius);
+		body = kickJelly(body, kick.x, kick.y);
 		for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
 	}
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);

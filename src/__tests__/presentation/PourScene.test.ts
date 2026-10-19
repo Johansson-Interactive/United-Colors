@@ -132,10 +132,32 @@ describe("easeToward", () => {
 });
 
 describe("landingKick", () => {
+	const onTop = (point: boolean, radius: number) => ({ x: 0, y: -radius, point });
+	const speed = ({ x, y }: { x: number; y: number }) => Math.hypot(x, y);
+
 	it("knocks the drop down, harder for a point dot and for a bigger drop", () => {
-		expect(landingKick(20, false)).toBeGreaterThan(0);
-		expect(landingKick(20, true)).toBeGreaterThan(landingKick(20, false));
-		expect(landingKick(60, false)).toBeGreaterThan(landingKick(20, false));
+		const down = landingKick(onTop(false, 20), 20);
+		expect(Math.abs(down.x)).toBe(0);
+		expect(down.y).toBeGreaterThan(0);
+		expect(speed(landingKick(onTop(true, 20), 20))).toBeGreaterThan(
+			speed(landingKick(onTop(false, 20), 20)),
+		);
+		expect(speed(landingKick(onTop(false, 60), 60))).toBeGreaterThan(
+			speed(landingKick(onTop(false, 20), 20)),
+		);
+	});
+
+	it("knocks in from where the catch lands, toward the drop's centre", () => {
+		const kick = landingKick({ x: 12, y: -16, point: false }, 20);
+		expect(kick.x).toBeLessThan(0);
+		expect(kick.x / kick.y).toBeCloseTo(-12 / 16);
+		expect(speed(kick)).toBeCloseTo(speed(landingKick(onTop(false, 20), 20)));
+	});
+
+	it("knocks straight down when the catch lands on a drop with no size yet", () => {
+		const kick = landingKick({ x: 0, y: 0, point: false }, 9);
+		expect(Math.abs(kick.x)).toBe(0);
+		expect(kick.y).toBeGreaterThan(0);
 	});
 });
 
@@ -355,6 +377,22 @@ describe("stepPour", () => {
 		expect(after.body.lagVY).toBeGreaterThan(before.body.lagVY);
 		expect(after.frame.bursts.length).toBe(before.frame.bursts.length + 1);
 		expect(after.frame.bursts.at(-1)?.kind).toBe("pop");
+	});
+
+	it("pushes the liquid away from where an off-centre catch lands, sideways as well as down", () => {
+		const { steps } = play(POUR_START_MS + 2400);
+		const at = steps.findIndex(
+			(s) => s.landings.length > 0 && s.playback.frame.view.drop.tally > 4,
+		);
+		const [last] = steps[at].landings;
+		const { radius } = steps[at - 1].playback.frame.view.drop;
+		expect(Math.abs(last.x)).toBeGreaterThan(0.2 * radius);
+		expect(steps[at - 1].playback.frame.jelly.stretchX).toBeCloseTo(0, 3);
+		// A few frames on, the drop is drawn out across, the mass thrown away from the landing
+		const { jelly } = steps[at + 3].playback.frame;
+		expect(Math.sign(jelly.stretchX)).toBe(-Math.sign(last.x));
+		expect(Math.abs(jelly.stretchX)).toBeGreaterThan(0.01);
+		expect(jelly.stretchY).toBeGreaterThan(0);
 	});
 
 	it("eases the drawn drop toward the stepper's", () => {

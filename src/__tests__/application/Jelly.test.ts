@@ -91,7 +91,7 @@ describe("jelly", () => {
 	it("sloshes along a kick, as from a catch landing on a still drop, then settles", () => {
 		let body = stepJelly(JELLY_AT_REST, 100, 100, RADIUS, FRAME_MS);
 		const before = { ...body };
-		const kicked = kickJelly(body, 20 * RADIUS);
+		const kicked = kickJelly(body, 0, 20 * RADIUS);
 		expect(body).toEqual(before);
 		body = kicked;
 		const stretches: number[] = [];
@@ -107,10 +107,19 @@ describe("jelly", () => {
 		expect(Math.abs(stretches[stretches.length - 1])).toBeLessThan(0.002);
 	});
 
+	it("sloshes along a slanted kick, drawn out the way it was knocked", () => {
+		let body = stepJelly(JELLY_AT_REST, 100, 100, RADIUS, FRAME_MS);
+		body = kickJelly(body, -12 * RADIUS, 16 * RADIUS);
+		for (let i = 0; i < 3; i++) body = stepJelly(body, 100, 100, RADIUS, FRAME_MS);
+		const { stretchX, stretchY } = jellyShape(body, RADIUS);
+		expect(stretchX).toBeLessThan(0);
+		expect(stretchX / stretchY).toBeCloseTo(-12 / 16);
+	});
+
 	it("comes to rest once a kick's slosh has died down too far to see", () => {
 		let body = stepJelly(JELLY_AT_REST, 100, 100, RADIUS, FRAME_MS);
 		expect(jellyAtRest(body, RADIUS)).toBe(true);
-		body = kickJelly(body, 20 * RADIUS);
+		body = kickJelly(body, 0, 20 * RADIUS);
 		expect(jellyAtRest(body, RADIUS)).toBe(false);
 		let frames = 0;
 		while (!jellyAtRest(body, RADIUS)) {

@@ -105,12 +105,12 @@ export function stepJelly(
 }
 
 /**
- * `body` with its mass knocked downward at `vy` px/s, as by a catch falling onto the drop's
- * top: it sloshes up and down and settles as after a sudden stop. A worklet.
+ * `body` with its mass knocked at (`vx`, `vy`) px/s, as by a catch landing on the drop: it
+ * sloshes along the knock and settles as after a sudden stop. A worklet.
  */
-export function kickJelly(body: JellyBody, vy: number): JellyBody {
+export function kickJelly(body: JellyBody, vx: number, vy: number): JellyBody {
 	"worklet";
-	return { ...body, lagVY: body.lagVY + vy };
+	return { ...body, lagVX: body.lagVX + vx, lagVY: body.lagVY + vy };
 }
 
 /** A slosh under this many radii, as far as it would swing, is too small to see */
