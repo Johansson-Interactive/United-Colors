@@ -34,16 +34,18 @@ export interface FlowStoreState {
 	screen: Screen;
 	/** Step a tap, then carry out what the step asks: calibrate, act, flood */
 	dispatch: (event: FlowEvent) => void;
-	/** Stop following the game's phase */
-	dispose: () => void;
 }
 
+/**
+ * The flow store, starting on the screen of the game's phase, and `follow`, which keeps it on
+ * the game's phase until the unsubscribe it returns is called. Creating the store has no side
+ * effects; following can stop and start again, catching up on the phase each time it starts.
+ */
 export function createFlowStore(game: GameStore, sinks: FlowSinks) {
 	const store = createStore<FlowStoreState>(() => ({
 		flow: INITIAL_FLOW,
 		screen: screenOf(INITIAL_FLOW),
 		dispatch,
-		dispose,
 	}));
 
 	const apply = (event: FlowEvent) => {
@@ -65,15 +67,15 @@ export function createFlowStore(game: GameStore, sinks: FlowSinks) {
 		}
 	}
 
-	const follow = (phase: GamePhase) => {
+	const toPhase = (phase: GamePhase) => {
 		if (phase !== store.getState().flow.phase) apply({ type: "phaseChanged", phase });
 	};
-	follow(game.getState().frame.phase);
-	const unsubscribe = game.subscribe((state) => follow(state.frame.phase));
+	toPhase(game.getState().frame.phase);
 
-	function dispose() {
-		unsubscribe();
-	}
+	const follow = () => {
+		toPhase(game.getState().frame.phase);
+		return game.subscribe((state) => toPhase(state.frame.phase));
+	};
 
-	return store;
+	return { store, follow };
 }

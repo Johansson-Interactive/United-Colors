@@ -12,8 +12,8 @@ export function useScreenFlow(
 	store: GameStore,
 	sinks: FlowSinks,
 ): { screen: Screen; dispatch: (event: FlowEvent) => void } {
-	const [flow] = useState(() => createFlowStore(store, sinks));
-	useEffect(() => flow.getState().dispose, [flow]);
+	const [{ store: flow, follow }] = useState(() => createFlowStore(store, sinks));
+	useEffect(follow, [follow]);
 	const screen = useStore(flow, (s) => s.screen);
 	const dispatch = useStore(flow, (s) => s.dispatch);
 	return { screen, dispatch };

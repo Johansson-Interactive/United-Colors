@@ -6,12 +6,15 @@ const AT = { x: 10, y: 20 };
 const ZERO = { x: 0.3, y: -0.1 };
 const PINK = "#E91E63";
 
-/** A game store and a flow store on it, with sinks that write every call to one list */
+/**
+ * A game store and a flow store on it, following the game, with sinks that write every call to
+ * one list
+ */
 function setup() {
 	const game = createGameStore();
 	const calls: string[] = [];
 	let cover: (() => void) | null = null;
-	const flow = createFlowStore(game, {
+	const { store: flow, follow } = createFlowStore(game, {
 		perform: (action) => calls.push(`act ${action.kind}`),
 		flood: (color, at, onCovered) => {
 			calls.push(`flood ${color} ${at.x},${at.y}`);
@@ -20,10 +23,13 @@ function setup() {
 		calibrate: (zero, facingDown) =>
 			calls.push(`calibrate ${zero.x},${zero.y}${facingDown ? " down" : ""}`),
 	});
+	const unfollow = follow();
 	const publish = (phase: GamePhase) =>
 		game.getState().updateFrame({ ...game.getState().frame, phase });
 	return {
 		flow,
+		follow,
+		unfollow,
 		calls,
 		publish,
 		screen: () => flow.getState().screen,
@@ -43,7 +49,7 @@ describe("flow store", () => {
 	it("starts on the screen of the game's phase", () => {
 		const game = createGameStore();
 		game.getState().updateFrame({ ...game.getState().frame, phase: "PAUSED" });
-		const flow = createFlowStore(game, {
+		const { store: flow } = createFlowStore(game, {
 			perform: () => {},
 			flood: () => {},
 			calibrate: () => {},
@@ -108,10 +114,14 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "hud" });
 	});
 
-	it("stops following the game once disposed", () => {
-		const { flow, publish, screen } = setup();
-		flow.getState().dispose();
+	it("stops following the game once unfollowed, and catches up when it follows again", () => {
+		const { follow, unfollow, publish, screen } = setup();
+		unfollow();
 		publish("GAME_OVER");
 		expect(screen()).toEqual({ kind: "title" });
+		follow();
+		expect(screen()).toEqual({ kind: "gameOver" });
+		publish("RUNNING");
+		expect(screen()).toEqual({ kind: "hud" });
 	});
 });
