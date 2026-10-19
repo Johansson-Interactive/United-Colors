@@ -1,4 +1,4 @@
-import { JELLY_MAX_STRETCH } from "../application/jelly";
+import { JELLY_MAX_STRETCH, JELLY_WOBBLE_PERIOD_S } from "../application/jelly";
 import { MERGE_MAX_DOTS } from "../application/renderScene";
 import {
 	dotCount,
@@ -25,6 +25,34 @@ export const DENT_GAP = 0.06;
 /** How softly the dent's rim curves into the player, as a fraction of the refused dot's radius */
 export const DENT_SOFTNESS = 0.7;
 
+/** The amber level that draws no amber layer, as in play: far below any body (px) */
+export const NO_AMBER = 1e6;
+/** How far the amber's surface waves at rest, as a fraction of the drop's radius */
+export const AMBER_REST_WAVE = 0.02;
+/** How much further it waves with the liquid at full slosh (stretched to JELLY_MAX_STRETCH) */
+export const AMBER_SLOSH_WAVE = 0.05;
+/** How far it tips at the drop's edge with the liquid at full sideways slosh, in radii */
+export const AMBER_TILT = 0.06;
+
+/**
+ * SkSL for the amber layer's surface in the first body, a drop of radius `r`: how far below
+ * its centre the surface is at `x` across from it, around the layer's `level`. A slow wave
+ * travels across it on the ripple clock (`shape.z`), so it is never ruler-flat; the liquid's
+ * slosh (its jelly stretch, `shape.xy`, see jelly.ts) makes it wave harder and tips it.
+ */
+const AMBER_SKSL = `
+float amberSurface(float x, float level, float r, float3 shape) {
+	float u = x / max(r, 1.0);
+	float t = shape.z * ${(2 * Math.PI) / JELLY_WOBBLE_PERIOD_S};
+	// Whole cycles a wobble period, so the wave goes on smoothly as the clock wraps
+	float w = 0.6 * sin(5.0 * u - 7.0 * t) + 0.4 * sin(8.0 * u + 11.0 * t);
+	float slosh = length(shape.xy) / ${JELLY_MAX_STRETCH};
+	float tilt = shape.x / ${JELLY_MAX_STRETCH};
+	return level + r * ((${AMBER_REST_WAVE} + ${AMBER_SLOSH_WAVE} * slosh) * w
+		+ ${AMBER_TILT} * tilt * u);
+}
+`;
+
 /**
  * Metaball shader: the player and the dots merging into it as one liquid body. Each body is
  * a signed distance to its circle; a polynomial smooth-min joins them, so two bodies grow a
@@ -41,11 +69,16 @@ export const DENT_SOFTNESS = 0.7;
  * Pushed into a wall (or two, in a corner), the liquid is cut off flat at it and wets it
  * with a fillet `neck` wide (see wall.ts).
  *
+ * Below the amber layer's wavy surface (see AMBER_SKSL) the liquid is amber, as the game
+ * over's drop holds its combo bonus. Play has no amber layer: its level is NO_AMBER, and the
+ * shader skips the surface.
+ *
  * Uniforms, in order: `blobs` (x, y, radius per body), `count` (bodies in use), `blend`
  * (smooth-min radius in points), `jelly` (the player's stretch x, y and wobble clock in
  * seconds), `dent` (centre x, y, radius and rim softness in points; no dent at radius 0),
  * `walls` (inward normal x, y and offset for each of two walls; a zero normal is none),
- * `neck` (fillet width in points) and `color` (unpremultiplied RGBA).
+ * `neck` (fillet width in points), `color` (unpremultiplied RGBA), `amber` (the amber layer's
+ * level in points below the first body's centre) and `amberColor` (unpremultiplied RGBA).
  */
 export const MERGE_SKSL = `
 uniform float3 blobs[${MERGE_MAX_BLOBS}];
@@ -56,9 +89,12 @@ uniform float4 dent;
 uniform float3 walls[2];
 uniform float neck;
 uniform float4 color;
+uniform float amber;
+uniform float4 amberColor;
 ${SMIN_SKSL}
 ${WALL_SKSL}
 ${LIQUID_SKSL}
+${AMBER_SKSL}
 half4 main(float2 p) {
 	float d = liquid(p - blobs[0].xy, blobs[0].z, jelly);
 	for (int i = 1; i < ${MERGE_MAX_BLOBS}; i++) {
@@ -73,13 +109,20 @@ half4 main(float2 p) {
 	d = atWall(d, p, walls[0], neck);
 	d = atWall(d, p, walls[1], neck);
 	float a = 1.0 - smoothstep(-0.5, 0.5, d);
-	return half4(color.rgb * a, a);
+	float3 rgb = color.rgb;
+	if (amber < ${NO_AMBER.toFixed(1)}) {
+		float2 q = p - blobs[0].xy;
+		float below = q.y - amberSurface(q.x, amber, blobs[0].z, jelly);
+		rgb = mix(rgb, amberColor.rgb, smoothstep(-0.5, 0.5, below));
+	}
+	return half4(rgb * a, a);
 }
 `;
 
 /**
  * The merge shader's uniforms by name, as Skia's declarative <Shader> takes them: the packed
- * values (see packMergeUniforms) cut at the declarations in MERGE_SKSL, with `color` added
+ * values (see packMergeUniforms) cut at the declarations in MERGE_SKSL, with `color` and the
+ * amber layer added
  */
 export interface MergeUniformsByName {
 	[name: string]: number | number[];
@@ -91,6 +134,8 @@ export interface MergeUniformsByName {
 	walls: number[];
 	neck: number;
 	color: number[];
+	amber: number;
+	amberColor: number[];
 }
 
 /** Floats each uniform takes, in declaration order (see MERGE_SKSL) */
@@ -104,10 +149,16 @@ const UNIFORM_SIZES = [
 	["neck", 1],
 ] as const;
 
-/** Cut packed values (without `color`) into named uniforms, with `color` (RGBA) added */
+/**
+ * Cut packed values (without `color`) into named uniforms, with `color` (RGBA) added, and an
+ * amber layer `amber` points below the first body's centre in `amberColor` (RGBA): none by
+ * default, as in play
+ */
 export function mergeUniformsByName(
 	values: number[],
 	color: ArrayLike<number>,
+	amber = NO_AMBER,
+	amberColor: ArrayLike<number> = color,
 ): MergeUniformsByName {
 	"worklet";
 	let at = 0;
@@ -132,6 +183,8 @@ export function mergeUniformsByName(
 		walls,
 		neck,
 		color: [color[0], color[1], color[2], color[3]],
+		amber,
+		amberColor: [amberColor[0], amberColor[1], amberColor[2], amberColor[3]],
 	};
 }
 
