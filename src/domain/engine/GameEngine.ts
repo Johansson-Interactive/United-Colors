@@ -53,13 +53,9 @@ export class GameEngine {
 	private dots: Dot[] = [];
 	private score = 0;
 	private timeStep = 0;
-	/**
-	 * Combo step of the last catch (0 when no combo is going), the tick it landed on, and what
-	 * the combo has paid so far
-	 */
+	/** Combo step of the last catch (0 when no combo is going), and the tick it landed on */
 	private comboStep = 0;
 	private lastCatchTick = 0;
-	private comboTotal = 0;
 	private density: number;
 	private screen: ScreenSize;
 	private random: () => number;
@@ -408,22 +404,17 @@ export class GameEngine {
 		this.lastCatchTick = this.timeStep;
 		const value = base + 2 * (this.comboStep - 1);
 		this.score += value;
-		this.comboTotal += value;
 		return { value, step: this.comboStep, sameTick };
 	}
 
-	/** End the combo once its window has run out, reporting it if it was two catches or more */
+	/** End the combo once its window has run out */
 	private endLapsedCombo(): void {
 		if (this.comboStep === 0 || this.timeStep - this.lastCatchTick <= COMBO_WINDOW_TICKS) return;
-		if (this.comboStep > 1) {
-			this.events.push({ type: "comboEnd", total: this.comboTotal, catches: this.comboStep });
-		}
 		this.resetCombo();
 	}
 
 	/** No combo going */
 	private resetCombo(): void {
 		this.comboStep = 0;
-		this.comboTotal = 0;
 	}
 }

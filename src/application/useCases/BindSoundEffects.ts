@@ -5,9 +5,8 @@ import type { GameAudio } from "../ports";
 
 /**
  * A sound for each catch and spawn, and the stinger as a run ends; the spit is felt, not
- * heard, and a combo's end is silent. A catch sounds higher the further into its combo it is,
- * and catches on the same tick sound one after the other (see catchCue). Returns the
- * unsubscribe.
+ * heard. A catch sounds higher the further into its combo it is, and catches on the same tick
+ * sound one after the other (see catchCue). Returns the unsubscribe.
  */
 export function bindSoundEffects(store: GameStore, audio: GameAudio): () => void {
 	const stagger = createCatchStagger();
@@ -27,7 +26,6 @@ export function bindSoundEffects(store: GameStore, audio: GameAudio): () => void
 				audio.playGameOver();
 				return;
 			case "spit":
-			case "comboEnd":
 				return;
 		}
 	});

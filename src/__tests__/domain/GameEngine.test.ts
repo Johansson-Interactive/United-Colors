@@ -294,31 +294,19 @@ describe("GameEngine", () => {
 			expect(catches(engine)).toEqual([[5, 3, false]]);
 		});
 
-		/** The combo ends reported with the next frame */
-		function comboEnds(engine: GameEngine) {
-			return engine.getFrame().events.filter((e) => e.type === "comboEnd");
-		}
-
-		it("reports its total and length once, on the first tick after the window runs out", () => {
-			const { engine, small, point } = stagedEngine(OWN);
-			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
+		it("lapses on the first tick after the window runs out", () => {
+			const { engine, small } = twoIntoACombo();
+			ticks(engine, COMBO_WINDOW_TICKS - 1);
+			small.push(smallDotAt(CENTRE, OWN, { id: "c" }));
 			engine.tick();
-			point.push(pointOnPlayer("p", OTHER));
-			engine.tick();
-			small.push(smallDotAt(CENTRE, OTHER, { id: "b" }));
-			engine.tick();
-			engine.getFrame();
+			expect(catches(engine)).toEqual([[5, 3, false]]);
 			ticks(engine, COMBO_WINDOW_TICKS);
-			expect(comboEnds(engine)).toEqual([]);
+			small.push(smallDotAt(CENTRE, OWN, { id: "d" }));
 			engine.tick();
-			expect(comboEnds(engine)).toEqual([
-				{ type: "comboEnd", total: 1 + POINT_DOT_VALUE + 2 + 5, catches: 3 },
-			]);
-			ticks(engine, COMBO_WINDOW_TICKS * 2);
-			expect(comboEnds(engine)).toEqual([]);
+			expect(catches(engine)).toEqual([[1, 1, false]]);
 		});
 
-		it("a catch on its own ends without a combo end, and the next starts afresh", () => {
+		it("a catch on its own lapses quietly, and the next starts afresh", () => {
 			const { engine, small } = stagedEngine(OWN);
 			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));
 			engine.tick();
@@ -341,39 +329,29 @@ describe("GameEngine", () => {
 			return staged;
 		}
 
-		it("cut short by a refusal still pays, but reports no combo end", () => {
+		it("cut short by a refusal still pays", () => {
 			const { engine, small } = twoIntoACombo();
 			small.push(smallDotAt(CENTRE, OTHER, { id: "wrong" }));
-			const reported: GameEvent[] = [];
-			for (let t = 0; t <= REJECT_TICKS + COMBO_WINDOW_TICKS; t++) {
-				engine.tick();
-				reported.push(...engine.getFrame().events);
-			}
+			ticks(engine, REJECT_TICKS + COMBO_WINDOW_TICKS + 1);
 			expect(engine.getFrame()).toMatchObject({ phase: "GAME_OVER", score: 1 + 3 });
-			expect(reported.filter((e) => e.type === "comboEnd")).toEqual([]);
 		});
 
-		it("cut short by a new run or kiosk mode reports no combo end", () => {
-			for (const restart of [
-				(engine: GameEngine) => engine.startGame(OWN),
-				(engine: GameEngine) => engine.startKiosk(),
-			]) {
-				const { engine } = twoIntoACombo();
-				restart(engine);
-				ticks(engine, COMBO_WINDOW_TICKS * 2);
-				expect(comboEnds(engine)).toEqual([]);
-			}
+		it("does not carry over into a new run", () => {
+			const { engine, small } = twoIntoACombo();
+			engine.startGame(OWN);
+			small.push(smallDotAt(CENTRE, OWN, { id: "c" }));
+			engine.tick();
+			expect(catches(engine)).toEqual([[1, 1, false]]);
 		});
 
-		it("still reports its end after a pause", () => {
-			const { engine } = twoIntoACombo();
+		it("carries on across a pause", () => {
+			const { engine, small } = twoIntoACombo();
 			engine.pause();
 			ticks(engine, COMBO_WINDOW_TICKS * 3);
 			engine.resume();
-			ticks(engine, COMBO_WINDOW_TICKS);
-			expect(comboEnds(engine)).toEqual([]);
+			small.push(smallDotAt(CENTRE, OWN, { id: "c" }));
 			engine.tick();
-			expect(comboEnds(engine)).toEqual([{ type: "comboEnd", total: 4, catches: 2 }]);
+			expect(catches(engine)).toEqual([[5, 3, false]]);
 		});
 
 		it("a drip plucked off its wall counts", () => {

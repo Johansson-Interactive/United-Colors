@@ -107,14 +107,6 @@ export interface Catch {
 	sameTick: boolean;
 }
 
-/** A combo of two or more catches that ran its course */
-interface ComboEnd {
-	/** Everything it paid */
-	total: number;
-	/** Its length */
-	catches: number;
-}
-
 /**
  * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
  * once, with the next frame.
@@ -125,11 +117,6 @@ export type GameEvent =
 	/** A point dot was caught and recoloured the player */
 	| ({ type: "collectPoint" } & Catch)
 	| { type: "pointSpawn" }
-	/**
-	 * A combo of two or more catches ran its course: its window ran out after the last catch.
-	 * None when a refusal or a new run cuts it short
-	 */
-	| ({ type: "comboEnd" } & ComboEnd)
 	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
 	| { type: "spit" }
 	| { type: "gameOver" };

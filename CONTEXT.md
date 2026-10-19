@@ -41,7 +41,3 @@ _Avoid_: streak, chain, multiplier
 
 **Combo step**:
 A catch's place in its combo: 1 for the first (or a catch on its own), 2 for the next, and so on. A catch pays its own value plus two for every catch before it in the combo, so a combo of small dots alone totals its length squared.
-
-**Combo total**:
-Everything a combo paid, its catches' own values and bonuses together; the player is shown it where the combo's last catch landed, once a combo of two or more catches ends. A combo cut short by a refusal still pays, but its total is not shown.
-_Avoid_: combo score, combo points
