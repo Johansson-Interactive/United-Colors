@@ -129,7 +129,7 @@ interface PourDigitDot {
 }
 
 /** The combo bonus's `+N`, drawn in ink inside the amber layer */
-interface PourBonus {
+interface PourBonusLabel {
 	/** Its dots, from the drop's centre (px) */
 	dots: readonly { x: number; y: number }[];
 	/** Their spacing (px), never more than the tally's */
@@ -174,7 +174,7 @@ export interface PourPlan {
 	/** How far the settled tally sits from the drop's centre (px, so negative: up) */
 	lift: number;
 	/** The settled `+N`; null without a combo bonus */
-	bonus: Omit<PourBonus, "opacity"> | null;
+	bonusLabel: Omit<PourBonusLabel, "opacity"> | null;
 }
 
 /** What the shell draws at one moment of the pour */
@@ -196,7 +196,7 @@ export interface PourView {
 	 */
 	amberLevel: number | null;
 	/** `+N` inside the amber layer; null without a combo bonus */
-	bonus: PourBonus | null;
+	bonusLabel: PourBonusLabel | null;
 	/** The drop is at rest: `NEW BEST!` and confetti may follow */
 	settled: boolean;
 }
@@ -391,7 +391,7 @@ function amberOf(bonus: number, score: number, radius: number, pitch: number) {
 		x: (col + 0.5 - cols / 2) * bonusPitch,
 		y: top + spare / 2 + (row + 0.5) * bonusPitch,
 	}));
-	return { level, bonus: { dots, pitch: bonusPitch } };
+	return { level, label: { dots, pitch: bonusPitch } };
 }
 
 /**
@@ -432,7 +432,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,
 		level: amber?.level ?? 1,
 		lift: amber ? tallyLift(radius, amber.level * radius, tallyHeight) : 0,
-		bonus: amber?.bonus ?? null,
+		bonusLabel: amber?.label ?? null,
 	};
 }
 
@@ -489,7 +489,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		}
 		digits = lifted;
 	}
-	const { bonus } = plan;
+	const { bonusLabel } = plan;
 	return {
 		landings,
 		sounds,
@@ -498,9 +498,9 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		digits,
 		clock: formatClock(plan.seconds * clamp01((ms - POUR_START_MS) / POUR_SPAN_MS)),
 		amberLevel: amberLevel < 1 ? amberLevel : null,
-		bonus: bonus && {
-			dots: bonus.dots,
-			pitch: bonus.pitch,
+		bonusLabel: bonusLabel && {
+			dots: bonusLabel.dots,
+			pitch: bonusLabel.pitch,
 			opacity: clamp01((ms - plan.settleMs - POUR_RISE_MS) / POUR_FADE_MS),
 		},
 		settled,

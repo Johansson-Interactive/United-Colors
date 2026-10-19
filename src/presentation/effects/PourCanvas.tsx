@@ -109,11 +109,11 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
 			}
-			const { bonus } = view;
-			if (bonus !== null && bonus.opacity > 0) {
-				BONUS_PAINT.setAlphaf(bonus.opacity);
-				const bonusRadius = bonus.pitch * POUR_DIGIT_SCALE;
-				for (const dot of bonus.dots) canvas.drawCircle(dot.x, dot.y, bonusRadius, BONUS_PAINT);
+			const { bonusLabel: label } = view;
+			if (label !== null && label.opacity > 0) {
+				BONUS_PAINT.setAlphaf(label.opacity);
+				const labelRadius = label.pitch * POUR_DIGIT_SCALE;
+				for (const dot of label.dots) canvas.drawCircle(dot.x, dot.y, labelRadius, BONUS_PAINT);
 			}
 			const { bursts, now } = frame.get();
 			drawBursts(canvas, bursts, now);

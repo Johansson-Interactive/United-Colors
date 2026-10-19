@@ -456,7 +456,7 @@ describe("pourAt", () => {
 	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
 			const p = plan({ catches, ticks: 120 });
-			expect(pourAt(p, 10_000)).toMatchObject({ amberLevel: null, bonus: null, settled: true });
+			expect(pourAt(p, 10_000)).toMatchObject({ amberLevel: null, bonusLabel: null, settled: true });
 		}
 	});
 
@@ -510,14 +510,14 @@ describe("the amber layer", () => {
 	}
 
 	/** The `+N` of a view, which must have one */
-	function bonusOf(view: PourView) {
-		if (view.bonus === null) throw new Error("no +N");
-		return view.bonus;
+	function labelOf(view: PourView) {
+		if (view.bonusLabel === null) throw new Error("no +N");
+		return view.bonusLabel;
 	}
 
 	/** Every dot of `+N`, with the half pitch around it, lies in the drop and under the amber */
 	function expectInAmber(view: PourView) {
-		const { dots, pitch } = bonusOf(view);
+		const { dots, pitch } = labelOf(view);
 		const surface = surfaceOf(view);
 		for (const { x, y } of dots) {
 			expect(y - pitch / 2).toBeGreaterThanOrEqual(surface);
@@ -540,9 +540,9 @@ describe("the amber layer", () => {
 		const view = pourAt(plan(comboRun(2, 98)), RESTED);
 		expect(view.drop.tally).toBe(102);
 		expect(amberShareOf(view)).toBeGreaterThan(5 * (2 / 102));
-		const bonus = bonusOf(view);
-		expect(bonus.dots).toHaveLength(layoutDotMatrix("+2").dots.length);
-		expect(bonus.pitch).toBeCloseTo(POUR_BONUS_MIN_PITCH, 2);
+		const label = labelOf(view);
+		expect(label.dots).toHaveLength(layoutDotMatrix("+2").dots.length);
+		expect(label.pitch).toBeCloseTo(POUR_BONUS_MIN_PITCH, 2);
 		expectInAmber(view);
 	});
 
@@ -551,7 +551,7 @@ describe("the amber layer", () => {
 		const view = pourAt(plan(comboRun(5, 50)), RESTED);
 		expect(view.drop.tally).toBe(75);
 		expect(amberShareOf(view)).toBeCloseTo(20 / 75);
-		const { pitch, dots } = bonusOf(view);
+		const { pitch, dots } = labelOf(view);
 		expect(dots).toHaveLength(layoutDotMatrix("+20").dots.length);
 		expect(pitch).toBeGreaterThan(POUR_BONUS_MIN_PITCH);
 		expect(pitch).toBeLessThan(PITCH);
@@ -562,7 +562,7 @@ describe("the amber layer", () => {
 		// A combo of ten pays 100, 90 of it bonus, its tally set close
 		const view = pourAt(planPour({ record: comboRun(10, 0), color: RED, pitch: 6 }), RESTED);
 		expect(amberShareOf(view)).toBeCloseTo(0.9);
-		expect(bonusOf(view).pitch).toBe(6);
+		expect(labelOf(view).pitch).toBe(6);
 		expectInAmber(view);
 	});
 
@@ -577,16 +577,16 @@ describe("the amber layer", () => {
 			const view = pourAt(p, ms);
 			expect(amberShareOf(view)).toBeGreaterThanOrEqual(last);
 			last = amberShareOf(view);
-			expect(bonusOf(view).opacity).toBe(0);
+			expect(labelOf(view).opacity).toBe(0);
 		}
 		const halfway = amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS / 2));
 		expect(halfway).toBeGreaterThan(0.1);
 		expect(halfway).toBeLessThan(0.8);
 		expect(amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS))).toBeCloseTo(0.9);
-		const fading = bonusOf(pourAt(p, SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
+		const fading = labelOf(pourAt(p, SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
 		expect(fading).toBeGreaterThan(0);
 		expect(fading).toBeLessThan(1);
-		expect(bonusOf(pourAt(p, RESTED)).opacity).toBe(1);
+		expect(labelOf(pourAt(p, RESTED)).opacity).toBe(1);
 	});
 
 	it("centres the settled tally in the player's colour, between the amber and the drop's top", () => {

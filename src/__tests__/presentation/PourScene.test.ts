@@ -468,10 +468,10 @@ describe("stepPour", () => {
 				for (const d of view.digits) {
 					expect(d.y + 14 * POUR_DIGIT_SCALE).toBeLessThanOrEqual(surface - reach);
 				}
-				const bonus = view.bonus;
-				if (bonus === null || bonus.opacity === 0) continue;
-				for (const d of bonus.dots) {
-					expect(d.y - bonus.pitch * POUR_DIGIT_SCALE).toBeGreaterThanOrEqual(surface + reach);
+				const label = view.bonusLabel;
+				if (label === null || label.opacity === 0) continue;
+				for (const d of label.dots) {
+					expect(d.y - label.pitch * POUR_DIGIT_SCALE).toBeGreaterThanOrEqual(surface + reach);
 				}
 			}
 			expect(amber).toBeGreaterThan(0);
@@ -481,7 +481,7 @@ describe("stepPour", () => {
 	it("never finishes: once settled its liquid keeps stepping, so the drop keeps rippling", () => {
 		const { playback } = play(20_000);
 		expect(playback.frame.view.settled).toBe(true);
-		expect(playback.frame.view.bonus?.opacity).toBe(1);
+		expect(playback.frame.view.bonusLabel?.opacity).toBe(1);
 		expect(playback.frame.bursts).toEqual([]);
 		expect(playback.status.settled).toBe(true);
 		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME, NO_BEST);
