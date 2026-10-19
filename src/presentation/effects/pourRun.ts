@@ -9,8 +9,8 @@
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
  * is a worklet and a pure function of time, so the shell samples it per frame from its own
  * clock. Pass it the previous sample's time too, and it lists the catches that landed in
- * between, each exactly once, for their sound and bursts. The shell owns the drawing, the
- * jelly kicked on each landing, the sounds and where things are on the screen.
+ * between, each exactly once, for their bursts, and the sounds among them. The shell owns the
+ * drawing, the jelly kicked on each landing, the sounds and where things are on the screen.
  */
 
 import { catchPitch } from "../../application/catchCue";
@@ -35,6 +35,11 @@ const MERGE_MS = 260;
  * of a flurry landing closer than this to the first of them fall with it, as one body.
  */
 export const POUR_STAGGER_MS = Math.ceil((POUR_FALL_MS + MERGE_MS) / MERGE_MAX_DOTS) + 1;
+/**
+ * Landings are heard in windows this long (ms), each opened by the first landing after the one
+ * before: at most one landing a window sounds, so a flurry is a quick run of notes, not a smear
+ */
+export const POUR_SOUND_WINDOW_MS = 60;
 /** The drop comes to rest this long after the last landing (ms); then the pour is settled */
 export const POUR_SETTLE_MS = 700;
 /** Once settled, the amber layer rises from the drop's bottom to its level over this (ms)... */
@@ -54,6 +59,8 @@ const AMBER_CLEAR = 3;
 export const POUR_DOT_RADIUS = 9;
 /** ...up to this radius (px), reached at a tally of about 200, so any score fits the screen */
 export const POUR_MAX_RADIUS = 130;
+/** A catch lands at most this share of the drop's radius to either side of its middle */
+const SIDE_REACH = 0.7;
 
 export interface PourInput {
 	record: RunRecord;
@@ -63,12 +70,22 @@ export interface PourInput {
 	pitch: number;
 }
 
-/** One catch's landing: the sound to cue for it and its bursts */
-interface PourLanding {
+/** Where a catch lands: the point of the drop's top it touches, from the drop's centre (px) */
+interface PourSpot {
+	x: number;
+	y: number;
+}
+
+/** A catch sound to cue */
+interface PourSound {
 	/** Semitones the catch sound is raised (see catchPitch) */
 	pitch: number;
 	/** A point dot: the large catch sound */
 	point: boolean;
+}
+
+/** One catch's landing: where, its sound, whether or not it is heard, and its bursts */
+interface PourLanding extends PourSpot, PourSound {
 	/**
 	 * Its bursts on the drop's top, as it burst in play (see stageBursts): a combo catch pops
 	 * in combo amber and a point dot pops and rings in its colour; a lone small dot is quiet
@@ -76,11 +93,12 @@ interface PourLanding {
 	bursts: readonly Burst[];
 }
 
-/** A body of catches on its way into the drop (see PlannedBody) */
-export interface PourFlight {
+/**
+ * A body of catches on its way into the drop (see PlannedBody): it falls straight down onto
+ * the spot its first catch lands on, then slides into the drop's centre
+ */
+export interface PourFlight extends PourSpot {
 	color: string;
-	/** A point dot, drawn at its size; otherwise a small dot */
-	point: boolean;
 	/** How far it has fallen from above onto the drop, 0..1 */
 	fall: number;
 	/** How far it has merged into the drop once landed, 0..1 */
@@ -117,6 +135,8 @@ interface PourBonus {
 
 interface PlannedCatch extends PourLanding {
 	landMs: number;
+	/** Its landing is heard: the loudest in its sound window (see soundingOf) */
+	heard: boolean;
 }
 
 /**
@@ -124,9 +144,8 @@ interface PlannedCatch extends PourLanding {
  * POUR_STAGGER_MS of the first of them. It looks like its first point dot, or its first catch,
  * and lands with its first catch; the others land into it as it merges, at their own times.
  */
-interface PlannedBody {
+interface PlannedBody extends PourSpot {
 	color: string;
-	point: boolean;
 	landMs: number;
 }
 
@@ -157,6 +176,8 @@ export interface PourPlan {
 export interface PourView {
 	/** Catches that landed after the previous sample, up to this one, in order */
 	landings: PourLanding[];
+	/** The sounds of those landings that are heard, in order */
+	sounds: PourSound[];
 	/** Bodies falling or merging, in landing order; never more than MERGE_MAX_DOTS */
 	flights: PourFlight[];
 	drop: PourDrop;
@@ -185,8 +206,15 @@ function landTimes(ticks: readonly number[]): number[] {
 	);
 }
 
-/** The bodies the catches landing at `times` fall in, at least POUR_STAGGER_MS apart */
-function bodiesOf(catches: readonly RunCatch[], times: readonly number[]): PlannedBody[] {
+/**
+ * The bodies the catches landing at `times` on `spots` fall in, at least POUR_STAGGER_MS
+ * apart; each falls onto its first catch's spot
+ */
+function bodiesOf(
+	catches: readonly RunCatch[],
+	times: readonly number[],
+	spots: readonly PourSpot[],
+): PlannedBody[] {
 	const bodies: PlannedBody[] = [];
 	for (let i = 0; i < catches.length; ) {
 		const landMs = times[i];
@@ -195,10 +223,55 @@ function bodiesOf(catches: readonly RunCatch[], times: readonly number[]): Plann
 		for (; next < catches.length && times[next] < landMs + POUR_STAGGER_MS; next++) {
 			if (catches[next].point && !look.point) look = catches[next];
 		}
-		bodies.push({ color: look.color, point: look.point, landMs });
+		bodies.push({ color: look.color, landMs, x: spots[i].x, y: spots[i].y });
 		i = next;
 	}
 	return bodies;
+}
+
+/**
+ * A share of -1..1 that looks random but is always the same for the same `n`: a 32-bit integer
+ * mix, so neighbouring catches land far apart
+ */
+function seededSide(n: number): number {
+	let h = Math.imul(n + 1, 0x9e3779b1);
+	h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+	h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+	h ^= h >>> 16;
+	return ((h >>> 0) / 0x100000000) * 2 - 1;
+}
+
+/**
+ * Where the run's `index`th catch lands on a drop of `radius`: on its curved top, a seeded
+ * share of SIDE_REACH to one side, so a run always pours the same way
+ */
+function landingSpot(index: number, radius: number): PourSpot {
+	const x = seededSide(index) * SIDE_REACH * radius;
+	return { x, y: -Math.sqrt(radius * radius - x * x) };
+}
+
+/** Whether sound `a` wins a window over `b`: a point dot, otherwise the higher pitch */
+function louder(a: PourSound, b: PourSound): boolean {
+	return a.point !== b.point ? a.point : a.pitch > b.pitch;
+}
+
+/**
+ * Whether each catch sounding `cues` at `times` is heard: in each POUR_SOUND_WINDOW_MS window,
+ * only the loudest catch (see louder), the first of them on a tie
+ */
+function soundingOf(cues: readonly PourSound[], times: readonly number[]): boolean[] {
+	const sounding = cues.map(() => false);
+	for (let i = 0; i < cues.length; ) {
+		const windowEnd = times[i] + POUR_SOUND_WINDOW_MS;
+		let heard = i;
+		let next = i + 1;
+		for (; next < cues.length && times[next] < windowEnd; next++) {
+			if (louder(cues[next], cues[heard])) heard = next;
+		}
+		sounding[heard] = true;
+		i = next;
+	}
+	return sounding;
 }
 
 /** The drop as each catch lands; before any, empty in the first catch's colour or `color` */
@@ -223,10 +296,10 @@ function digitsOf({ tally, radius }: PourDrop, pitch: number): PourDigitDot[] {
 }
 
 /**
- * A catch's bursts where it lands on a drop of `radius`, laid out under ids from `firstId` on:
- * those it showed in play, if it was a combo catch or a point dot
+ * A catch's bursts on the spot it lands on, laid out under ids from `firstId` on: those it
+ * showed in play, if it was a combo catch or a point dot
  */
-function landingBursts(c: RunCatch, radius: number, firstId: number): Burst[] {
+function landingBursts(c: RunCatch, spot: PourSpot, firstId: number): Burst[] {
 	if (c.step === 1 && !c.point) return [];
 	const event = {
 		type: c.point ? ("collectPoint" as const) : ("collect" as const),
@@ -234,7 +307,7 @@ function landingBursts(c: RunCatch, radius: number, firstId: number): Burst[] {
 		step: c.step,
 		sameTick: false,
 	};
-	const player = { x: 0, y: -radius, color: c.color };
+	const player = { x: spot.x, y: spot.y, color: c.color };
 	return stepBursts(NO_CATCH_SPOT, event, player).bursts.map((b, i) => layOutBurst(firstId + i, b));
 }
 
@@ -325,19 +398,22 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
 	const times = landTimes(catches.map((c) => c.tick));
 	const drops = dropsOf(record, color);
+	const cues = catches.map((c) => ({ pitch: catchPitch(c.step), point: c.point }));
+	const sounding = soundingOf(cues, times);
 	const settledDrop = drops[drops.length - 1];
 	const { radius, tally: score } = settledDrop;
 	const bonus = comboBonus(record);
 	const amber = bonus > 0 ? amberOf(bonus, score, radius, pitch) : null;
 	const tallyHeight = layoutDotMatrix(String(score)).rows * pitch;
+	const spots = catches.map((_, i) => landingSpot(i, drops[i].radius));
 	let burstId = 0;
 	return {
 		catches: catches.map((c, i) => {
-			const bursts = landingBursts(c, drops[i].radius, burstId);
+			const bursts = landingBursts(c, spots[i], burstId);
 			burstId += bursts.length;
-			return { landMs: times[i], pitch: catchPitch(c.step), point: c.point, bursts };
+			return { ...cues[i], ...spots[i], landMs: times[i], bursts, heard: sounding[i] };
 		}),
-		bodies: bodiesOf(catches, times),
+		bodies: bodiesOf(catches, times, spots),
 		drops,
 		settledDrop,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
@@ -366,19 +442,22 @@ function formatClock(seconds: number): string {
 export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	"worklet";
 	const landings: PourLanding[] = [];
+	const sounds: PourSound[] = [];
 	const flights: PourFlight[] = [];
 	let landed = 0;
 	for (const c of plan.catches) {
 		if (c.landMs <= ms) landed++;
 		if (c.landMs > sinceMs && c.landMs <= ms) {
-			landings.push({ pitch: c.pitch, point: c.point, bursts: c.bursts });
+			landings.push({ x: c.x, y: c.y, pitch: c.pitch, point: c.point, bursts: c.bursts });
+			if (c.heard) sounds.push({ pitch: c.pitch, point: c.point });
 		}
 	}
 	for (const b of plan.bodies) {
 		if (ms >= b.landMs - POUR_FALL_MS && ms < b.landMs + MERGE_MS) {
 			flights.push({
 				color: b.color,
-				point: b.point,
+				x: b.x,
+				y: b.y,
 				fall: clamp01((ms - b.landMs + POUR_FALL_MS) / POUR_FALL_MS),
 				merge: clamp01((ms - b.landMs) / MERGE_MS),
 			});
@@ -401,6 +480,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	const { bonus } = plan;
 	return {
 		landings,
+		sounds,
 		flights,
 		drop,
 		digits,

@@ -11,6 +11,7 @@ import {
 	POUR_MAX_RADIUS,
 	POUR_RISE_MS,
 	POUR_SETTLE_MS,
+	POUR_SOUND_WINDOW_MS,
 	POUR_SPAN_MS,
 	POUR_STAGGER_MS,
 	POUR_START_MS,
@@ -47,6 +48,15 @@ function landings(p: PourPlan, untilMs = 6000) {
 	const found: ({ ms: number } & PourView["landings"][number])[] = [];
 	for (let ms = 1; ms <= untilMs; ms++) {
 		for (const landing of pourAt(p, ms, ms - 1).landings) found.push({ ms, ...landing });
+	}
+	return found;
+}
+
+/** When each sound is cued, sampled every millisecond through the sounds the stepper reports */
+function sounds(p: PourPlan, untilMs = 6000) {
+	const found: ({ ms: number } & PourView["sounds"][number])[] = [];
+	for (let ms = 1; ms <= untilMs; ms++) {
+		for (const sound of pourAt(p, ms, ms - 1).sounds) found.push({ ms, ...sound });
 	}
 	return found;
 }
@@ -177,7 +187,7 @@ describe("pourAt", () => {
 		}
 	});
 
-	it("drops each catch from above as the dot it was, in its colour, falling then merging", () => {
+	it("drops each catch from above in its colour, falling then merging", () => {
 		const p = plan({
 			catches: [caught(10), caught(400, { point: true, color: BLUE, value: 5 })],
 			ticks: 450,
@@ -185,12 +195,50 @@ describe("pourAt", () => {
 		const end = POUR_START_MS + POUR_SPAN_MS;
 		expect(pourAt(p, end - POUR_FALL_MS - 1).flights).toEqual([]);
 		const falling = pourAt(p, end - POUR_FALL_MS / 2).flights;
-		expect(falling).toEqual([{ color: BLUE, point: true, fall: 0.5, merge: 0 }]);
+		expect(falling).toEqual([expect.objectContaining({ color: BLUE, fall: 0.5, merge: 0 })]);
 		const merging = pourAt(p, end + 1).flights;
 		expect(merging).toHaveLength(1);
 		expect(merging[0].fall).toBe(1);
 		expect(merging[0].merge).toBeGreaterThan(0);
 		expect(pourAt(p, end + 2000).flights).toEqual([]);
+	});
+
+	it("lands each catch on the drop's curved top, within 70% of its radius to either side", () => {
+		const many = Array.from({ length: 40 }, (_, i) => caught(10 + i * 20));
+		const p = plan({ catches: many, ticks: 1000 });
+		const found = landings(p);
+		expect(found).toHaveLength(40);
+		// The first catch lands on nothing: there is no drop yet
+		expect(Math.hypot(found[0].x, found[0].y)).toBe(0);
+		for (const { ms, x, y } of found.slice(1)) {
+			const { radius } = pourAt(p, ms - 1).drop;
+			expect(Math.hypot(x, y)).toBeCloseTo(radius);
+			expect(y).toBeLessThan(0);
+			expect(Math.abs(x)).toBeLessThanOrEqual(0.7 * radius + 1e-9);
+		}
+		// Not down one line: to both sides, and spread across them
+		const sides = found.slice(1).map((l) => l.x / pourAt(p, l.ms - 1).drop.radius);
+		expect(sides.some((s) => s < -0.35)).toBe(true);
+		expect(sides.some((s) => s > 0.35)).toBe(true);
+		expect(new Set(sides.map((s) => s.toFixed(2))).size).toBeGreaterThan(30);
+	});
+
+	it("pours the same run the same way every time", () => {
+		const record = {
+			catches: Array.from({ length: 12 }, (_, i) => caught(10 + i * 9)),
+			ticks: 200,
+		};
+		expect(landings(plan(record))).toEqual(landings(plan(record)));
+	});
+
+	it("drops each body straight down onto the point its first catch lands on", () => {
+		const p = plan({ catches: [caught(10), caught(200), caught(400)], ticks: 450 });
+		const found = landings(p);
+		for (const { ms, x, y } of found) {
+			const [falling] = pourAt(p, ms - POUR_FALL_MS / 2).flights.filter((f) => f.merge === 0);
+			expect(falling).toMatchObject({ x, y });
+			expect(pourAt(p, ms + 1).flights.at(-1)).toMatchObject({ x, y });
+		}
 	});
 
 	it("grows the drop from nothing as catches land, its area following the tally", () => {
@@ -273,7 +321,7 @@ describe("pourAt", () => {
 		expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(PITCH * (GLYPH_ROWS - 1));
 	});
 
-	it("cues each landing's sound once, at the catch's pitch, however the frames fall", () => {
+	it("sounds each landing once, at the catch's pitch, however the frames fall", () => {
 		const steps = [1, 2, 3, 14, 1];
 		const p = plan({
 			catches: steps.map((step, i) =>
@@ -283,7 +331,7 @@ describe("pourAt", () => {
 		});
 		const cued: { pitch: number; point: boolean }[] = [];
 		for (let ms = 0, prev = -1; prev < 6000; prev = ms, ms += 16.7 + (ms % 7)) {
-			for (const { pitch, point } of pourAt(p, ms, prev).landings) cued.push({ pitch, point });
+			cued.push(...pourAt(p, ms, prev).sounds);
 		}
 		expect(cued).toEqual([
 			{ pitch: 0, point: false },
@@ -292,6 +340,60 @@ describe("pourAt", () => {
 			{ pitch: 12, point: false },
 			{ pitch: 0, point: true },
 		]);
+	});
+
+	it("sounds a flurry once, at its highest pitch, while every catch in it still lands", () => {
+		// A tick is 2.2 ms of the pour: the three in the middle land within a few ms
+		const p = plan({
+			catches: [
+				caught(0),
+				caught(400, { step: 2, value: 3 }),
+				caught(401, { step: 4, value: 7 }),
+				caught(402, { step: 3, value: 5 }),
+				caught(1000),
+			],
+			ticks: 1100,
+		});
+		expect(landings(p)).toHaveLength(5);
+		expect(sounds(p).map(({ pitch, point }) => ({ pitch, point }))).toEqual([
+			{ pitch: 0, point: false },
+			{ pitch: 3, point: false },
+			{ pitch: 0, point: false },
+		]);
+		// Heard as the highest-pitched catch lands
+		expect(sounds(p)[1].ms).toBe(landings(p)[2].ms);
+	});
+
+	it("sounds a point dot over the small dots of its flurry, however high they climb", () => {
+		const p = plan({
+			catches: [
+				caught(0),
+				caught(400, { step: 12, value: 23 }),
+				caught(401, { point: true, color: BLUE, value: 5 }),
+				caught(402, { step: 13, value: 25 }),
+				caught(1000),
+			],
+			ticks: 1100,
+		});
+		expect(sounds(p).map(({ pitch, point }) => ({ pitch, point }))).toEqual([
+			{ pitch: 0, point: false },
+			{ pitch: 0, point: true },
+			{ pitch: 0, point: false },
+		]);
+	});
+
+	it("sounds a long flurry as a quick run of notes, one a window, its bursts all shown", () => {
+		// A combo catch every 22 ms of the pour, each bursting
+		const stream = Array.from({ length: 101 }, (_, i) => caught(i * 10, { step: 2, value: 3 }));
+		const p = plan({ catches: stream, ticks: 1100 });
+		const heard = sounds(p).map((s) => s.ms);
+		expect(heard.length).toBeGreaterThan(POUR_SPAN_MS / (POUR_SOUND_WINDOW_MS + 10));
+		for (let i = 1; i < heard.length; i++) {
+			expect(heard[i] - heard[i - 1]).toBeGreaterThanOrEqual(POUR_SOUND_WINDOW_MS);
+		}
+		const landed = landings(p);
+		expect(landed).toHaveLength(101);
+		expect(landed.every((l) => l.bursts.length > 0)).toBe(true);
 	});
 
 	it("bursts a landing as the catch did in play, on the drop's top where it lands", () => {
@@ -305,17 +407,18 @@ describe("pourAt", () => {
 			ticks: 300,
 		});
 		const [lone, combo, point, comboPoint] = landings(p);
-		const top = (k: number) => -p.drops[k].radius;
 		// A lone small dot lands quietly
 		expect(lone.bursts).toEqual([]);
 		// A combo catch pops what it paid in combo amber
+		const { x, y } = combo;
 		expect(combo.bursts).toEqual([
-			expect.objectContaining({ kind: "pop", x: 0, y: top(1), color: burstColor(COMBO_AMBER) }),
+			expect.objectContaining({ kind: "pop", x, y, color: burstColor(COMBO_AMBER) }),
 		]);
 		// A point dot pops in its colour and rings in it; in a combo, its pop is amber
+		const at = { x: point.x, y: point.y };
 		expect(point.bursts).toEqual([
-			expect.objectContaining({ kind: "pop", y: top(2), color: burstColor(BLUE) }),
-			expect.objectContaining({ kind: "ring", y: top(2), color: burstColor(BLUE) }),
+			expect.objectContaining({ kind: "pop", ...at, color: burstColor(BLUE) }),
+			expect.objectContaining({ kind: "ring", ...at, color: burstColor(BLUE) }),
 		]);
 		expect(comboPoint.bursts).toEqual([
 			expect.objectContaining({ kind: "pop", color: burstColor(COMBO_AMBER) }),

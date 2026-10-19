@@ -1,6 +1,6 @@
 import { Asset } from "expo-asset";
 import { type AudioMode, type AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio";
-import type { GameAudio, MusicCue, MusicTrack } from "../application/ports";
+import type { CatchSoundOptions, GameAudio, MusicCue, MusicTrack } from "../application/ports";
 import { type Loop, MusicChannel } from "./MusicChannel";
 import { SoundEffect } from "./SoundEffect";
 
@@ -103,12 +103,12 @@ export class AudioService implements GameAudio {
 		return this.loading;
 	}
 
-	playCollect(pitch: number, volume = 1): void {
-		this.effects.collect?.play(pitch, volume);
+	playCollect(pitch: number, options?: CatchSoundOptions): void {
+		this.effects.collect?.play(pitch, options);
 	}
 
-	playLargeCollect(pitch: number, volume = 1): void {
-		this.effects.collectLarge?.play(pitch, volume);
+	playLargeCollect(pitch: number, options?: CatchSoundOptions): void {
+		this.effects.collectLarge?.play(pitch, options);
 	}
 
 	playPointSpawn(): void {
