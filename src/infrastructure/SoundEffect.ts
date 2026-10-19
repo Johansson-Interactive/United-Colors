@@ -1,5 +1,4 @@
 import type { AudioPlayer } from "expo-audio";
-import type { CatchSoundOptions } from "../application/ports";
 
 /** The slice of an expo-audio player a sound effect drives */
 export type Voice = Pick<
@@ -13,6 +12,14 @@ export type Voice = Pick<
 	| "setPlaybackRate"
 	| "volume"
 >;
+
+/** How one play of a sound effect sounds */
+export interface PlayOptions {
+	/** Its volume (0..1, default 1), as a share of the effect's mix level */
+	volume?: number;
+	/** Drop the play when every voice is busy, rather than taking over the oldest */
+	skipWhenBusy?: boolean;
+}
 
 /**
  * One sound effect backed by a small pool of players. Rapid repeats take a free voice and
@@ -40,7 +47,7 @@ export class SoundEffect {
 	}
 
 	/** Play once, raised by `pitch` semitones (0..12), at `volume` (0..1) of the mix level */
-	play(pitch = 0, { volume = 1, skipWhenBusy = false }: CatchSoundOptions = {}): void {
+	play(pitch = 0, { volume = 1, skipWhenBusy = false }: PlayOptions = {}): void {
 		if (this.muted || this.disposed) return;
 		const voice = this.takeVoice(skipWhenBusy);
 		if (!voice) return;
