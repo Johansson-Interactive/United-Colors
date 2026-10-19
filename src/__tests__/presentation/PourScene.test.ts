@@ -1,9 +1,10 @@
 import type { BestVerdict } from "../../application/GameStore";
+import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunCatch } from "../../domain/types";
 import {
-	POUR_DOT_RADIUS,
 	POUR_MAX_RADIUS,
 	POUR_START_MS,
+	type PourFlight,
 	planPour,
 } from "../../presentation/effects/pourRun";
 import {
@@ -132,10 +133,32 @@ describe("easeToward", () => {
 });
 
 describe("landingKick", () => {
+	const onTop = (point: boolean, radius: number) => ({ x: 0, y: -radius, point });
+	const speed = ({ x, y }: { x: number; y: number }) => Math.hypot(x, y);
+
 	it("knocks the drop down, harder for a point dot and for a bigger drop", () => {
-		expect(landingKick(20, false)).toBeGreaterThan(0);
-		expect(landingKick(20, true)).toBeGreaterThan(landingKick(20, false));
-		expect(landingKick(60, false)).toBeGreaterThan(landingKick(20, false));
+		const down = landingKick(onTop(false, 20), 20);
+		expect(Math.abs(down.x)).toBe(0);
+		expect(down.y).toBeGreaterThan(0);
+		expect(speed(landingKick(onTop(true, 20), 20))).toBeGreaterThan(
+			speed(landingKick(onTop(false, 20), 20)),
+		);
+		expect(speed(landingKick(onTop(false, 60), 60))).toBeGreaterThan(
+			speed(landingKick(onTop(false, 20), 20)),
+		);
+	});
+
+	it("knocks in from where the catch lands, toward the drop's centre", () => {
+		const kick = landingKick({ x: 12, y: -16, point: false }, 20);
+		expect(kick.x).toBeLessThan(0);
+		expect(kick.x / kick.y).toBeCloseTo(-12 / 16);
+		expect(speed(kick)).toBeCloseTo(speed(landingKick(onTop(false, 20), 20)));
+	});
+
+	it("knocks straight down when the catch lands on a drop with no size yet", () => {
+		const kick = landingKick({ x: 0, y: 0, point: false }, 9);
+		expect(Math.abs(kick.x)).toBe(0);
+		expect(kick.y).toBeGreaterThan(0);
 	});
 });
 
@@ -202,18 +225,20 @@ describe("pourBody", () => {
 	const BLUE = "#1E88E5";
 	const STILL = { stretchX: 0, stretchY: 0, wobble: 0 };
 	const TOP = -300;
-	const flight = (
-		more: Partial<{ color: string; point: boolean; fall: number; merge: number }>,
-	) => ({
+	/** A free small dot's radius in play (px), at the game's default density */
+	const SMALL = (SMALL_DOT_SIZE_RATIO * 400) / 2;
+	/** A catch on its way down onto the top of a drop of radius 40, unless told otherwise */
+	const flight = (more: Partial<PourFlight>): PourFlight => ({
 		color: RED,
-		point: false,
+		x: 0,
+		y: -40,
 		fall: 0,
 		merge: 0,
 		...more,
 	});
-	/** The body's circles after the drop, as (y, radius), and its bead catches */
-	function draw(flights: ReturnType<typeof flight>[], radius = 40, amber = 0) {
-		const body = pourBody({ flights, color: RED, radius, jelly: STILL, top: TOP, amber });
+	/** The body's circles, the drop's first, and its bead catches, drawn at `scale` */
+	function draw(flights: PourFlight[], radius = 40, amber = 0, scale = 1) {
+		const body = pourBody({ flights, color: RED, radius, jelly: STILL, top: TOP, amber, scale });
 		const { blobs, count, blend, jelly } = mergeUniformsByName(body.values, [0, 0, 0, 1]);
 		const circles: { x: number; y: number; radius: number }[] = [];
 		for (let i = 0; i < count; i++) {
@@ -224,7 +249,8 @@ describe("pourBody", () => {
 
 	it("is the drop at the centre with its jelly, and nothing else between catches", () => {
 		const jelly = { stretchX: 0.1, stretchY: 0, wobble: 3 };
-		const body = pourBody({ flights: [], color: RED, radius: 40, jelly, top: TOP, amber: 0 });
+		const input = { flights: [], color: RED, radius: 40, jelly, top: TOP, amber: 0, scale: 1 };
+		const body = pourBody(input);
 		const named = mergeUniformsByName(body.values, [0, 0, 0, 1]);
 		expect(named.count).toBe(1);
 		expect(named.blobs.slice(0, 3)).toEqual([0, 0, 40]);
@@ -235,21 +261,38 @@ describe("pourBody", () => {
 		const start = draw([flight({ fall: 0 })]).circles[1];
 		expect(start.y + start.radius).toBeLessThanOrEqual(TOP);
 		const landing = draw([flight({ fall: 1 })]).circles[1];
-		expect(landing).toEqual({ x: 0, y: -(40 + POUR_DOT_RADIUS), radius: POUR_DOT_RADIUS });
+		expect(landing).toEqual({ x: 0, y: -(40 + SMALL), radius: SMALL });
 		const halfway = draw([flight({ fall: 0.5 })]).circles[1];
 		expect(halfway.y).toBeGreaterThan(start.y);
 		expect(halfway.y).toBeLessThan(landing.y);
 	});
 
-	it("merges a landed catch into the drop's centre, shrinking as it goes, as in play", () => {
-		const merged = draw([flight({ fall: 1, merge: 1 })]).circles[1];
-		expect(merged.y).toBeCloseTo(0);
-		expect(merged.radius).toBeLessThan(POUR_DOT_RADIUS);
-		expect(merged.radius).toBeGreaterThan(0);
+	it("drops an off-centre catch straight down, resting on the drop where it lands", () => {
+		// 24 px to the right on a drop of 40, so 32 px up: a 3-4-5 triangle
+		const spot = { x: 24, y: -32 };
+		const start = draw([flight({ ...spot, fall: 0 })]).circles[1];
+		const halfway = draw([flight({ ...spot, fall: 0.5 })]).circles[1];
+		const landing = draw([flight({ ...spot, fall: 1 })]).circles[1];
+		expect(start.x).toBeCloseTo(landing.x);
+		expect(halfway.x).toBeCloseTo(landing.x);
+		// It touches the drop at the spot: its centre on the line out of the drop's through it
+		expect(landing.x).toBeCloseTo((24 / 40) * (40 + SMALL));
+		expect(landing.y).toBeCloseTo((-32 / 40) * (40 + SMALL));
 	});
 
-	it("drops a point dot at twice a small dot's size", () => {
-		expect(draw([flight({ point: true, fall: 1 })]).circles[1].radius).toBe(2 * POUR_DOT_RADIUS);
+	it("drops every catch, point dots too, at a small dot's size in play on screen", () => {
+		// The pour drawn at half size draws its catches twice as big, to be the same on screen
+		expect(draw([flight({ fall: 1 })], 40, 0, 0.5).circles[1].radius * 0.5).toBeCloseTo(SMALL);
+		const bead = draw([flight({ color: BLUE, fall: 1 })], 40, 0, 0.5).body.beads[0];
+		expect(bead.radius * 0.5).toBeCloseTo(SMALL);
+	});
+
+	it("merges a landed catch into the drop's centre, shrinking as it goes, as in play", () => {
+		const merged = draw([flight({ x: 24, y: -32, fall: 1, merge: 1 })]).circles[1];
+		expect(merged.x).toBeCloseTo(0);
+		expect(merged.y).toBeCloseTo(0);
+		expect(merged.radius).toBeLessThan(SMALL);
+		expect(merged.radius).toBeGreaterThan(0);
 	});
 
 	it("draws a catch of another colour than the drop as a bead of its own", () => {
@@ -257,7 +300,7 @@ describe("pourBody", () => {
 		expect(circles).toHaveLength(2);
 		expect(body.beads).toHaveLength(1);
 		expect(body.beads[0].color).toBe(BLUE);
-		expect(body.beads[0].radius).toBe(POUR_DOT_RADIUS);
+		expect(body.beads[0].radius).toBe(SMALL);
 	});
 
 	it("still blends a first catch into a drop that has no size yet", () => {
@@ -265,16 +308,20 @@ describe("pourBody", () => {
 	});
 
 	it("has no drop in it before the first catch lands, and fills nothing without a catch", () => {
-		const { circles } = draw([flight({ fall: 0.5 })], 0);
+		const { circles } = draw([flight({ x: 0, y: 0, fall: 0.5 })], 0);
 		expect(circles).toHaveLength(1);
-		expect(circles[0].radius).toBe(POUR_DOT_RADIUS);
+		expect(circles[0].radius).toBe(SMALL);
 		const empty = draw([], 0);
 		expect(empty.circles).toHaveLength(0);
 		expect(empty.body.width * empty.body.height).toBe(0);
 	});
 
 	it("fills a rect holding the drop and every catch in it", () => {
-		const { body, circles } = draw([flight({ fall: 0.2 }), flight({ fall: 1, merge: 0.5 })]);
+		const { body, circles } = draw([
+			flight({ x: -24, y: -32, fall: 0.2 }),
+			flight({ x: 24, y: -32, fall: 1 }),
+			flight({ fall: 1, merge: 0.5 }),
+		]);
 		for (const c of circles) {
 			expect(c.x - c.radius).toBeGreaterThanOrEqual(body.x);
 			expect(c.x + c.radius).toBeLessThanOrEqual(body.x + body.width);
@@ -342,6 +389,20 @@ describe("stepPour", () => {
 		expect(after.body.lagVY).toBeGreaterThan(before.body.lagVY);
 		expect(after.frame.bursts.length).toBe(before.frame.bursts.length + 1);
 		expect(after.frame.bursts.at(-1)?.kind).toBe("pop");
+	});
+
+	it("pushes the liquid away from where an off-centre catch lands, sideways as well as down", () => {
+		const { steps } = play(POUR_START_MS + 2400);
+		const at = steps.findIndex(({ playback: { frame } }) => frame.view.drop.tally > 4);
+		const [last] = steps[at].playback.frame.view.landings;
+		const { radius } = steps[at - 1].playback.frame.view.drop;
+		expect(Math.abs(last.x)).toBeGreaterThan(0.2 * radius);
+		expect(steps[at - 1].playback.frame.jelly.stretchX).toBeCloseTo(0, 3);
+		// A few frames on, the drop is drawn out across, the mass thrown away from the landing
+		const { jelly } = steps[at + 3].playback.frame;
+		expect(Math.sign(jelly.stretchX)).toBe(-Math.sign(last.x));
+		expect(Math.abs(jelly.stretchX)).toBeGreaterThan(0.01);
+		expect(jelly.stretchY).toBeGreaterThan(0);
 	});
 
 	it("eases the drawn drop toward the stepper's", () => {
