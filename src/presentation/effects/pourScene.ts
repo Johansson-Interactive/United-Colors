@@ -8,7 +8,6 @@ import {
 	JELLY_AT_REST,
 	type JellyBody,
 	type JellyState,
-	jellyAtRest,
 	jellyShape,
 	kickJelly,
 	stepJelly,
@@ -172,9 +171,6 @@ export function landingKick(radius: number, point: boolean): number {
 export const POUR_DELAY_MS = 350;
 /** Longest frame (ms) the drop's liquid integrates, so a stall does not kick it */
 const MAX_FRAME_MS = 100;
-/** How close (px, and share) the drawn drop must be to the stepper's to count as there */
-const EASED_PX = 0.01;
-const EASED_SHARE = 1e-4;
 
 /** One frame of the pour as the canvas draws it, from the drop's centre */
 export interface PourFrame {
@@ -216,8 +212,6 @@ export interface PourPlayback {
 	frame: PourFrame;
 	/** The status last reported, or the one the pour starts with */
 	status: PourStatus;
-	/** Settled, its liquid at rest and its bursts over: nothing left to draw */
-	done: boolean;
 }
 
 /** What one frame of the pour does */
@@ -238,24 +232,22 @@ export function startPour(plan: PourPlan): PourPlayback {
 		body: JELLY_AT_REST,
 		frame: { view, radius: 0, amber: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
 		status: statusOf(view),
-		done: false,
 	};
 }
 
 /**
  * The pour at UI frame time `now`, `dtMs` after the frame before: the stepper sampled since the
  * last frame, each landing kicking the drop's liquid down and adding its bursts, the drawn drop
- * eased toward the stepper's and the liquid stepped. Null once the pour is done, as nothing
- * changes after.
+ * eased toward the stepper's and the liquid stepped. It never finishes: once settled, the
+ * liquid keeps stepping so the drop keeps rippling, as the AGAIN button's does.
  */
 export function stepPour(
 	plan: PourPlan,
 	playback: PourPlayback,
 	now: number,
 	dtMs: number,
-): PourStep | null {
+): PourStep {
 	"worklet";
-	if (playback.done) return null;
 	const start = playback.start ?? now;
 	const ms = now - start - POUR_DELAY_MS;
 	const dt = Math.min(MAX_FRAME_MS, dtMs);
@@ -273,12 +265,6 @@ export function stepPour(
 	const amber = easeToward(before.amber, view.amber, dt);
 	const status = statusOf(view);
 	const changed = !sameStatus(status, playback.status);
-	const done =
-		view.settled &&
-		bursts.length === 0 &&
-		jellyAtRest(body, view.drop.radius) &&
-		Math.abs(radius - view.drop.radius) < EASED_PX &&
-		Math.abs(amber - view.amber) < EASED_SHARE;
 	return {
 		playback: {
 			start,
@@ -286,7 +272,6 @@ export function stepPour(
 			body,
 			frame: { view, radius, amber, jelly: jellyShape(body, view.drop.radius), bursts, now },
 			status: changed ? status : playback.status,
-			done,
 		},
 		sounds: view.sounds,
 		status: changed ? status : null,

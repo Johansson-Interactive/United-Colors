@@ -303,10 +303,9 @@ describe("stepPour", () => {
 	/** Step every frame from T0 up to `untilMs` of replay time, keeping what each step said */
 	function play(untilMs: number) {
 		let playback = startPour(pour);
-		const steps: NonNullable<ReturnType<typeof stepPour>>[] = [];
+		const steps: ReturnType<typeof stepPour>[] = [];
 		for (let now = T0, last = T0; now <= frameAt(untilMs); last = now, now += FRAME) {
 			const step = stepPour(pour, playback, now, now - last);
-			if (!step) break;
 			steps.push(step);
 			playback = step.playback;
 		}
@@ -315,8 +314,8 @@ describe("stepPour", () => {
 
 	it("starts its clock on the first frame, the delay before the replay", () => {
 		const first = stepPour(pour, startPour(pour), T0, 0);
-		expect(first?.playback.frame.view.clock).toBe("0:00");
-		expect(first?.playback.frame.view.drop.tally).toBe(0);
+		expect(first.playback.frame.view.clock).toBe("0:00");
+		expect(first.playback.frame.view.drop.tally).toBe(0);
 		expect(play(POUR_START_MS + FRAME).playback.frame.view.drop.tally).toBe(1);
 	});
 
@@ -344,7 +343,7 @@ describe("stepPour", () => {
 		const now = frameAt(POUR_START_MS + 100) + 400;
 		const stalled = stepPour(pour, playback, now, 400);
 		const short = stepPour(pour, playback, now, 100);
-		expect(stalled?.playback.body).toEqual(short?.playback.body);
+		expect(stalled.playback.body).toEqual(short.playback.body);
 	});
 
 	it("reports the status only when what the interface shows changes", () => {
@@ -357,16 +356,13 @@ describe("stepPour", () => {
 		expect(reported.length).toBeLessThan(steps.length);
 	});
 
-	it("stops once settled, its liquid at rest and its bursts over, and stays stopped", () => {
-		const { playback, steps } = play(20_000);
-		const last = steps.at(-1)?.playback;
-		expect(last?.done).toBe(true);
-		expect(last?.frame.view.settled).toBe(true);
-		expect(last?.frame.bursts).toEqual([]);
-		expect(last?.status.settled).toBe(true);
-		// It runs on past the settling only until the slosh dies down
-		expect(steps.length * FRAME).toBeGreaterThan(POUR_DELAY_MS + pour.settleMs);
-		expect(steps.length * FRAME).toBeLessThan(POUR_DELAY_MS + pour.settleMs + 3000);
-		expect(stepPour(pour, playback, frameAt(30_000), FRAME)).toBeNull();
+	it("never finishes: once settled its liquid keeps stepping, so the drop keeps rippling", () => {
+		const { playback } = play(20_000);
+		expect(playback.frame.view.settled).toBe(true);
+		expect(playback.frame.bursts).toEqual([]);
+		expect(playback.status.settled).toBe(true);
+		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME);
+		expect(later.playback.body.wobble).toBeCloseTo(playback.body.wobble + FRAME / 1000);
+		expect(later.playback.frame.jelly).not.toEqual(playback.frame.jelly);
 	});
 });

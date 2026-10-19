@@ -16,7 +16,7 @@ const POUR_VOLUME = 0.4;
 /**
  * Plays a planned pour from the game over's mount, stepping it on the UI thread every frame
  * (see stepPour) and sounding each heard landing quietly at its catch's pitch. The canvas draws
- * `frame`; the interface reads `status`. Once the pour is done, the frames do nothing more.
+ * `frame`; the interface reads `status`. The drop never finishes; it keeps rippling.
  * Leaving the game over unmounts it, and the pour stops with it. Never buzzes: a pour is a
  * replay, not play.
  */
@@ -46,7 +46,6 @@ export function usePour(
 		(info: FrameInfo) => {
 			"worklet";
 			const step = stepPour(plan, playback.get(), info.timestamp, info.timeSincePreviousFrame ?? 0);
-			if (step === null) return;
 			playback.set(step.playback);
 			frame.set(step.playback.frame);
 			if (step.sounds.length > 0) scheduleOnRN(sound, step.sounds);
