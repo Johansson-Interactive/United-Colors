@@ -6,15 +6,8 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { PourCanvas } from "../effects/PourCanvas";
 import type { PourPlan } from "../effects/pourRun";
-import {
-	type BestRow,
-	bonusSpot,
-	type PourFit,
-	type PourFrame,
-	type PourStatus,
-	pourFit,
-} from "../effects/pourScene";
-import { CAPTION, COMBO_AMBER, WHITE } from "../theme/theme";
+import { type BestRow, type PourFrame, type PourStatus, pourFit } from "../effects/pourScene";
+import { CAPTION, WHITE } from "../theme/theme";
 
 interface GameOverPourProps {
 	plan: PourPlan;
@@ -39,8 +32,8 @@ interface Box {
 
 /**
  * The middle of the game over: the clock, the pour's drop with the tally in it and the best row
- * under it, in a column centred on the drop. The drop's slot is sized for the settled drop from
- * the start, so nothing moves as it grows.
+ * under it, in a column centred on the drop. The drop's slot is sized for the settled drop and
+ * its tally lifted clear of the amber from the start, so nothing moves as it grows.
  */
 export const GameOverPour: React.FC<GameOverPourProps> = ({
 	plan,
@@ -75,9 +68,6 @@ export const GameOverPour: React.FC<GameOverPourProps> = ({
 			<View style={styles.row}>
 				<BestRowView row={row} color={color} />
 			</View>
-			{box && fit && status.settled && plan.bonusLabel ? (
-				<BonusLabel text={plan.bonusLabel} plan={plan} box={box} fit={fit} />
-			) : null}
 		</View>
 	);
 };
@@ -101,23 +91,6 @@ const BestRowView: React.FC<{ row: BestRow; color: string }> = ({ row, color }) 
 	}
 };
 
-interface BonusLabelProps {
-	text: string;
-	plan: PourPlan;
-	box: Box;
-	fit: PourFit;
-}
-
-/** The combo bonus `+N` in amber beside the drop's amber layer (see bonusSpot) */
-const BonusLabel: React.FC<BonusLabelProps> = ({ text, plan, box, fit }) => {
-	const { left, top, pitch } = bonusSpot(plan, box, fit);
-	return (
-		<Animated.View entering={FadeIn.duration(400)} style={[styles.bonus, { left, top }]}>
-			<DotMatrixText text={text} pitch={pitch} color={COMBO_AMBER} />
-		</Animated.View>
-	);
-};
-
 const styles = StyleSheet.create({
 	centre: {
 		flex: 1,
@@ -133,8 +106,5 @@ const styles = StyleSheet.create({
 	caption: {
 		...CAPTION,
 		fontSize: 13,
-	},
-	bonus: {
-		position: "absolute",
 	},
 });

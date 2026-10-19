@@ -2,16 +2,16 @@ import type { BestVerdict } from "../../application/GameStore";
 import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunCatch } from "../../domain/types";
 import {
+	amberLevel,
 	POUR_MAX_RADIUS,
 	POUR_START_MS,
 	type PourFlight,
 	planPour,
+	pourAt,
 } from "../../presentation/effects/pourRun";
 import {
-	amberLevel,
 	bestRow,
 	bestToBeat,
-	bonusSpot,
 	easeToward,
 	landingKick,
 	POUR_DELAY_MS,
@@ -51,6 +51,35 @@ describe("pourFit", () => {
 		expect(fit.half).toBeGreaterThanOrEqual(POUR_MAX_RADIUS);
 	});
 
+	it("makes room for the tally lifted clear of the amber, out of the drop's top", () => {
+		// A combo of ten pays 100, 90 of it bonus: the tally stands on the amber
+		const combo = planPour({
+			record: {
+				catches: Array.from(
+					{ length: 10 },
+					(_, i): RunCatch => ({
+						tick: i + 1,
+						value: 2 * i + 1,
+						step: i + 1,
+						color: "#E53935",
+						point: false,
+					}),
+				),
+				ticks: 300,
+			},
+			color: "#E53935",
+			pitch: PITCH,
+		});
+		const highest = Math.min(...pourAt(combo, 10_000).digits.map((d) => d.y)) - 0.38 * PITCH;
+		expect(-highest).toBeGreaterThan(combo.settledDrop.radius);
+		const fit = pourFit(combo, PITCH, 1000);
+		expect(fit.scale).toBe(1);
+		expect(fit.half).toBeGreaterThanOrEqual(-highest);
+		const squeezed = pourFit(combo, PITCH, 200);
+		expect(squeezed.half).toBeGreaterThanOrEqual(-highest * squeezed.scale);
+		expect(squeezed.half).toBeLessThanOrEqual(100);
+	});
+
 	it("shrinks a 1000 point drop to fit a short screen", () => {
 		const fit = pourFit(scored(200, 5), PITCH, 200);
 		expect(fit.scale).toBeLessThan(1);
@@ -83,39 +112,6 @@ describe("pourInput", () => {
 		const bare = { phase: "GAME_OVER" as const, score: 0, dots: [], events: [] };
 		const input = pourInput({ frame: bare }, RED);
 		expect(input.record).toEqual({ catches: [], ticks: 0 });
-	});
-});
-
-describe("bonusSpot", () => {
-	const RED = "#E53935";
-	// A catch and the next in its combo: a score of 4, half of it combo bonus
-	const plan = planPour({
-		record: {
-			catches: [
-				{ tick: 10, value: 1, step: 1, color: RED, point: false },
-				{ tick: 11, value: 3, step: 2, color: RED, point: false },
-			],
-			ticks: 60,
-		},
-		color: RED,
-		pitch: 14,
-	});
-	const radius = plan.settledDrop.radius;
-
-	it("sits beside the drop, its middle halfway down the amber layer, as the pour is scaled", () => {
-		const spot = bonusSpot(plan, { width: 400, height: 600 }, { scale: 0.5, half: 100 });
-		// Half the drop is amber, so its layer runs from the centre down: its middle is r / 2 down
-		expect(spot.top + spot.height / 2).toBeCloseTo(300 + 0.5 * (radius / 2));
-		expect(spot.left).toBeGreaterThan(200 + 0.5 * radius - spot.pitch);
-		expect(spot.left + spot.width / 2).toBeGreaterThan(200 + 0.5 * radius);
-		expect(spot.pitch).toBe(3);
-	});
-
-	it("closes its dots up to keep the label on a narrow screen", () => {
-		const width = 2 * radius + 30;
-		const spot = bonusSpot(plan, { width, height: 600 }, { scale: 1, half: 100 });
-		expect(spot.pitch).toBeLessThan(3);
-		expect(spot.left + spot.width).toBeLessThanOrEqual(width);
 	});
 });
 
@@ -440,9 +436,15 @@ describe("stepPour", () => {
 		expect(passed(5)).toBe(-1);
 	});
 
+	it("draws the amber as it rises, not after it", () => {
+		const { steps } = play(20_000);
+		for (const { playback } of steps) expect(playback.frame.amber).toBe(playback.frame.view.amber);
+	});
+
 	it("never finishes: once settled its liquid keeps stepping, so the drop keeps rippling", () => {
 		const { playback } = play(20_000);
 		expect(playback.frame.view.settled).toBe(true);
+		expect(playback.frame.view.bonus?.opacity).toBe(1);
 		expect(playback.frame.bursts).toEqual([]);
 		expect(playback.status.settled).toBe(true);
 		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME, NO_BEST);
