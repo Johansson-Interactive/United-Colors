@@ -16,14 +16,12 @@ import type { GamePhase } from "../../domain/types";
 import {
 	advanceBursts,
 	type Burst,
-	burstColor,
-	comboTotalBurst,
 	createBurstIds,
-	popBurst,
-	ringBurst,
+	layOutBurst,
+	type NewBurst,
 	withBurst,
 } from "../effects/burstFrames";
-import { INITIAL_BURST_MEMORY, type NewBurst, SHAKE, stepBursts } from "../effects/stageBursts";
+import { NO_CATCH_SPOT, SHAKE, stepBursts } from "../effects/stageBursts";
 import { INK_LIFT } from "../theme/theme";
 
 /**
@@ -94,8 +92,8 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	}, [clock]);
 
 	const addBurst = useCallback(
-		(make: (id: number) => Burst) => {
-			const burst = make(burstIds.take());
+		(newBurst: NewBurst) => {
+			const burst = layOutBurst(burstIds.take(), newBurst);
 			bursts.modify((list) => {
 				"worklet";
 				return withBurst(list, burst);
@@ -106,24 +104,22 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	);
 
 	// Bursts as the game reports what happened (see stageBursts). The frame's player dot is at its
-	// live position: the frame was published by the very move that scored. Catch pops still
-	// waiting on the stagger are dropped on unmount, so none fire into a dead screen.
+	// live position: the frame was published by the very move that scored. Steps still waiting on
+	// the stagger are dropped on unmount, so none fire into a dead screen.
 	useEffect(() => {
 		const stagger = createCatchStagger();
-		let memory = INITIAL_BURST_MEMORY;
+		let catchSpot = NO_CATCH_SPOT;
 		const unsubscribe = onGameEvents(store, (event, frame) => {
 			const player = frame.dots.find((d) => d.kind === "player");
 			if (!player) return;
-			const step = stepBursts(memory, event, player);
-			memory = step.memory;
-			const show = () => {
-				for (const burst of step.bursts) addBurst((id) => layOutBurst(id, burst));
+			const step = stepBursts(catchSpot, event, player);
+			catchSpot = step.catchSpot;
+			stagger.cue(step.sameTick, () => {
+				for (const burst of step.bursts) addBurst(burst);
 				if (step.shake) {
 					shake.set(withSequence(...SHAKE.map(({ to, ms }) => withTiming(to, { duration: ms }))));
 				}
-			};
-			if (step.catchCue) stagger(step.catchCue.sameTick, show);
-			else show();
+			});
 		});
 		return () => {
 			unsubscribe();
@@ -132,17 +128,4 @@ export function useStageEffects(store: GameStore, phase: GamePhase, playerColor:
 	}, [store, addBurst, shake]);
 
 	return { accent, frost, shake, bursts, burstClock };
-}
-
-/** A burst from the stepper, laid out for the UI thread under `id` */
-function layOutBurst(id: number, burst: NewBurst): Burst {
-	const color = burstColor(burst.color);
-	switch (burst.kind) {
-		case "pop":
-			return popBurst(id, burst.x, burst.y, burst.text, color);
-		case "comboTotal":
-			return comboTotalBurst(id, burst.x, burst.y, burst.text, color);
-		case "ring":
-			return ringBurst(id, burst.x, burst.y, color, burst.size);
-	}
 }

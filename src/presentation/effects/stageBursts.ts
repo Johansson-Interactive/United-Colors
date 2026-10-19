@@ -7,13 +7,15 @@
  * as its catches have already added it to the score; a new run never ends the old run's combo.
  * A refusal, which ends the run, rings white at the player and shakes the stage.
  *
- * Each step answers with the bursts to add, still to be laid out (see burstFrames.ts), whether
- * the stage shakes, and when the bursts show. How the stage shakes is SHAKE, here; the shell
- * assigns the burst ids, runs the stagger and plays the shake.
+ * Each step answers with the bursts to add, still to be laid out (see layOutBurst), whether
+ * the stage shakes, and whether it waits on the catch stagger as a same-tick catch. Every step
+ * goes through the stagger, so nothing shows before a catch still waiting. How the stage shakes
+ * is SHAKE, here; the shell assigns the burst ids, runs the stagger and plays the shake.
  */
 
 import type { GameEvent } from "../../domain/types";
 import { COMBO_AMBER, WHITE } from "../theme/theme";
+import type { NewBurst } from "./burstFrames";
 
 /** A point on the stage */
 interface Spot {
@@ -26,30 +28,18 @@ export interface BurstPlayer extends Spot {
 	color: string;
 }
 
-/** A burst to add, before it is laid out: a score pop or a combo total's pop, or a ring */
-export type NewBurst =
-	| (Spot & { kind: "pop" | "comboTotal"; text: string; color: string })
-	| (Spot & { kind: "ring"; color: string; size: number });
+/** Where the catches pop before any has landed; a combo's total always follows a catch */
+export const NO_CATCH_SPOT: Spot = { x: 0, y: 0 };
 
-/** What the stepper remembers between events */
-export interface BurstMemory {
+/** What one event does to the stage */
+export interface BurstStep {
 	/** Where the last catch not on the same tick as the one before landed */
 	catchSpot: Spot;
-}
-
-export const INITIAL_BURST_MEMORY: BurstMemory = { catchSpot: { x: 0, y: 0 } };
-
-/** What one event does to the stage, and what the stepper remembers after it */
-export interface BurstStep {
-	memory: BurstMemory;
 	bursts: NewBurst[];
 	/** Whether the stage shakes (see SHAKE) */
 	shake: boolean;
-	/**
-	 * Set for a catch: its bursts wait for the catch stagger, given whether it landed on the same
-	 * tick as the catch before. Null when they show at once.
-	 */
-	catchCue: { sameTick: boolean } | null;
+	/** Whether it is a catch on the same tick as the one before, cued after it (see catchCue) */
+	sameTick: boolean;
 }
 
 /** A ring's diameter before it grows: round a point-dot catch, and round the player on a refusal */
@@ -65,14 +55,13 @@ export const SHAKE: readonly { to: number; ms: number }[] = [
 	{ to: 0, ms: 60 },
 ];
 
-/** Step on one game event, with the player as the frame that carried it has it */
-export function stepBursts(memory: BurstMemory, event: GameEvent, player: BurstPlayer): BurstStep {
+/** Step on one game event, from where the last catch landed, with the player as the frame has it */
+export function stepBursts(catchSpot: Spot, event: GameEvent, player: BurstPlayer): BurstStep {
 	const { x, y, color } = player;
 	switch (event.type) {
 		case "collect":
 		case "collectPoint": {
-			const next = event.sameTick ? memory : { catchSpot: { x, y } };
-			const at = next.catchSpot;
+			const at = event.sameTick ? catchSpot : { x, y };
 			const bursts: NewBurst[] = [
 				{
 					kind: "pop",
@@ -84,23 +73,23 @@ export function stepBursts(memory: BurstMemory, event: GameEvent, player: BurstP
 			if (event.type === "collectPoint") {
 				bursts.push({ kind: "ring", ...at, color, size: POINT_RING_SIZE });
 			}
-			return { memory: next, bursts, shake: false, catchCue: { sameTick: event.sameTick } };
+			return { catchSpot: at, bursts, shake: false, sameTick: event.sameTick };
 		}
 		case "comboEnd": {
 			const total: NewBurst = {
 				kind: "comboTotal",
-				...memory.catchSpot,
+				...catchSpot,
 				text: `${event.total}`,
 				color: COMBO_AMBER,
 			};
-			return { memory, bursts: [total], shake: false, catchCue: null };
+			return { catchSpot, bursts: [total], shake: false, sameTick: false };
 		}
 		case "gameOver": {
 			const ring: NewBurst = { kind: "ring", x, y, color: WHITE, size: GAME_OVER_RING_SIZE };
-			return { memory, bursts: [ring], shake: true, catchCue: null };
+			return { catchSpot, bursts: [ring], shake: true, sameTick: false };
 		}
 		case "pointSpawn":
 		case "spit":
-			return { memory, bursts: [], shake: false, catchCue: null };
+			return { catchSpot, bursts: [], shake: false, sameTick: false };
 	}
 }

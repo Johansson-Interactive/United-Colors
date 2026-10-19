@@ -20,7 +20,7 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
  * are those views' animations, and a pop's dots land where the view's DotMatrixText put them.
  *
  * The list of bursts lives on the UI thread. The JS thread lays each one out once (see
- * popBurst) and appends it with withBurst; the UI thread stamps it with the frame time on its
+ * layOutBurst) and appends it with withBurst; the UI thread stamps it with the frame time on its
  * first frame, drops it when its lifetime is up (advanceBursts) and packs every frame's
  * sprites and rings for drawing (packBursts). Packing runs every frame a burst is alive, so it
  * indexes directly, calls nothing per dot and reuses its objects from frame to frame.
@@ -33,8 +33,6 @@ export const COMBO_TOTAL_LIFETIME_MS = 1300;
 export const COMBO_TOTAL_SCALE = 1.6;
 /** Bursts alive at once; a new one past this drops the oldest */
 export const MAX_BURSTS = 8;
-/** A ring's diameter (px) before it grows, unless the burst gives its own */
-const RING_SIZE = 60;
 /** A pop's text: the dot spacing (px) and the dot radius as a fraction of it, as DotMatrixText */
 export const POP_PITCH = 5;
 export const POP_DOT_SCALE = 0.38;
@@ -73,14 +71,30 @@ export interface Burst {
 	start: number;
 }
 
+/** A burst to add, before it is laid out: a score pop or a combo total's pop, or a ring */
+export type NewBurst =
+	| { kind: "pop" | "comboTotal"; x: number; y: number; text: string; color: string }
+	| { kind: "ring"; x: number; y: number; color: string; size: number };
+
+/** `burst` laid out once under `id`, as the UI thread draws it */
+export function layOutBurst(id: number, burst: NewBurst): Burst {
+	const { kind, x, y } = burst;
+	const color = burstColor(burst.color);
+	if (burst.kind === "ring") {
+		return { id, kind, x, y, color, size: burst.size, dots: [], centreY: 0, start: NOT_STARTED };
+	}
+	const { dots, centreY } = popDots(burst.text);
+	return { id, kind, x, y, color, size: 0, dots, centreY, start: NOT_STARTED };
+}
+
 /**
- * A score pop of `text` caught at (x, y). The old view was a box 120 px wide with its top-left
- * at (x - 60, y - 30 - rise), the text's padded canvas (see matrixBox) centred in
- * it, scaled about the box's centre. The box and the text share a centre, so each dot sits at
- * its offset from the text's centre, times the scale, from a centre that starts half the
- * canvas's height below the box's top.
+ * A score pop's dots for `text`, and how far below the catch its text centre starts. The old
+ * view was a box 120 px wide with its top-left at (x - 60, y - 30 - rise), the text's padded
+ * canvas (see matrixBox) centred in it, scaled about the box's centre. The box and the text
+ * share a centre, so each dot sits at its offset from the text's centre, times the scale,
+ * from a centre that starts half the canvas's height below the box's top.
  */
-export function popBurst(id: number, x: number, y: number, text: string, color: number): Burst {
+function popDots(text: string): { dots: number[]; centreY: number } {
 	const layout = layoutDotMatrix(text);
 	const { width, height, pad } = matrixBox(layout, POP_PITCH, true, false);
 	const dots: number[] = [];
@@ -90,39 +104,7 @@ export function popBurst(id: number, x: number, y: number, text: string, color: 
 			pad + (dot.row + 0.5) * POP_PITCH - height / 2,
 		);
 	}
-	return {
-		id,
-		kind: "pop",
-		x,
-		y,
-		color,
-		size: 0,
-		dots,
-		centreY: height / 2 - POP_DROP,
-		start: NOT_STARTED,
-	};
-}
-
-/** A combo total's pop of `text`, from where the combo's last catch landed */
-export function comboTotalBurst(
-	id: number,
-	x: number,
-	y: number,
-	text: string,
-	color: number,
-): Burst {
-	return { ...popBurst(id, x, y, text, color), kind: "comboTotal" };
-}
-
-/** A ring from (x, y), `size` across before it grows */
-export function ringBurst(
-	id: number,
-	x: number,
-	y: number,
-	color: number,
-	size: number = RING_SIZE,
-): Burst {
-	return { id, kind: "ring", x, y, color, size, dots: [], centreY: 0, start: NOT_STARTED };
+	return { dots, centreY: height / 2 - POP_DROP };
 }
 
 /** `list` with `burst` added at the end, dropping the oldest past MAX_BURSTS */

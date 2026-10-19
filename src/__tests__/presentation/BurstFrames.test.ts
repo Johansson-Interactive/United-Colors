@@ -22,20 +22,18 @@ import {
 	burstSprites,
 	COMBO_TOTAL_LIFETIME_MS,
 	COMBO_TOTAL_SCALE,
-	comboTotalBurst,
 	createBurstIds,
+	layOutBurst,
 	MAX_BURSTS,
 	NOT_STARTED,
 	POP_DOT_SCALE,
 	POP_PITCH,
 	packBursts,
-	popBurst,
 	popOpacity,
 	popProgress,
 	popRise,
 	popScale,
 	ringBorder,
-	ringBurst,
 	ringOpacity,
 	ringProgress,
 	ringScale,
@@ -87,6 +85,14 @@ function oldPopDots(text: string, age: number, x: number, y: number) {
 		};
 	});
 }
+
+/** Bursts laid out as the stage adds them, coloured by index into BURST_COLORS */
+const popBurst = (id: number, x: number, y: number, text: string, color: number) =>
+	layOutBurst(id, { kind: "pop", x, y, text, color: BURST_COLORS[color] });
+const comboTotalBurst = (id: number, x: number, y: number, text: string, color: number) =>
+	layOutBurst(id, { kind: "comboTotal", x, y, text, color: BURST_COLORS[color] });
+const ringBurst = (id: number, x: number, y: number, color: number, size = 60) =>
+	layOutBurst(id, { kind: "ring", x, y, color: BURST_COLORS[color], size });
 
 function started(burst: Burst, start: number): Burst {
 	return { ...burst, start };
@@ -196,10 +202,6 @@ describe("packBursts", () => {
 		expect(ring.alpha).toBeCloseTo(ringOpacity(t), 12);
 	});
 
-	it("is 60 px across unless the burst says otherwise", () => {
-		expect(ringBurst(0, 0, 0, 0).size).toBe(60);
-	});
-
 	it("draws a burst not yet stamped as at its start, and none past its lifetime", () => {
 		const out = burstSprites(plainKit());
 		const fresh = popBurst(0, 0, 0, "+1", 0);
@@ -237,7 +239,7 @@ describe("packBursts", () => {
 	});
 });
 
-describe("popBurst", () => {
+describe("layOutBurst", () => {
 	it("lays its text out once, as offsets from the text's centre", () => {
 		const pop = popBurst(7, 10, 20, "+3", 1);
 		const layout = layoutDotMatrix("+3");
@@ -246,6 +248,19 @@ describe("popBurst", () => {
 		const xs = pop.dots.filter((_, i) => i % 2 === 0);
 		// Symmetric about the centre: the outermost columns are as far either side
 		expect(Math.min(...xs) + Math.max(...xs)).toBeCloseTo(0, 9);
+	});
+
+	it("lays a ring out at the size it is given, with no dots", () => {
+		expect(ringBurst(3, 5, 6, 2, 90)).toMatchObject({
+			id: 3,
+			kind: "ring",
+			x: 5,
+			y: 6,
+			color: 2,
+			size: 90,
+			dots: [],
+			start: NOT_STARTED,
+		});
 	});
 });
 
