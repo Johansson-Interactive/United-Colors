@@ -1,9 +1,10 @@
-import { cornerExtent } from "../../domain/arena";
+import { arenaContacts, cornerExtent, holdInside } from "../../domain/arena";
 import {
 	DOT_LIMIT,
 	GAME_COLORS,
 	GAME_HERTZ,
 	KIOSK_DOT_LIMIT,
+	POINT_DOT_SIZE_RATIO,
 	POINT_DOT_TIME_BETWEEN,
 	SMALL_DOT_CREATE_INTERVAL,
 	SMALL_DOT_HEADING_SPREAD,
@@ -13,12 +14,55 @@ import {
 } from "../../domain/constants";
 import { SpawnSystem } from "../../domain/engine/SpawnSystem";
 import { PlayerDot } from "../../domain/entities/PlayerDot";
+import type { PointDot } from "../../domain/entities/PointDot";
 import type { SmallDot } from "../../domain/entities/SmallDot";
+import { seededRandom } from "../../domain/random";
+import type { ScreenSize } from "../../domain/types";
+import { PHONE_DENSITY, PHONES, PLAYER_SIZE, POINT_SIZE, ROUNDED_PHONES } from "./phones";
 
 /** Ticks in a minute. One minute in, dots come 25 a minute: one every 72 ticks */
 const MINUTE = GAME_HERTZ * 60;
 /** So far into a run (200 minutes) that the spawn interval is under a tick */
 const LATE = 200 * MINUTE;
+
+/**
+ * The next `count` point dots, each caught as soon as it spawns so the next follows after the
+ * longest wait; `player` is asked where it is before each. Ticks count on from `after`.
+ */
+function pointDots(
+	system: SpawnSystem,
+	player: (index: number) => PlayerDot,
+	screen: ScreenSize,
+	count: number,
+	after = 0,
+): PointDot[] {
+	const dots: PointDot[] = [];
+	for (let call = 1; dots.length < count; call++) {
+		const tick = after + call * 2 * POINT_DOT_TIME_BETWEEN;
+		const dot = system.trySpawnPointDot(tick, player(dots.length), screen, PHONE_DENSITY);
+		if (dot) {
+			dots.push(dot);
+			dot.startAbsorb();
+		}
+	}
+	return dots;
+}
+
+/** The space between a grown point dot's edge and the player's, at a phone's density */
+function gap(dot: PointDot, player: PlayerDot): number {
+	return Math.hypot(dot.x - player.x, dot.y - player.y) - POINT_SIZE / 2 - player.size / 2;
+}
+
+/**
+ * Nine spots the player can be on `screen`, at its centre, the middle of each edge and each
+ * corner
+ */
+function centreEdgesAndCorners(screen: ScreenSize): { x: number; y: number }[] {
+	const r = PLAYER_SIZE / 2;
+	const xs = [r, screen.width / 2, screen.width - r];
+	const ys = [r, screen.height / 2, screen.height - r];
+	return xs.flatMap((x) => ys.map((y) => ({ x, y })));
+}
 
 /** Run a drip until it has shot off its wall */
 function launched(dot: SmallDot): SmallDot {
@@ -201,15 +245,29 @@ describe("SpawnSystem", () => {
 			}
 		});
 
-		it("a point dot that would land in a corner is placed again", () => {
-			// Draws: timing, color, then (0, 0) for the first candidate, in the top-left corner
-			const rolls = [0.5, 0.5, 0, 0, 0.5, 0.5];
+		it("a point dot that would touch a corner's curve is pushed in off it, staying in the corner", () => {
+			// Draws: timing, color, then the first cell (top left) and its top-left point
+			const rolls = [0.5, 0.5, 0, 0, 0];
 			const scripted = new SpawnSystem(() => rolls.shift() ?? 0.5);
-			scripted.reset();
-			const centred = new PlayerDot(390, 790, "#E91E63", 12.5, 0);
-			const dot = scripted.trySpawnPointDot(POINT_DOT_TIME_BETWEEN + 1, centred, rounded, 100);
-			expect(dot?.x).toBe(199.5);
-			expect(dot?.y).toBe(399.5);
+			const farCorner = new PlayerDot(390, 790, GAME_COLORS[0], 12.5, 0);
+			const dot = scripted.trySpawnPointDot(POINT_DOT_TIME_BETWEEN + 1, farCorner, rounded, 100);
+			if (!dot) throw new Error("no point dot");
+			expect(arenaContacts(rounded, dot.x, dot.y, (POINT_DOT_SIZE_RATIO * 100) / 2)).toEqual([]);
+			expect(dot.x).toBeLessThan(extent);
+			expect(dot.y).toBeLessThan(extent);
+		});
+
+		it("no point dot touches a corner's curve", () => {
+			let seed = 1;
+			for (const screen of ROUNDED_PHONES) {
+				for (const spot of centreEdgesAndCorners(screen)) {
+					const player = new PlayerDot(spot.x, spot.y, GAME_COLORS[0], PLAYER_SIZE, 0);
+					const system = new SpawnSystem(seededRandom(seed++));
+					for (const dot of pointDots(system, () => player, screen, 60)) {
+						expect(arenaContacts(screen, dot.x, dot.y, POINT_SIZE / 2)).toEqual([]);
+					}
+				}
+			}
 		});
 	});
 
@@ -264,36 +322,6 @@ describe("SpawnSystem", () => {
 			expect(dot?.color).toBe(GAME_COLORS[2]);
 		});
 
-		it("re-rolls a point dot position that lands on the player", () => {
-			// Draws: timing (0.5), color (0.5), then x/y for the first candidate (0, 0) which
-			// sits on the player at (10, 10), then x/y for the second candidate (0.5, 0.5)
-			const rolls = [0.5, 0.5, 0, 0, 0.5, 0.5];
-			const scripted = new SpawnSystem(() => rolls.shift() ?? 0.5);
-			scripted.reset();
-
-			const dot = scripted.trySpawnPointDot(wait + 1, player, screen, 100);
-			// size 12.5: x = floor(0.5 * 375) + 12.5, y = floor(0.5 * 775) + 12.5
-			expect(dot?.x).toBe(199.5);
-			expect(dot?.y).toBe(399.5);
-		});
-
-		it("gives up re-rolling after a bounded number of attempts", () => {
-			let draws = 0;
-			// Every candidate is (12.5, 12.5), on top of the player
-			const alwaysOverlap = new SpawnSystem(() => {
-				draws++;
-				return draws === 1 || draws === 2 ? 0.5 : 0;
-			});
-			alwaysOverlap.reset();
-
-			const dot = alwaysOverlap.trySpawnPointDot(wait + 1, player, screen, 100);
-			expect(dot).not.toBeNull();
-			expect(dot?.x).toBe(12.5);
-			expect(dot?.y).toBe(12.5);
-			// timing + color + 10 attempts of x/y
-			expect(draws).toBe(2 + 2 * 10);
-		});
-
 		it("waits after a faded point dot is removed before respawning", () => {
 			const first = spawn.trySpawnPointDot(wait + 1, player, screen, 100);
 			let step = wait + 1;
@@ -307,6 +335,195 @@ describe("SpawnSystem", () => {
 
 			expect(spawn.trySpawnPointDot(step + wait, player, screen, 100)).toBeNull();
 			expect(spawn.trySpawnPointDot(step + wait + 1, player, screen, 100)).not.toBeNull();
+		});
+	});
+
+	describe("point dot placement", () => {
+		/** Two player widths */
+		const clearSpace = 2 * PLAYER_SIZE;
+
+		it("keeps every point dot two player widths clear of the player, inside the spawn area", () => {
+			let seed = 1;
+			for (const screen of PHONES) {
+				for (const spot of centreEdgesAndCorners(screen)) {
+					const player = new PlayerDot(spot.x, spot.y, GAME_COLORS[0], PLAYER_SIZE, 0);
+					const system = new SpawnSystem(seededRandom(seed++));
+					for (const dot of pointDots(system, () => player, screen, 60)) {
+						expect(gap(dot, player)).toBeGreaterThanOrEqual(clearSpace);
+						expect(dot.x).toBeGreaterThanOrEqual(POINT_SIZE);
+						expect(dot.x).toBeLessThanOrEqual(screen.width - POINT_SIZE);
+						expect(dot.y).toBeGreaterThanOrEqual(POINT_SIZE);
+						expect(dot.y).toBeLessThanOrEqual(screen.height - POINT_SIZE);
+					}
+				}
+			}
+		});
+
+		it("keeps clear of where the player is when each point dot spawns", () => {
+			const screen = PHONES[0];
+			const spots = centreEdgesAndCorners(screen);
+			const players = spots.map((at) => new PlayerDot(at.x, at.y, GAME_COLORS[0], PLAYER_SIZE, 0));
+			const system = new SpawnSystem(seededRandom(7));
+			const dots = pointDots(system, (i) => players[i % players.length], screen, 90);
+			dots.forEach((dot, i) => {
+				expect(gap(dot, players[i % players.length])).toBeGreaterThanOrEqual(clearSpace);
+			});
+		});
+
+		it("keeps the clear space on phones with rounded corners, where dots are pushed off the curves", () => {
+			let seed = 1;
+			for (const screen of ROUNDED_PHONES) {
+				// Where the player can be: a corner spot is held in off the curve, like the player
+				const players = centreEdgesAndCorners(screen).map((spot) => {
+					const at = holdInside(screen, spot.x, spot.y, PLAYER_SIZE / 2);
+					return new PlayerDot(at.x, at.y, GAME_COLORS[0], PLAYER_SIZE, 0);
+				});
+				for (const player of players) {
+					const system = new SpawnSystem(seededRandom(seed++));
+					for (const dot of pointDots(system, () => player, screen, 60)) {
+						expect(gap(dot, player)).toBeGreaterThanOrEqual(clearSpace);
+					}
+				}
+				const moving = new SpawnSystem(seededRandom(seed++));
+				const dots = pointDots(moving, (i) => players[i % players.length], screen, 90);
+				dots.forEach((dot, i) => {
+					expect(gap(dot, players[i % players.length])).toBeGreaterThanOrEqual(clearSpace);
+				});
+			}
+		});
+	});
+
+	describe("point dot spawn memory", () => {
+		const screen = PHONES[0];
+		// Held still in the top-left corner, leaving most of the board free
+		const player = new PlayerDot(PLAYER_SIZE / 2, PLAYER_SIZE / 2, GAME_COLORS[0], PLAYER_SIZE, 0);
+		/** "Near" a spot: within two player widths of it */
+		const near = 2 * PLAYER_SIZE;
+		const run = pointDots(new SpawnSystem(seededRandom(11)), () => player, screen, 4000);
+		/** Skip the start of the run, so the memory has had every chance to wear out */
+		const from = 500;
+
+		/** How often a point dot lands within `distance` of the one `back` spawns before it */
+		function nearRate(back: number, distance = near): number {
+			let hits = 0;
+			for (let i = from; i < run.length; i++) {
+				const before = run[i - back];
+				if (Math.hypot(run[i].x - before.x, run[i].y - before.y) < distance) hits++;
+			}
+			return hits / (run.length - from);
+		}
+
+		/**
+		 * The same rate for points placed uniformly where a point dot may go (in the spawn area,
+		 * two player widths clear of the player), sampled here by rejection
+		 */
+		const uniformRate = (() => {
+			const random = seededRandom(99);
+			const clear = PLAYER_SIZE / 2 + 2 * PLAYER_SIZE + POINT_SIZE / 2;
+			const spot = () => {
+				for (;;) {
+					const x = POINT_SIZE + random() * (screen.width - 2 * POINT_SIZE);
+					const y = POINT_SIZE + random() * (screen.height - 2 * POINT_SIZE);
+					if (Math.hypot(x - player.x, y - player.y) >= clear) return { x, y };
+				}
+			};
+			let hits = 0;
+			const pairs = 40000;
+			for (let i = 0; i < pairs; i++) {
+				const a = spot();
+				const b = spot();
+				if (Math.hypot(a.x - b.x, a.y - b.y) < near) hits++;
+			}
+			return hits / pairs;
+		})();
+
+		it("lands near the last few point dots less often than uniform placement would, all run long", () => {
+			const recent = (nearRate(1) + nearRate(2) + nearRate(3)) / 3;
+			expect(recent).toBeLessThan(uniformRate * 0.9);
+		});
+
+		it("still lands right by the last point dot now and then", () => {
+			expect(nearRate(1, PLAYER_SIZE)).toBeGreaterThan(0);
+		});
+
+		it("lets an area that had a point dot a dozen spawns ago be as likely as any again", () => {
+			expect(nearRate(12)).toBeGreaterThan(uniformRate * 0.9);
+		});
+	});
+
+	describe("point dot placement over runs", () => {
+		const player = new PlayerDot(100, 300, GAME_COLORS[0], PLAYER_SIZE, 0);
+		const still = () => player;
+		const spots = (dots: PointDot[]) => dots.map((dot) => [dot.x, dot.y]);
+		/** A spawner on a random source that can be started over from its seed */
+		function rewindable(seed: number) {
+			let random = seededRandom(seed);
+			const system = new SpawnSystem(() => random());
+			return {
+				system,
+				rewind: () => {
+					random = seededRandom(seed);
+				},
+			};
+		}
+
+		it("places point dots the same way for the same seed", () => {
+			const a = pointDots(new SpawnSystem(seededRandom(4)), still, PHONES[0], 30);
+			const b = pointDots(new SpawnSystem(seededRandom(4)), still, PHONES[0], 30);
+			expect(spots(a)).toEqual(spots(b));
+			const other = pointDots(new SpawnSystem(seededRandom(5)), still, PHONES[0], 30);
+			expect(spots(other)).not.toEqual(spots(a));
+		});
+
+		it("starts a run with no memory of the last run's point dots", () => {
+			const fresh = pointDots(new SpawnSystem(seededRandom(4)), still, PHONES[0], 10);
+			const replayed = rewindable(4);
+			pointDots(replayed.system, still, PHONES[0], 30);
+			replayed.system.reset();
+			replayed.rewind();
+			expect(spots(pointDots(replayed.system, still, PHONES[0], 10))).toEqual(spots(fresh));
+		});
+
+		it("carries no memory over to a new screen size", () => {
+			const fresh = pointDots(new SpawnSystem(seededRandom(4)), still, PHONES[1], 10);
+			const resized = rewindable(4);
+			const before = pointDots(resized.system, still, PHONES[0], 30);
+			resized.rewind();
+			const after = before[before.length - 1].createStep;
+			expect(spots(pointDots(resized.system, still, PHONES[1], 10, after))).toEqual(spots(fresh));
+		});
+	});
+
+	describe("point dot placement without room", () => {
+		/** Too small for the clear space: the spawn area runs from 50 to 150 each way */
+		const tiny = { width: 200, height: 200 };
+		const player = new PlayerDot(40, 60, GAME_COLORS[0], PLAYER_SIZE, 0);
+
+		/** The ticks point dots spawn on, and their colours, over a stretch of play */
+		function spawnTicks(screen: ScreenSize): string[] {
+			const system = new SpawnSystem(seededRandom(5));
+			const spawned: string[] = [];
+			for (let tick = 1; tick <= 4000; tick++) {
+				const dot = system.trySpawnPointDot(tick, player, screen, PHONE_DENSITY);
+				if (!dot) continue;
+				spawned.push(`${tick} ${dot.color}`);
+				dot.startAbsorb();
+			}
+			return spawned;
+		}
+
+		it("still spawns a point dot, in the corner of the spawn area farthest from the player", () => {
+			const system = new SpawnSystem(seededRandom(5));
+			for (const dot of pointDots(system, () => player, tiny, 5)) {
+				expect(dot.x).toBe(150);
+				expect(dot.y).toBe(150);
+			}
+		});
+
+		it("spawns point dots on the same ticks, in the same colours, as with room to spare", () => {
+			const roomy = spawnTicks(PHONES[0]);
+			expect(roomy.length).toBeGreaterThan(5);
+			expect(spawnTicks(tiny)).toEqual(roomy);
 		});
 	});
 

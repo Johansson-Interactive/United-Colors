@@ -1,4 +1,4 @@
-import { arenaContacts, cornerExtent } from "../arena";
+import { cornerExtent } from "../arena";
 import {
 	DOT_LIMIT,
 	GAME_HERTZ,
@@ -16,13 +16,10 @@ import type { PlayerDot } from "../entities/PlayerDot";
 import { PointDot } from "../entities/PointDot";
 import { SmallDot } from "../entities/SmallDot";
 import type { ScreenSize } from "../types";
-import { circlesOverlap } from "./Collision";
 import { ColorPicker } from "./ColorPicker";
 import { edgeHeading } from "./Heading";
+import { PointDotPlacement } from "./PointDotPlacement";
 import type { Spawner } from "./Spawner";
-
-/** Upper bound on random re-rolls when placing a point dot away from the player */
-const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
 
 /**
  * Handles spawning of small dots and point dots.
@@ -34,9 +31,9 @@ const MAX_POINT_DOT_PLACEMENT_ATTEMPTS = 10;
  * where the interval would be shorter, enough drips form at once to keep the dots arriving
  * at the interval's rate.
  *
- * Small and point dots pick colors from separate weighted pickers; point dots never
- * spawn in the player's current color. Replicates legacy GameManager spawn logic, apart from
- * the difficulty ramp (see SMALL_DOT_RATE_GROWTH).
+ * Small and point dots pick colors from separate weighted pickers; point dots never spawn in
+ * the player's current color. Where a point dot spawns is up to PointDotPlacement. Replicates
+ * legacy GameManager spawn logic, apart from the difficulty ramp (see SMALL_DOT_RATE_GROWTH).
  */
 export class SpawnSystem implements Spawner {
 	/** Ids run from 0 in each game, so the same seed spawns the same dots */
@@ -48,17 +45,20 @@ export class SpawnSystem implements Spawner {
 	private random: () => number;
 	private smallDotColors: ColorPicker;
 	private pointDotColors: ColorPicker;
+	private pointDotPlacement: PointDotPlacement;
 
 	constructor(random?: () => number) {
 		this.random = random ?? Math.random;
 		this.smallDotColors = new ColorPicker(this.random);
 		this.pointDotColors = new ColorPicker(this.random);
+		this.pointDotPlacement = new PointDotPlacement(this.random);
 	}
 
 	reset(): void {
 		this.nextId = 0;
 		this.smallDotColors.reset();
 		this.pointDotColors.reset();
+		this.pointDotPlacement.reset();
 		this.drips = [];
 		this.pointStep = 0;
 		this.pointDot = null;
@@ -247,18 +247,7 @@ export class SpawnSystem implements Spawner {
 		color: string,
 	): PointDot {
 		const size = POINT_DOT_SIZE_RATIO * density;
-		let x = 0;
-		let y = 0;
-		// Re-roll while the candidate would land on the player, or as near a rounded corner as
-		// it is kept from the edges. After the last attempt the final candidate is used even if
-		// it overlaps, so placement always terminates.
-		for (let attempt = 0; attempt < MAX_POINT_DOT_PLACEMENT_ATTEMPTS; attempt++) {
-			x = Math.floor(this.random() * (screen.width - size * 2)) + size;
-			y = Math.floor(this.random() * (screen.height - size * 2)) + size;
-			const clear = arenaContacts(screen, x, y, size).length === 0;
-			if (clear && !circlesOverlap(player.x, player.y, player.size, x, y, size * 2)) break;
-		}
-
+		const { x, y } = this.pointDotPlacement.place(screen, player, density);
 		return new PointDot(this.newId(), timeStep, x, y, color, size, POINT_DOT_VALUE);
 	}
 

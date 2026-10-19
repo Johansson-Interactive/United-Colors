@@ -29,7 +29,8 @@
 		"doctors": "pnpm run doctor:react && pnpm run doctor:expo",
 		"verify": "biome ci . && pnpm run typecheck && pnpm run test && pnpm run lint:unused && pnpm run doctors",
 		"preflight": "biome check --write . && pnpm run verify",
-		"test": "vitest run --config vitest.config.mts"
+		"test": "vitest run --config vitest.config.mts",
+		"bench": "vitest bench --run --config vitest.config.mts --reporter=verbose"
 	},
 	"dependencies": {
 		"@react-native-async-storage/async-storage": "2.2.0",
