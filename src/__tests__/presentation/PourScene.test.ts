@@ -85,10 +85,35 @@ describe("pourInput", () => {
 });
 
 describe("bonusSpot", () => {
-	it("sits beside the drop, halfway down its amber layer", () => {
-		const spot = bonusSpot(40, 0.5);
-		expect(spot.x).toBeGreaterThan(40);
-		expect(spot.y).toBeCloseTo(20);
+	const RED = "#E53935";
+	// A catch and the next in its combo: a score of 4, half of it combo bonus
+	const plan = planPour({
+		record: {
+			catches: [
+				{ tick: 10, value: 1, step: 1, color: RED, point: false },
+				{ tick: 11, value: 3, step: 2, color: RED, point: false },
+			],
+			ticks: 60,
+		},
+		color: RED,
+		pitch: 14,
+	});
+	const radius = plan.settledDrop.radius;
+
+	it("sits beside the drop, its middle halfway down the amber layer, as the pour is scaled", () => {
+		const spot = bonusSpot(plan, { width: 400, height: 600 }, { scale: 0.5, half: 100 });
+		// Half the drop is amber, so its layer runs from the centre down: its middle is r / 2 down
+		expect(spot.top + spot.height / 2).toBeCloseTo(300 + 0.5 * (radius / 2));
+		expect(spot.left).toBeGreaterThan(200 + 0.5 * radius - spot.pitch);
+		expect(spot.left + spot.width / 2).toBeGreaterThan(200 + 0.5 * radius);
+		expect(spot.pitch).toBe(3);
+	});
+
+	it("closes its dots up to keep the label on a narrow screen", () => {
+		const width = 2 * radius + 30;
+		const spot = bonusSpot(plan, { width, height: 600 }, { scale: 1, half: 100 });
+		expect(spot.pitch).toBeLessThan(3);
+		expect(spot.left + spot.width).toBeLessThanOrEqual(width);
 	});
 });
 

@@ -6,7 +6,6 @@
 import type { BestVerdict, GameStoreState } from "../../application/GameStore";
 import {
 	JELLY_AT_REST,
-	JELLY_MAX_STRETCH,
 	type JellyBody,
 	type JellyState,
 	jellyAtRest,
@@ -16,8 +15,8 @@ import {
 } from "../../application/jelly";
 import { MERGE_SHRINK } from "../../application/renderScene";
 import type { RunRecord } from "../../domain/types";
-import { LIQUID_WOBBLE } from "../liquidShader";
-import { MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
+import { layoutDotMatrix, matrixBox, pitchToFit } from "../dotmatrix/layout";
+import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS } from "../mergeShader";
 import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
 	POUR_DOT_RADIUS,
@@ -85,13 +84,40 @@ export function pourInput({ frame }: Pick<GameStoreState, "frame">, color: strin
 	};
 }
 
-/** The `+N` label's left middle, from the drop's centre: beside the drop, halfway down the amber */
-export function bonusSpot(radius: number, share: number): { x: number; y: number } {
-	return { x: radius + BONUS_GAP, y: (radius * amberLevel(share) + radius) / 2 };
-}
-
 /** Space between the drop and the `+N` label (px) */
 const BONUS_GAP = 10;
+/** The `+N` label's dot spacing (px), closed up only to keep it on the screen */
+const BONUS_PITCH = 3;
+/** Space the `+N` label keeps from the screen's edge (px) */
+const BONUS_EDGE = 8;
+
+/** Where the `+N` label's box goes in the pour's area, and its dot spacing (px) */
+export interface BonusSpot {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+	pitch: number;
+}
+
+/**
+ * The `+N` label in an area of `box` with the drop at its centre, drawn at the fit's scale:
+ * beside the settled drop, its middle halfway down the amber layer, closed up to stay on the
+ * screen. The plan must have a combo bonus.
+ */
+export function bonusSpot(
+	plan: PourPlan,
+	box: { width: number; height: number },
+	fit: PourFit,
+): BonusSpot {
+	const { radius } = plan.settledDrop;
+	const left = box.width / 2 + (radius + BONUS_GAP) * fit.scale;
+	const middle = box.height / 2 + ((radius * amberLevel(plan.amber) + radius) / 2) * fit.scale;
+	const layout = layoutDotMatrix(plan.bonusLabel ?? "");
+	const pitch = pitchToFit(layout, box.width - left - BONUS_EDGE, BONUS_PITCH);
+	const { width, height, pad } = matrixBox(layout, pitch, false, false);
+	return { left: left - pad, top: middle - height / 2, width, height, pitch };
+}
 
 /** A tally dot's radius as a fraction of the pitch, as DotMatrixText draws it */
 export const POUR_DIGIT_SCALE = 0.38;
@@ -108,8 +134,7 @@ export interface PourFit {
  * when that is not
  */
 export function pourFit(plan: PourPlan, pitch: number, available: number): PourFit {
-	const settled = plan.drops[plan.drops.length - 1];
-	let extent = settled.radius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
+	let extent = plan.settledDrop.radius * LIQUID_REACH;
 	for (const dot of plan.digits[plan.digits.length - 1]) {
 		extent = Math.max(extent, Math.abs(dot.y) + pitch * POUR_DIGIT_SCALE);
 	}
@@ -311,7 +336,7 @@ export function pourBody({ flights, color, radius, jelly, top, amber }: PourBody
 	// that catch is the first body until it does
 	const blobs: number[] = radius > 0 ? [0, 0, radius] : [];
 	const beads: PourBead[] = [];
-	const reach = radius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
+	const reach = radius * LIQUID_REACH;
 	let side = reach;
 	let highest = -reach;
 	for (const f of flights) {

@@ -4,7 +4,6 @@ import { type LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { DotMatrixText } from "../components/DotMatrixText";
-import { layoutDotMatrix, matrixBox, pitchToFit } from "../dotmatrix/layout";
 import { PourCanvas } from "../effects/PourCanvas";
 import type { PourPlan } from "../effects/pourRun";
 import {
@@ -32,9 +31,6 @@ interface GameOverPourProps {
 const ROW_HEIGHT = 36;
 const ROW_GAP = 18;
 const CLOCK_PITCH = 4;
-const BONUS_PITCH = 3;
-/** Space the `+N` label keeps from the screen's edge (px) */
-const EDGE = 8;
 
 interface Box {
 	width: number;
@@ -112,22 +108,11 @@ interface BonusLabelProps {
 	fit: PourFit;
 }
 
-/** The combo bonus `+N` in amber beside the drop's amber layer, shrunk to fit the screen */
+/** The combo bonus `+N` in amber beside the drop's amber layer (see bonusSpot) */
 const BonusLabel: React.FC<BonusLabelProps> = ({ text, plan, box, fit }) => {
-	const settled = plan.drops[plan.drops.length - 1];
-	const spot = bonusSpot(settled.radius, plan.amber);
-	const left = box.width / 2 + spot.x * fit.scale;
-	const layout = layoutDotMatrix(text);
-	const pitch = pitchToFit(layout, box.width - left - EDGE, BONUS_PITCH);
-	const { height, pad } = matrixBox(layout, pitch, false, false);
+	const { left, top, pitch } = bonusSpot(plan, box, fit);
 	return (
-		<Animated.View
-			entering={FadeIn.duration(400)}
-			style={[
-				styles.bonus,
-				{ left: left - pad, top: box.height / 2 + spot.y * fit.scale - height / 2 },
-			]}
-		>
+		<Animated.View entering={FadeIn.duration(400)} style={[styles.bonus, { left, top }]}>
 			<DotMatrixText text={text} pitch={pitch} color={COMBO_AMBER} />
 		</Animated.View>
 	);

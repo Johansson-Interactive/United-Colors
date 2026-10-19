@@ -116,6 +116,8 @@ export interface PourPlan {
 	bodies: readonly PlannedBody[];
 	/** The drop and its tally's dots once `k` catches have landed, by `k` */
 	drops: readonly PourDrop[];
+	/** The drop once every catch has landed */
+	settledDrop: PourDrop;
 	digits: readonly (readonly PourDigitDot[])[];
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
@@ -215,7 +217,8 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
 	const times = landTimes(catches.map((c) => c.tick));
 	const drops = dropsOf(record, color);
-	const score = drops[drops.length - 1].tally;
+	const settledDrop = drops[drops.length - 1];
+	const score = settledDrop.tally;
 	const bonus = comboBonus(record);
 	let burstId = 0;
 	return {
@@ -226,6 +229,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		}),
 		bodies: bodiesOf(catches, times),
 		drops,
+		settledDrop,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
 		seconds: runSeconds(record.ticks),
 		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,

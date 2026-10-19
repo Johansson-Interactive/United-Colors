@@ -18,6 +18,8 @@ import { LIQUID_SKSL, LIQUID_WOBBLE, SMIN_SKSL, WALL_SKSL } from "./liquidShader
 export const MERGE_MAX_BLOBS = 1 + MERGE_MAX_DOTS;
 /** Smooth-min radius as a multiple of the player radius: how early two bodies start to neck */
 export const MERGE_BLEND = 0.9;
+/** How far a drop of the liquid can reach from its centre, in radii: stretched and wobbling */
+export const LIQUID_REACH = (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
 /** The dent a refused dot presses is this much wider than the dot, as a fraction of its radius */
 export const DENT_GAP = 0.06;
 /** How softly the dent's rim curves into the player, as a fraction of the refused dot's radius */
@@ -171,7 +173,7 @@ export function packMergeUniforms(scene: Float32Array): MergeUniforms | null {
 		bottom = Math.max(bottom, y + reach);
 	};
 
-	const playerReach = player.radius * (1 + JELLY_MAX_STRETCH) * (1 + LIQUID_WOBBLE);
+	const playerReach = player.radius * LIQUID_REACH;
 	add(player.x, player.y, player.radius, playerReach);
 
 	const count = dotCount(scene);
