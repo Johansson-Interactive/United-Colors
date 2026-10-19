@@ -406,7 +406,7 @@ export class GameEngine {
 
 	/**
 	 * Score catching `dot`, worth `base` on its own, carrying the combo on if it is still going,
-	 * and keep it in the run record
+	 * and keep it in the run record of a run that can end
 	 */
 	private scoreCatch(base: number, dot: Dot): Catch {
 		const sameTick = this.comboStep > 0 && this.lastCatchTick === this.timeStep;
@@ -414,13 +414,16 @@ export class GameEngine {
 		this.lastCatchTick = this.timeStep;
 		const value = base + 2 * (this.comboStep - 1);
 		this.score += value;
-		this.runCatches.push({
-			tick: this.timeStep,
-			value,
-			step: this.comboStep,
-			color: dot.color,
-			point: dot.kind === "point",
-		});
+		// Without refusals no game over comes to carry the record, so keep none
+		if (this.refusals) {
+			this.runCatches.push({
+				tick: this.timeStep,
+				value,
+				step: this.comboStep,
+				color: dot.color,
+				point: dot.kind === "point",
+			});
+		}
 		return { value, step: this.comboStep, sameTick };
 	}
 

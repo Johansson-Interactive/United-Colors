@@ -957,6 +957,26 @@ describe("GameEngine", () => {
 			engine.tick();
 			expect(engine.getScore()).toBe(1);
 		});
+
+		it("keeps no run record, as no game over can come to carry it", () => {
+			const script = scriptedSpawner();
+			const engine = new GameEngine({
+				density: 100,
+				screen: SCREEN,
+				random: () => 0.5,
+				spawner: script.spawner,
+				refusals: false,
+			});
+			engine.startGame(OWN);
+			for (let i = 0; i < 50; i++) {
+				script.small.push(smallDotAt(CENTRE, OWN, { id: `mine${i}` }));
+				engine.tick();
+			}
+			expect(engine.getScore()).toBeGreaterThan(0);
+			// The record only leaves the engine on a game-over frame, which a bench run never
+			// reaches, so the only sign of it growing without bound is inside
+			expect((engine as unknown as { runCatches: unknown[] }).runCatches).toEqual([]);
+		});
 	});
 
 	describe("rejecting a wrong-colour dot", () => {
