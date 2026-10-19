@@ -72,15 +72,22 @@ export function amberLevel(share: number): number {
 /** No catches, no time: what a game over without a run record pours */
 const NO_RUN: RunRecord = { catches: [], ticks: 0 };
 
+/** The tally's dot spacing (px), as the game over has always set the score... */
+const SCORE_PITCH = 14;
+/** ...and closer for a score of this many digits or more */
+const LONG_SCORE_PITCH = 11;
+const LONG_SCORE_DIGITS = 4;
+
 /**
  * The pour of the game over showing now, from the store as it stands when the game over
- * appears: the frame's run, and the tally's pitch, closer from four digits on
+ * appears: the frame's run, and the tally's pitch, closer for a long score
  */
 export function pourInput({ frame }: Pick<GameStoreState, "frame">, color: string): PourInput {
+	const long = String(frame.score).length >= LONG_SCORE_DIGITS;
 	return {
 		record: frame.run ?? NO_RUN,
 		color,
-		pitch: String(frame.score).length > 3 ? 11 : 14,
+		pitch: long ? LONG_SCORE_PITCH : SCORE_PITCH,
 	};
 }
 
@@ -257,7 +264,7 @@ export function stepPour(
 	let body = playback.body;
 	let bursts = before.bursts;
 	for (const landing of view.landings) {
-		body = kickJelly(body, 0, landingKick(view.drop.radius, landing.point));
+		body = kickJelly(body, landingKick(view.drop.radius, landing.point));
 		for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
 	}
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
