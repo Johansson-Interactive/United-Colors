@@ -107,6 +107,20 @@ export interface Catch {
 	sameTick: boolean;
 }
 
+/**
+ * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
+ * once, with the next frame.
+ */
+export type GameEvent =
+	/** A small dot of the player's colour was caught */
+	| ({ type: "collect" } & Catch)
+	/** A point dot was caught and recoloured the player */
+	| ({ type: "collectPoint" } & Catch)
+	| { type: "pointSpawn" }
+	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
+	| { type: "spit" }
+	| { type: "gameOver" };
+
 /** One catch of a run, as its run record keeps it */
 export interface RunCatch {
 	/** The run tick it landed on: ticks the simulation ran since the run started */
@@ -127,20 +141,6 @@ export interface RunRecord {
 	/** Run time in ticks: only ticks the simulation ran (not paused, refusing or game over) */
 	ticks: number;
 }
-
-/**
- * Something that happened in the simulation, for sound, touch and bursts. Each is handed over
- * once, with the next frame.
- */
-export type GameEvent =
-	/** A small dot of the player's colour was caught */
-	| ({ type: "collect" } & Catch)
-	/** A point dot was caught and recoloured the player */
-	| ({ type: "collectPoint" } & Catch)
-	| { type: "pointSpawn" }
-	/** The player springs back and spits the refused dot out (see REJECT_SPIT_AT) */
-	| { type: "spit" }
-	| { type: "gameOver" };
 
 /** Complete frame data emitted by the engine for the presentation layer */
 export interface RenderFrame {
