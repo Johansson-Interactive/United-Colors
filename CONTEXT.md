@@ -59,19 +59,23 @@ What a run did, as the game keeps it for its game over: its catches in order (ea
 _Avoid_: history, log, "record" on its own
 
 **Pour**:
-The game over's replay of a run: its catches pour in as small dots, in their order and rhythm, and merge into the drop while a clock runs up to the run time, until the drop settles and its amber layer rises in.
+The game over's replay of a run: its catches pour in as small dots, in their order and rhythm, and merge into the drop while a clock runs up to the run time, until the drop settles and the bonus pour follows.
 _Avoid_: recap, summary animation
 
 **Drop**:
-The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land; it holds the tally and, once settled, the amber layer.
+The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land and swells as the bonus pours in; it holds the tally and, once settled, the amber layer.
 _Avoid_: blob, ball, cup
 
+**Bonus pour**:
+The second beat of the pour, once the drop has settled: the combo bonus falls in as one amber body, the amber layer rises, the drop swells and the tally counts up from what the catches were worth alone to the score. The bonus is seen going into the total, so nothing is left for the player to add up. A run without a combo bonus has none.
+_Avoid_: bonus reveal, combo tally
+
 **Amber layer**:
-The combo bonus, drawn as amber liquid at the bottom of the settled drop with its `+N` in ink inside it. Its share of the drop is the combo bonus's share of the score, except that it is never too small to hold a readable `+N`: a small combo bonus is deliberately drawn larger than its true share.
+The combo bonus, drawn as amber liquid at the bottom of the settled drop with its figure in ink inside it: a bare number, never `+N`, as it has already counted into the tally. Its share of the drop is the combo bonus's share of the score, except that it is never too small to hold a readable figure: a small combo bonus is deliberately drawn larger than its true share, and a large one smaller, so the tally above it is never drawn smaller than the bonus figure. While rising, it is held back under the tally until the tally has lifted and the drop swelled enough to make room.
 _Avoid_: bonus bar, combo fill
 
 **Tally**:
-The running total inside the pour's drop: what the catches landed so far paid. It counts up to the run's score as the last catch lands, then lifts clear of the amber layer as it rises.
+The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer, shrinking to fit inside it as the bonus figure fits inside the amber. Only a drop too small to hold it readably leaves it at full size, standing on the amber and out of the drop's top.
 _Avoid_: counter, subtotal
 
 ### Ranking
