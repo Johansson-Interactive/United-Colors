@@ -59,6 +59,7 @@ import {
 	MERGE_SKSL,
 	type MergeUniformsByName,
 	mergeUniformsByName,
+	NO_AMBER,
 	packMergeUniforms,
 } from "./mergeShader";
 import {
@@ -328,15 +329,22 @@ export function liquidBody(dots: Float32Array): LiquidBody {
 	if (merge === null) {
 		const zeros: number[] = [];
 		for (let i = 0; i < MERGE_PACKED_LENGTH; i++) zeros.push(0);
-		return { x: 0, y: 0, width: 0, height: 0, uniforms: mergeUniformsByName(zeros, NO_BODY_COLOR) };
+		return {
+			x: 0,
+			y: 0,
+			width: 0,
+			height: 0,
+			uniforms: mergeUniformsByName(zeros, NO_BODY_COLOR, NO_AMBER, NO_BODY_COLOR),
+		};
 	}
 	const player = readDot(dots, findPlayer(dots), sceneDot());
+	const fill = FILL_COLORS[player.color];
 	return {
 		x: merge.left,
 		y: merge.top,
 		width: merge.right - merge.left,
 		height: merge.bottom - merge.top,
-		uniforms: mergeUniformsByName(merge.values, FILL_COLORS[player.color]),
+		uniforms: mergeUniformsByName(merge.values, fill, NO_AMBER, fill),
 	};
 }
 

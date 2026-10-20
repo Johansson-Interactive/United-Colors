@@ -165,19 +165,16 @@ const UNIFORM_SIZES = [
 
 /**
  * Cut packed values (without `color`) into named uniforms, with `color` (RGBA) added, and an
- * amber layer `amber` points below the first body's centre in `amberColor` (RGBA): none by
- * default, as in play
+ * amber layer `amber` points below the first body's centre in `amberColor` (RGBA): NO_AMBER
+ * for none, as in play
  */
 export function mergeUniformsByName(
 	values: number[],
 	color: ArrayLike<number>,
-	amber?: number,
-	amberColor: ArrayLike<number> = color,
+	amber: number,
+	amberColor: ArrayLike<number>,
 ): MergeUniformsByName {
 	"worklet";
-	// Defaulted here, not in the signature: on the UI thread captured constants are unpacked at
-	// the top of the body, after default parameters have run
-	const level = amber ?? NO_AMBER;
 	let at = 0;
 	const take = (size: number) => {
 		const part = values.slice(at, at + size);
@@ -200,7 +197,7 @@ export function mergeUniformsByName(
 		walls,
 		neck,
 		color: [color[0], color[1], color[2], color[3]],
-		amber: level,
+		amber,
 		amberColor: [amberColor[0], amberColor[1], amberColor[2], amberColor[3]],
 	};
 }

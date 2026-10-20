@@ -22,6 +22,7 @@ import {
 	stepPour,
 } from "../../presentation/effects/pourScene";
 import { amberWaveReach, mergeUniformsByName, NO_AMBER } from "../../presentation/mergeShader";
+import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 describe("pourFit", () => {
 	const PITCH = 14;
@@ -205,6 +206,7 @@ describe("pourBody", () => {
 	const RED = "#E53935";
 	const BLUE = "#1E88E5";
 	const STILL = { stretchX: 0, stretchY: 0, wobble: 0 };
+	const BLACK = [0, 0, 0, 1];
 	const TOP = -300;
 	/** A free small dot's radius in play (px), at the game's default density */
 	const SMALL = (SMALL_DOT_SIZE_RATIO * 400) / 2;
@@ -221,7 +223,12 @@ describe("pourBody", () => {
 	function draw(flights: PourFlight[], radius = 40, amberLevel: number | null = null, scale = 1) {
 		const input = { flights, color: RED, radius, jelly: STILL, top: TOP, amberLevel, scale };
 		const body = pourBody(input);
-		const { blobs, count, blend, jelly } = mergeUniformsByName(body.values, [0, 0, 0, 1]);
+		const { blobs, count, blend, jelly } = mergeUniformsByName(
+			body.values,
+			BLACK,
+			body.amber,
+			BLACK,
+		);
 		const circles: { x: number; y: number; radius: number }[] = [];
 		for (let i = 0; i < count; i++) {
 			circles.push({ x: blobs[i * 3], y: blobs[i * 3 + 1], radius: blobs[i * 3 + 2] });
@@ -241,7 +248,7 @@ describe("pourBody", () => {
 			scale: 1,
 		};
 		const body = pourBody(input);
-		const named = mergeUniformsByName(body.values, [0, 0, 0, 1]);
+		const named = mergeUniformsByName(body.values, BLACK, body.amber, BLACK);
 		expect(named.count).toBe(1);
 		expect(named.blobs.slice(0, 3)).toEqual([0, 0, 40]);
 		expect(named.jelly).toEqual([0.1, 0, 3]);
@@ -291,6 +298,13 @@ describe("pourBody", () => {
 		expect(body.beads).toHaveLength(1);
 		expect(body.beads[0].color).toBe(BLUE);
 		expect(body.beads[0].radius).toBe(SMALL);
+	});
+
+	it("draws a combo body in amber as a bead too, never merging, as the shader paints one liquid", () => {
+		const merging = flight({ color: COMBO_AMBER, fall: 1, merge: 0.5 });
+		const { body, circles } = draw([merging]);
+		expect(circles).toHaveLength(1);
+		expect(body.beads).toEqual([expect.objectContaining({ color: COMBO_AMBER })]);
 	});
 
 	it("still blends a first catch into a drop that has no size yet", () => {

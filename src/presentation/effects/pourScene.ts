@@ -283,8 +283,8 @@ export interface PourBody {
  * The pour at one moment as the merge shader draws it, the way a caught dot merges into the
  * player in play: each catch falls as a small dot, straight down from out of sight above the
  * canvas, speeding up, onto its spot on the drop's top, then slides into its centre, shrinking
- * as it goes. A catch of another colour (a point dot, before it recolours the drop) is a bead
- * of its own.
+ * as it goes. A catch of another colour is a bead of its own, as the shader paints one liquid:
+ * a point dot, before it recolours the drop, and a combo body in amber, which never merges.
  */
 export function pourBody({
 	flights,

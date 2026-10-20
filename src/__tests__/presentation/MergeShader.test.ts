@@ -172,7 +172,7 @@ describe("merge uniforms by name", () => {
 
 	it("names every uniform the shader declares, in order, with its size", () => {
 		const values = Array.from({ length: MERGE_PACKED_LENGTH }, (_, i) => i);
-		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1]);
+		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1], NO_AMBER, [1, 0.7, 0, 1]);
 		expect(Object.keys(named)).toEqual(declared().map(([name]) => name));
 		for (const [name, size] of declared()) {
 			const value = named[name];
@@ -193,18 +193,16 @@ describe("merge uniforms by name", () => {
 		);
 		const packed = packMergeUniforms(scene);
 		expect(packed?.values.length).toBe(MERGE_PACKED_LENGTH);
-		const named = mergeUniformsByName(packed?.values ?? [], [0, 0, 0, 1]);
+		const named = mergeUniformsByName(packed?.values ?? [], [0, 0, 0, 1], NO_AMBER, [0, 0, 0, 1]);
 		const flat = declared()
 			.slice(0, -3)
 			.flatMap(([name]) => named[name]);
 		expect(flat).toEqual(packed?.values);
 	});
 
-	it("draws no amber layer unless given one, as in play", () => {
-		const values = Array.from({ length: MERGE_PACKED_LENGTH }, () => 0);
-		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1]);
-		expect(named.amber).toBe(NO_AMBER);
+	it("draws no amber layer at NO_AMBER, as in play", () => {
 		expect(MERGE_SKSL).toContain("uniform float amber;");
+		expect(MERGE_SKSL).toContain(`if (amber < ${NO_AMBER.toFixed(1)})`);
 	});
 
 	it("carries the amber layer's level and colour", () => {
