@@ -9,7 +9,7 @@
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
  * is a worklet and a pure function of time, so the shell samples it per frame from its own
  * clock. Pass it the previous sample's time too, and it lists the catches that landed in
- * between, each exactly once, for their bursts, and the sounds among them. The shell owns the
+ * between, each exactly once, for their kicks, and the sounds among them. The shell owns the
  * drawing, the jelly kicked on each landing, the sounds and where things are on the screen.
  */
 
@@ -19,8 +19,6 @@ import { comboBonus, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
 import { amberWaveReach } from "../mergeShader";
-import { type Burst, layOutBurst } from "./burstFrames";
-import { NO_CATCH_SPOT, stepBursts } from "./stageBursts";
 
 /** The first catch lands this long after the game over appears (ms) */
 export const POUR_START_MS = 500;
@@ -88,14 +86,12 @@ interface PourSound {
 	point: boolean;
 }
 
-/** One catch's landing: where, whether a point dot, which knocks the drop harder, and its bursts */
+/**
+ * One catch's landing: where, and whether a point dot, which knocks the drop harder. It neither
+ * pops nor rings, as it did in play: the tally tells what it paid.
+ */
 interface PourLanding extends PourSpot {
 	point: boolean;
-	/**
-	 * Its bursts on the drop's top, as it burst in play (see stageBursts): a combo catch pops
-	 * in combo amber and a point dot pops and rings in its colour; a lone small dot is quiet
-	 */
-	bursts: readonly Burst[];
 }
 
 /**
@@ -217,7 +213,7 @@ function landTimes(ticks: readonly number[]): number[] {
 /**
  * The bodies the catches landing at `times` into `drops` fall in, at least POUR_STAGGER_MS
  * apart, and the spot each catch lands on: its body's, the one its first catch lands on, so
- * every catch of a body lands, kicks and bursts where the body is drawn landing
+ * every catch of a body lands and kicks where the body is drawn landing
  */
 function bodiesOf(
 	catches: readonly RunCatch[],
@@ -306,22 +302,6 @@ function digitsOf({ tally, radius }: PourDrop, pitch: number): PourDigitDot[] {
 		const y = (row + 0.5 - rows / 2) * pitch;
 		return { x, y, ink: Math.hypot(x, y) < radius };
 	});
-}
-
-/**
- * A catch's bursts on the spot it lands on, laid out under ids from `firstId` on: those it
- * showed in play, if it was a combo catch or a point dot
- */
-function landingBursts(c: RunCatch, spot: PourSpot, firstId: number): Burst[] {
-	if (c.step === 1 && !c.point) return [];
-	const event = {
-		type: c.point ? ("collectPoint" as const) : ("collect" as const),
-		value: c.value,
-		step: c.step,
-		sameTick: false,
-	};
-	const player = { x: spot.x, y: spot.y, color: c.color };
-	return stepBursts(NO_CATCH_SPOT, event, player).bursts.map((b, i) => layOutBurst(firstId + i, b));
 }
 
 /**
@@ -417,13 +397,13 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const amber = bonus > 0 ? amberOf(bonus, score, radius, pitch) : null;
 	const tallyHeight = layoutDotMatrix(String(score)).rows * pitch;
 	const { bodies, spots } = bodiesOf(catches, times, drops);
-	let burstId = 0;
 	return {
-		catches: catches.map((c, i) => {
-			const bursts = landingBursts(c, spots[i], burstId);
-			burstId += bursts.length;
-			return { ...cues[i], ...spots[i], landMs: times[i], bursts, heard: sounding[i] };
-		}),
+		catches: catches.map((_, i) => ({
+			...cues[i],
+			...spots[i],
+			landMs: times[i],
+			heard: sounding[i],
+		})),
 		bodies,
 		drops,
 		settledDrop,
@@ -459,7 +439,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	for (const c of plan.catches) {
 		if (c.landMs <= ms) landed++;
 		if (c.landMs > sinceMs && c.landMs <= ms) {
-			landings.push({ x: c.x, y: c.y, point: c.point, bursts: c.bursts });
+			landings.push({ x: c.x, y: c.y, point: c.point });
 			if (c.heard) sounds.push({ pitch: c.pitch, point: c.point });
 		}
 	}

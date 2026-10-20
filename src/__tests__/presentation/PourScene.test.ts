@@ -369,7 +369,7 @@ describe("stepPour", () => {
 		expect(play(POUR_START_MS + FRAME).playback.frame.view.drop.tally).toBe(1);
 	});
 
-	it("cues each heard landing once, kicks the drop down and adds the landing's bursts", () => {
+	it("cues each heard landing once and kicks the drop down", () => {
 		const { steps } = play(POUR_START_MS + 200);
 		// The first two catches land in one sound window: only the higher is heard
 		const heard = steps.flatMap((s) => s.sounds);
@@ -378,8 +378,6 @@ describe("stepPour", () => {
 		const before = steps[second - 1].playback;
 		const after = steps[second].playback;
 		expect(after.body.lagVY).toBeGreaterThan(before.body.lagVY);
-		expect(after.frame.bursts.length).toBe(before.frame.bursts.length + 1);
-		expect(after.frame.bursts.at(-1)?.kind).toBe("pop");
 	});
 
 	it("pushes the liquid away from where an off-centre catch lands, sideways as well as down", () => {
@@ -485,7 +483,6 @@ describe("stepPour", () => {
 		const { playback } = play(20_000);
 		expect(playback.frame.view.settled).toBe(true);
 		expect(playback.frame.view.bonusLabel?.opacity).toBe(1);
-		expect(playback.frame.bursts).toEqual([]);
 		expect(playback.status.settled).toBe(true);
 		const later = stepPour(pour, playback, frameAt(20_000) + FRAME, FRAME, NO_BEST);
 		expect(later.playback.body.wobble).toBeCloseTo(playback.body.wobble + FRAME / 1000);

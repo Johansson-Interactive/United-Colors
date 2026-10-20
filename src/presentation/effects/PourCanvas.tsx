@@ -14,7 +14,7 @@ import { convertToRGBA, type SharedValue, useDerivedValue } from "react-native-r
 import { glareOffset } from "../dotSprites";
 import { mergeUniformsByName } from "../mergeShader";
 import { recordPicture } from "../recordPicture";
-import { drawBursts, drawGlareAt, MERGE_EFFECT } from "../sceneDrawer";
+import { drawGlareAt, MERGE_EFFECT } from "../sceneDrawer";
 import { COMBO_AMBER, INK } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
 import { BURST_COLORS } from "./burstFrames";
@@ -55,8 +55,7 @@ COLOR_PAINT.setAntiAlias(true);
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
  * catches of another colour; then the drop and the catches merging into it as one body under
- * the merge shader, amber under its wavy surface; then the glare, the tally, `+N` and the
- * landings' bursts over it. Every frame, on the UI thread, from `frame`.
+ * the merge shader, amber under its wavy surface; then the glare, the tally and `+N` over it. Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;
@@ -112,8 +111,6 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 				const labelRadius = label.pitch * POUR_DIGIT_SCALE;
 				for (const dot of label.dots) canvas.drawCircle(dot.x, dot.y, labelRadius, BONUS_PAINT);
 			}
-			const { bursts, now } = frame.get();
-			drawBursts(canvas, bursts, now);
 		}),
 	);
 

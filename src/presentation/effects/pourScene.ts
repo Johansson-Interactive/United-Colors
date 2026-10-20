@@ -16,7 +16,6 @@ import { MERGE_SHRINK } from "../../application/renderScene";
 import { GAME_DENSITY, SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunRecord } from "../../domain/types";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS, NO_AMBER } from "../mergeShader";
-import { advanceBursts, type Burst, withBurst } from "./burstFrames";
 import {
 	POUR_DOT_RADIUS,
 	type PourFlight,
@@ -138,9 +137,6 @@ export interface PourFrame {
 	/** The drop's radius, eased after the stepper's */
 	radius: number;
 	jelly: JellyState;
-	/** The landings' bursts, at frame time `now` (see burstFrames.ts) */
-	bursts: Burst[];
-	now: number;
 }
 
 /**
@@ -192,7 +188,7 @@ export function startPour(plan: PourPlan): PourPlayback {
 		start: null,
 		sampled: -POUR_DELAY_MS,
 		body: JELLY_AT_REST,
-		frame: { view, radius: 0, jelly: jellyShape(JELLY_AT_REST, 0), bursts: [], now: 0 },
+		frame: { view, radius: 0, jelly: jellyShape(JELLY_AT_REST, 0) },
 		status: statusOf(view, Number.POSITIVE_INFINITY),
 	};
 }
@@ -200,9 +196,9 @@ export function startPour(plan: PourPlan): PourPlayback {
 /**
  * The pour at UI frame time `now`, `dtMs` after the frame before, its tally measured against
  * `best` (see bestToBeat): the stepper sampled since the last frame, each landing kicking the
- * drop's liquid and adding its bursts, the drawn drop eased toward the stepper's and the liquid
- * stepped. It never finishes: once settled, the liquid keeps stepping so the drop keeps
- * rippling, as the AGAIN button's does.
+ * drop's liquid, the drawn drop eased toward the stepper's and the liquid stepped. It never
+ * finishes: once settled, the liquid keeps stepping so the drop keeps rippling, as the AGAIN
+ * button's does.
  */
 export function stepPour(
 	plan: PourPlan,
@@ -218,14 +214,11 @@ export function stepPour(
 	const view = pourAt(plan, ms, playback.sampled);
 	const before = playback.frame;
 	let body = playback.body;
-	let bursts = before.bursts;
 	for (const landing of view.landings) {
 		const kick = landingKick(landing, view.drop.radius);
 		body = kickJelly(body, kick.x, kick.y);
-		for (const burst of landing.bursts) bursts = withBurst(bursts, burst);
 	}
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
-	bursts = advanceBursts(bursts, now);
 	const radius = easeToward(before.radius, view.drop.radius, dt);
 	const status = statusOf(view, best);
 	const changed = !sameStatus(status, playback.status);
@@ -234,7 +227,7 @@ export function stepPour(
 			start,
 			sampled: ms,
 			body,
-			frame: { view, radius, jelly: jellyShape(body, view.drop.radius), bursts, now },
+			frame: { view, radius, jelly: jellyShape(body, view.drop.radius) },
 			status: changed ? status : playback.status,
 		},
 		sounds: view.sounds,

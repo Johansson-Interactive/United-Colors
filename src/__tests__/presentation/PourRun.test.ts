@@ -2,7 +2,6 @@ import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { GLYPH_ROWS } from "../../presentation/dotmatrix/glyphs";
 import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
-import { burstColor, layOutBurst, type NewBurst } from "../../presentation/effects/burstFrames";
 import {
 	POUR_BONUS_MIN_PITCH,
 	POUR_FADE_MS,
@@ -19,7 +18,6 @@ import {
 	planPour,
 	pourAt,
 } from "../../presentation/effects/pourRun";
-import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 const RED = "#E53935";
 const BLUE = "#1E88E5";
@@ -35,9 +33,6 @@ function caught(tick: number, more: Partial<RunCatch> = {}): RunCatch {
 function plan(record: RunRecord, color = RED): PourPlan {
 	return planPour({ record, color, pitch: PITCH });
 }
-
-/** A score pop of `text`, to lay out */
-const popOf = (text: string): NewBurst => ({ kind: "pop", x: 0, y: 0, text, color: RED });
 
 /** Run time in ticks at 30 Hz */
 const seconds = (s: number) => s * 30;
@@ -232,7 +227,7 @@ describe("pourAt", () => {
 		}
 	});
 
-	it("lands, kicks and bursts a body's catches where the body is drawn landing", () => {
+	it("lands and kicks a body's catches where the body is drawn landing", () => {
 		// Three combo catches on one tick fall as one body
 		const p = plan({
 			catches: [
@@ -248,10 +243,7 @@ describe("pourAt", () => {
 		const body = found.slice(1, 4);
 		expect(new Set(body.map((l) => l.ms)).size).toBe(1);
 		const [falling] = pourAt(p, body[0].ms - POUR_FALL_MS / 2).flights;
-		for (const { x, y, bursts } of body) {
-			expect({ x, y }).toEqual({ x: falling.x, y: falling.y });
-			for (const burst of bursts) expect(burst).toMatchObject({ x, y });
-		}
+		for (const { x, y } of body) expect({ x, y }).toEqual({ x: falling.x, y: falling.y });
 	});
 
 	it("grows the drop from nothing as catches land, its area following the tally", () => {
@@ -395,8 +387,8 @@ describe("pourAt", () => {
 		]);
 	});
 
-	it("sounds a long flurry as a quick run of notes, one a window, its bursts all shown", () => {
-		// A combo catch every 22 ms of the pour, each bursting
+	it("sounds a long flurry as a quick run of notes, one a window, every catch landing", () => {
+		// A combo catch every 22 ms of the pour
 		const stream = Array.from({ length: 101 }, (_, i) => caught(i * 10, { step: 2, value: 3 }));
 		const p = plan({ catches: stream, ticks: 1100 });
 		const heard = sounds(p).map((s) => s.ms);
@@ -406,10 +398,9 @@ describe("pourAt", () => {
 		}
 		const landed = landings(p);
 		expect(landed).toHaveLength(101);
-		expect(landed.every((l) => l.bursts.length > 0)).toBe(true);
 	});
 
-	it("bursts a landing as the catch did in play, on the drop's top where it lands", () => {
+	it("lands every catch, combo and point dot alike, without a pop or a ring", () => {
 		const p = plan({
 			catches: [
 				caught(10),
@@ -419,27 +410,10 @@ describe("pourAt", () => {
 			],
 			ticks: 300,
 		});
-		const [lone, combo, point, comboPoint] = landings(p);
-		// A lone small dot lands quietly
-		expect(lone.bursts).toEqual([]);
-		// A combo catch pops what it paid in combo amber
-		const { x, y } = combo;
-		expect(combo.bursts).toEqual([
-			expect.objectContaining({ kind: "pop", x, y, color: burstColor(COMBO_AMBER) }),
-		]);
-		// A point dot pops in its colour and rings in it; in a combo, its pop is amber
-		const at = { x: point.x, y: point.y };
-		expect(point.bursts).toEqual([
-			expect.objectContaining({ kind: "pop", ...at, color: burstColor(BLUE) }),
-			expect.objectContaining({ kind: "ring", ...at, color: burstColor(BLUE) }),
-		]);
-		expect(comboPoint.bursts).toEqual([
-			expect.objectContaining({ kind: "pop", color: burstColor(COMBO_AMBER) }),
-			expect.objectContaining({ kind: "ring", color: burstColor(GREEN) }),
-		]);
-		expect(combo.bursts[0].dots).toEqual(layOutBurst(0, popOf("3")).dots);
-		const ids = [combo, point, comboPoint].flatMap((l) => l.bursts.map((b) => b.id));
-		expect(new Set(ids).size).toBe(ids.length);
+		// A landing is where it lands and whether it knocks as a point dot, nothing to draw
+		expect(landings(p).map(({ ms: _, ...landing }) => Object.keys(landing).sort())).toEqual(
+			Array(4).fill(["point", "x", "y"]),
+		);
 	});
 
 	it("settles only once the last catch has landed and the drop has had time to come to rest", () => {
