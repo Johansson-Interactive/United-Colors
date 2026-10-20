@@ -25,14 +25,12 @@ interface PourCanvasProps {
 	x: number;
 	y: number;
 	scale: number;
-	/** The tally's dot spacing (px, before scaling) */
-	pitch: number;
 }
 
 const AMBER = Skia.Color(COMBO_AMBER);
 /**
  * Every colour the pour draws in, parsed once: the game's, as its catches and the drop have,
- * and combo amber, as a combo body has; as Skia colours for the paints and as RGBA for the
+ * and combo amber, as the bonus body has; as Skia colours for the paints and as RGBA for the
  * merge shader
  */
 const POUR_COLORS = [...TRIO, COMBO_AMBER];
@@ -59,10 +57,9 @@ COLOR_PAINT.setAntiAlias(true);
  * the merge shader, amber under its wavy surface; then the glare, the tally and `+N` over it.
  * Every frame, on the UI thread, from `frame`.
  */
-export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
+export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale }) => {
 	const top = -y / scale;
 	const transform = [{ translateX: x }, { translateY: y }, { scale }];
-	const dotRadius = pitch * POUR_DIGIT_SCALE;
 	// The glare follows the tilt, as on the AGAIN button's drop and the dots in play
 	const tilt = useTilt();
 	const glare = useDerivedValue(() => ({
@@ -104,6 +101,7 @@ export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitc
 			const { x: gx, y: gy } = glare.get();
 			if (radius > 0.5) drawGlareAt(canvas, 0, 0, radius, gx, gy);
 			COLOR_PAINT.setColor(FILLS[view.drop.color]);
+			const dotRadius = view.tallyPitch * POUR_DIGIT_SCALE;
 			for (const dot of view.digits) {
 				canvas.drawCircle(dot.x, dot.y, dotRadius, dot.ink ? INK_PAINT : COLOR_PAINT);
 			}

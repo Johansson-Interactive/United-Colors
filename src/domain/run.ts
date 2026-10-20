@@ -1,5 +1,5 @@
 import { GAME_HERTZ } from "./constants";
-import type { RunRecord } from "./types";
+import type { RunCatch, RunRecord } from "./types";
 
 /**
  * What a catch at combo step `step` pays beyond its own value: two for every catch before it
@@ -7,6 +7,11 @@ import type { RunRecord } from "./types";
  */
 export function comboPay(step: number): number {
 	return 2 * (step - 1);
+}
+
+/** What a catch was worth on its own: what it paid less its combo bonus (see comboPay) */
+export function ownValue({ value, step }: Pick<RunCatch, "value" | "step">): number {
+	return value - comboPay(step);
 }
 
 /** The run's combo bonus: what its catches paid beyond their own value (see comboPay) */

@@ -52,12 +52,13 @@ describe("pourFit", () => {
 		expect(fit.half).toBeGreaterThanOrEqual(POUR_MAX_RADIUS);
 	});
 
-	it("makes room for the tally lifted clear of the amber, out of the drop's top", () => {
-		// A combo of ten pays 100, 90 of it bonus: the tally stands on the amber
+	it("makes room for a small drop's tally lifted clear of the amber, out of the drop's top", () => {
+		// A combo of three pays 9, 6 of it bonus: too small a drop to hold the tally, which
+		// stands on the amber
 		const combo = planPour({
 			record: {
 				catches: Array.from(
-					{ length: 10 },
+					{ length: 3 },
 					(_, i): RunCatch => ({
 						tick: i + 1,
 						value: 2 * i + 1,
@@ -76,9 +77,10 @@ describe("pourFit", () => {
 		const fit = pourFit(combo, PITCH, 1000);
 		expect(fit.scale).toBe(1);
 		expect(fit.half).toBeGreaterThanOrEqual(-highest);
-		const squeezed = pourFit(combo, PITCH, 200);
+		const squeezed = pourFit(combo, PITCH, 100);
+		expect(squeezed.scale).toBeLessThan(1);
 		expect(squeezed.half).toBeGreaterThanOrEqual(-highest * squeezed.scale);
-		expect(squeezed.half).toBeLessThanOrEqual(100);
+		expect(squeezed.half).toBeLessThanOrEqual(50);
 	});
 
 	it("shrinks a 1000 point drop to fit a short screen", () => {
@@ -396,7 +398,8 @@ describe("stepPour", () => {
 
 	it("pushes the liquid away from where an off-centre catch lands, sideways as well as down", () => {
 		const { steps } = play(POUR_START_MS + 2400);
-		const at = steps.findIndex(({ playback: { frame } }) => frame.view.drop.tally > 4);
+		// The third catch, landing on its own, counts the tally past 2
+		const at = steps.findIndex(({ playback: { frame } }) => frame.view.drop.tally > 2);
 		const [last] = steps[at].playback.frame.view.landings;
 		const { radius } = steps[at - 1].playback.frame.view.drop;
 		expect(Math.abs(last.x)).toBeGreaterThan(0.2 * radius);
@@ -435,7 +438,8 @@ describe("stepPour", () => {
 	});
 
 	it("reports once the tally has passed the best to beat", () => {
-		// The first two catches pay 4, past a best of 3; the third, 5 in all, is past a best of 4
+		// The catches are worth 3 on their own; the bonus of 2 then counts in past a best of 3,
+		// and on past a best of 4, to 5
 		const passed = (best: number) =>
 			play(20_000, best).steps.findIndex((s) => s.status?.passedBest === true);
 		expect(passed(3)).toBeGreaterThan(0);
@@ -443,7 +447,22 @@ describe("stepPour", () => {
 		expect(passed(5)).toBe(-1);
 	});
 
-	it("keeps the tally above the amber's wavy surface and +N below it, however it waves", () => {
+	it("kicks the drop as the bonus lands, and draws the swell as the stepper has it, unlagged", () => {
+		const { steps } = play(20_000);
+		const at = steps.findIndex((s) => s.playback.frame.view.bonusLanding !== null);
+		expect(at).toBeGreaterThan(0);
+		expect(steps[at].sounds).toEqual([{ pitch: 1, point: false }]);
+		expect(steps[at].playback.body.lagVY).toBeGreaterThan(steps[at - 1].playback.body.lagVY);
+		let swelled = 0;
+		for (const { playback } of steps.slice(at)) {
+			const { view, radius } = playback.frame;
+			if (view.swell > 0) swelled++;
+			expect(radius).toBeCloseTo(view.drop.radius, 2);
+		}
+		expect(swelled).toBeGreaterThan(5);
+	});
+
+	it("keeps the tally above the amber's wavy surface and the bonus figure below it, however it waves", () => {
 		/** A combo of `length`, then `alone` catches on their own, ending in a combo bonus */
 		const comboPour = (length: number, alone: number) =>
 			planPour({

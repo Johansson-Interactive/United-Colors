@@ -85,13 +85,18 @@ export interface PourFit {
 
 /**
  * The pour's slot between the clock and the best row: high enough for the settled drop (as
- * far as its slosh reaches) and the score's dots at `pitch`, lifted clear of the amber,
- * scaled down to fit `available` px when that is not
+ * far as its slosh reaches) and the tally's dots at `pitch`, both centred before the bonus
+ * pours in and where it settles, scaled down to fit `available` px when that is not
  */
 export function pourFit(plan: PourPlan, pitch: number, available: number): PourFit {
 	let extent = plan.settledDrop.radius * LIQUID_REACH;
+	const shrink = plan.tallyPitch / plan.pitch;
 	for (const dot of plan.digits[plan.digits.length - 1]) {
-		extent = Math.max(extent, Math.abs(dot.y + plan.lift) + pitch * POUR_DIGIT_SCALE);
+		extent = Math.max(
+			extent,
+			Math.abs(dot.y) + pitch * POUR_DIGIT_SCALE,
+			Math.abs(dot.y * shrink + plan.lift) + pitch * shrink * POUR_DIGIT_SCALE,
+		);
 	}
 	const scale = Math.min(1, available / (2 * extent));
 	return { scale, half: extent * scale };
@@ -134,7 +139,7 @@ const MAX_FRAME_MS = 100;
 /** One frame of the pour as the canvas draws it, from the drop's centre */
 export interface PourFrame {
 	view: PourView;
-	/** The drop's radius, eased after the stepper's */
+	/** The drop's radius as drawn: eased after the stepper's at the landings, swelling with it */
 	radius: number;
 	jelly: JellyState;
 }
@@ -218,8 +223,14 @@ export function stepPour(
 		const kick = landingKick(landing, view.drop.radius);
 		body = kickJelly(body, kick.x, kick.y);
 	}
+	if (view.bonusLanding !== null) {
+		const kick = landingKick(view.bonusLanding, view.drop.radius);
+		body = kickJelly(body, kick.x, kick.y);
+	}
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
-	const radius = easeToward(before.radius, view.drop.radius, dt);
+	// The landings' jumps are eased; the bonus pour's swell is smooth already, and followed exactly
+	const landed = easeToward(before.radius - before.view.swell, view.drop.radius - view.swell, dt);
+	const radius = landed + view.swell;
 	const status = statusOf(view, best);
 	const changed = !sameStatus(status, playback.status);
 	return {
@@ -284,7 +295,7 @@ export interface PourBody {
  * player in play: each catch falls as a small dot, straight down from out of sight above the
  * canvas, speeding up, onto its spot on the drop's top, then slides into its centre, shrinking
  * as it goes. A catch of another colour is a bead of its own, as the shader paints one liquid:
- * a point dot, before it recolours the drop, and a combo body in amber, which never merges.
+ * a point dot, before it recolours the drop, and the bonus body in amber, which never merges.
  */
 export function pourBody({
 	flights,

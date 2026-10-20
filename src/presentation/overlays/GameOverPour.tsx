@@ -33,7 +33,8 @@ interface Box {
 /**
  * The middle of the game over: the clock, the pour's drop with the tally in it and the best row
  * under it, in a column centred on the drop. The drop's slot is sized for the settled drop and
- * its tally lifted clear of the amber from the start, so nothing moves as it grows.
+ * the tally as it stands before the bonus pours it into the drop's top part, from the start, so
+ * nothing moves as it grows.
  */
 export const GameOverPour: React.FC<GameOverPourProps> = ({
 	plan,
@@ -53,13 +54,7 @@ export const GameOverPour: React.FC<GameOverPourProps> = ({
 	return (
 		<View style={styles.centre} onLayout={handleLayout} pointerEvents="none">
 			{box && fit ? (
-				<PourCanvas
-					frame={frame}
-					x={box.width / 2}
-					y={box.height / 2}
-					scale={fit.scale}
-					pitch={pitch}
-				/>
+				<PourCanvas frame={frame} x={box.width / 2} y={box.height / 2} scale={fit.scale} />
 			) : null}
 			<View style={styles.row}>
 				<DotMatrixText text={status.clock} pitch={CLOCK_PITCH} color={WHITE} opacity={0.7} />
