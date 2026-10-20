@@ -21,6 +21,7 @@ import {
 	burstColor,
 	burstSprites,
 	createBurstIds,
+	FULL_RING_SIZE,
 	layOutBurst,
 	MAX_BURSTS,
 	NOT_STARTED,
@@ -180,6 +181,17 @@ describe("packBursts", () => {
 		expect(tint[3]).toBeCloseTo(popOpacity(popProgress(600)), 6);
 		expect(out.glows.colors[n].every((c) => c === tint)).toBe(true);
 		expect(out.dots.colors[n].every((c) => c === tint)).toBe(true);
+	});
+
+	it("draws a ring smaller than FULL_RING_SIZE as a smaller copy, its border thinned in turn", () => {
+		const out = burstSprites(plainKit());
+		packBursts([started(ringBurst(0, 0, 0, 3, FULL_RING_SIZE), 0)], 450, COLORS, out);
+		const full = { ...out.rings[0] };
+		packBursts([started(ringBurst(1, 0, 0, 3, FULL_RING_SIZE / 4), 0)], 450, COLORS, out);
+		expect(out.rings[0].radius).toBeCloseTo(full.radius / 4, 9);
+		expect(out.rings[0].width).toBeCloseTo(full.width / 4, 9);
+		packBursts([started(ringBurst(2, 0, 0, 3, 90), 0)], 450, COLORS, out);
+		expect(out.rings[0].width).toBeCloseTo(full.width, 9);
 	});
 
 	it("strokes a ring through the middle of the view's border, scaled about the burst", () => {

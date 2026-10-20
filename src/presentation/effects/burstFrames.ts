@@ -216,7 +216,13 @@ export function ringOpacity(t: number): number {
 	return (1 - t) * 0.9;
 }
 
-/** A ring's border width (px) before it is scaled */
+/**
+ * The ring diameter whose border is ringBorder as it is: a smaller ring is a smaller copy of
+ * one this size, its border thinned in proportion, so it reads as a ring rather than a blot
+ */
+export const FULL_RING_SIZE = 80;
+
+/** A ring's border width (px) before it is scaled, for a ring of FULL_RING_SIZE or more */
 export function ringBorder(t: number): number {
 	"worklet";
 	return 3 + (1 - t) * 5;
@@ -310,7 +316,7 @@ export function packBursts<P, R>(
 		if (burst.kind === "ring") {
 			const t = ringProgress(age);
 			const scale = ringScale(t);
-			const border = ringBorder(t);
+			const border = ringBorder(t) * Math.min(1, burst.size / FULL_RING_SIZE);
 			// The view's border lay inside its circle; the stroke is centred on its middle
 			const ring = rings[ringCount++];
 			ring.x = burst.x;

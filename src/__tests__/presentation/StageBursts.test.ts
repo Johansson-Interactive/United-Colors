@@ -1,5 +1,6 @@
 import type { GameEvent } from "../../domain/types";
 import { NO_CATCH_SPOT, stepBursts } from "../../presentation/effects/stageBursts";
+import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 const PINK = "#E91E63";
 const PLAYER = { x: 120, y: 340, color: PINK };
@@ -26,10 +27,24 @@ describe("stage bursts", () => {
 		]);
 	});
 
+	it("rings a small-dot catch that carries a combo on, small and in amber, where it landed", () => {
+		const amber = [{ kind: "ring", x: 120, y: 340, color: COMBO_AMBER, size: 28 }];
+		expect(stepBursts(NO_CATCH_SPOT, collect(3, 2), PLAYER).bursts).toEqual(amber);
+		expect(stepBursts(NO_CATCH_SPOT, collect(9, 5), PLAYER).bursts).toEqual(amber);
+	});
+
+	it("rings a point-dot catch in a combo in the player's colour, with the amber ring inside", () => {
+		const point: GameEvent = { type: "collectPoint", value: 12, step: 2, sameTick: false };
+		expect(stepBursts(NO_CATCH_SPOT, point, PLAYER).bursts).toEqual([
+			{ kind: "ring", x: 120, y: 340, color: PINK, size: 80 },
+			{ kind: "ring", x: 120, y: 340, color: COMBO_AMBER, size: 28 },
+		]);
+	});
+
 	it("rings a same-tick catch where the catch before it landed, and keeps that spot", () => {
 		const first = stepBursts(NO_CATCH_SPOT, collect(1, 1), PLAYER);
 		const moved = { ...PLAYER, x: 130, y: 350 };
-		const point: GameEvent = { type: "collectPoint", value: 10, step: 2, sameTick: true };
+		const point: GameEvent = { type: "collectPoint", value: 10, step: 1, sameTick: true };
 		const second = stepBursts(first.catchSpot, point, moved);
 		expect(second.bursts).toEqual([{ kind: "ring", x: 120, y: 340, color: PINK, size: 80 }]);
 		expect(second.catchSpot).toEqual(first.catchSpot);

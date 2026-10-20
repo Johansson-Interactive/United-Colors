@@ -40,7 +40,7 @@ The running total a run earns from catches.
 _Avoid_: points
 
 **Combo**:
-A run of catches, small dots and point dots alike, each within a split second of the one before. Every catch after the first in a combo is worth more than it would be alone, without limit.
+A run of catches, small dots and point dots alike, each within a split second of the one before. Every catch after the first in a combo is worth more than it would be alone, without limit. In play, each such catch rings a small amber circle where it landed, and the score turns amber while it counts the combo in.
 _Avoid_: streak, chain, multiplier
 
 **Combo step**:
