@@ -10,6 +10,10 @@ interface UiWorklet {
 	name: string;
 	params: string;
 	captured: string[];
+	/** Where in the file's Babel output the worklet is made, and so its closure snapshotted */
+	at: number;
+	/** Where the file's Babel output makes each named worklet function */
+	madeAt: Map<string, number>;
 }
 
 /**
@@ -21,8 +25,18 @@ function uiWorkletsOf(file: string): UiWorklet[] {
 		platform: "ios",
 		isDev: true,
 	});
+	const madeAt = new Map<string, number>();
+	for (const { 1: name, index } of code.matchAll(/\bvar (\w+)=function \1_\w+Factory\(/g)) {
+		if (!madeAt.has(name)) madeAt.set(name, index);
+	}
 	return [...code.matchAll(/function (\w+)\(([^)]*)\)\{const\{([^}]*)\}=this\.__closure/g)].map(
-		([, name, params, captured]) => ({ name, params, captured: captured.split(",") }),
+		({ 1: name, 2: params, 3: captured, index }) => ({
+			name,
+			params,
+			captured: captured.split(","),
+			at: index,
+			madeAt,
+		}),
 	);
 }
 
@@ -46,6 +60,18 @@ describe("worklet closures", () => {
 			captured
 				.filter((constant) => new RegExp(`=[^,]*\\b${constant}\\b`).test(params))
 				.map((constant) => `${name} defaults a parameter to ${constant}`),
+		);
+		expect(offending).toEqual([]);
+	});
+
+	// Babel makes a worklet function a `var` set where it stands, no longer hoisted, and a worklet
+	// snapshots its closure when made, so one that calls a worklet declared below it gets
+	// undefined on the UI thread: "undefined is not a function"
+	it.each(workletFiles)("%s: no worklet captures a worklet declared below it", (file) => {
+		const offending = (worklets.get(file) ?? []).flatMap(({ name, captured, at, madeAt }) =>
+			captured
+				.filter((constant) => (madeAt.get(constant) ?? 0) > at)
+				.map((constant) => `${name} captures ${constant} before it is made`),
 		);
 		expect(offending).toEqual([]);
 	});

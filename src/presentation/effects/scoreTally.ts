@@ -296,79 +296,6 @@ function layDigits(
 	}
 }
 
-/**
- * Pack what the meter draws at frame time `now` into `out`, in `style`, with the total centred
- * at the geometry's (cx, cy)
- */
-export function packTally(
-	tally: Tally,
-	now: number,
-	style: TallyStyle,
-	geometry: TallyGeometry,
-	out: TallyFrame,
-): void {
-	"worklet";
-	const { cx, cy } = geometry;
-	const list = tally.catches;
-	out.total.length = 0;
-	out.dots.length = 0;
-
-	// The total, bumped by the newest landing: hard for a catch's last point, lightly otherwise
-	const shown = shownScore(tally, now);
-	out.shown = shown;
-	let bumpAt = tally.lastLand;
-	let bumpFinal = true;
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		const n = landed(c, now);
-		if (n === 0) continue;
-		const at = c.start + (n - 1) * c.tick + FLIGHT_MS;
-		if (at > bumpAt) {
-			bumpAt = at;
-			bumpFinal = n === c.value;
-		}
-	}
-	let scale = 1;
-	if (bumpAt !== NOT_STARTED) {
-		const swell = scoreBumpScale((now - bumpAt) / SCORE_BUMP_MS) - 1;
-		scale = 1 + swell * (bumpFinal ? 1 : POINT_BUMP);
-	}
-	const totalWidth = digitCols(shown) * SCORE_PITCH;
-	const totalLeft = cx - totalWidth / 2;
-	const totalRight = cx + totalWidth / 2;
-	layDigits(
-		out.total,
-		shown,
-		SCORE_PITCH,
-		totalLeft,
-		cy,
-		SCORE_PITCH * SCORE_DOT_SCALE,
-		scale,
-		cx,
-		cy,
-		0,
-		1,
-		true,
-	);
-	// Where a point lands: the last digit's centre
-	const landX = totalRight - (GLYPH_COLS / 2) * SCORE_PITCH;
-	const landY = cy;
-
-	if (style === "feed") {
-		packFeed(list, now, totalRight, cy, landX, landY, out.dots);
-	} else {
-		packTransfer(
-			list,
-			now,
-			totalRight,
-			cy + (GLYPH_ROWS / 2) * SCORE_PITCH,
-			landX,
-			landY,
-			out.dots,
-		);
-	}
-}
-
 /** A point in the air from (`sx`, `sy`) to (`lx`, `ly`), `age` ms after leaving, in `color` */
 function layFlight(
 	out: number[],
@@ -491,6 +418,79 @@ function packTransfer(
 			c.color,
 			1,
 			false,
+		);
+	}
+}
+
+/**
+ * Pack what the meter draws at frame time `now` into `out`, in `style`, with the total centred
+ * at the geometry's (cx, cy)
+ */
+export function packTally(
+	tally: Tally,
+	now: number,
+	style: TallyStyle,
+	geometry: TallyGeometry,
+	out: TallyFrame,
+): void {
+	"worklet";
+	const { cx, cy } = geometry;
+	const list = tally.catches;
+	out.total.length = 0;
+	out.dots.length = 0;
+
+	// The total, bumped by the newest landing: hard for a catch's last point, lightly otherwise
+	const shown = shownScore(tally, now);
+	out.shown = shown;
+	let bumpAt = tally.lastLand;
+	let bumpFinal = true;
+	for (let i = 0; i < list.length; i++) {
+		const c = list[i];
+		const n = landed(c, now);
+		if (n === 0) continue;
+		const at = c.start + (n - 1) * c.tick + FLIGHT_MS;
+		if (at > bumpAt) {
+			bumpAt = at;
+			bumpFinal = n === c.value;
+		}
+	}
+	let scale = 1;
+	if (bumpAt !== NOT_STARTED) {
+		const swell = scoreBumpScale((now - bumpAt) / SCORE_BUMP_MS) - 1;
+		scale = 1 + swell * (bumpFinal ? 1 : POINT_BUMP);
+	}
+	const totalWidth = digitCols(shown) * SCORE_PITCH;
+	const totalLeft = cx - totalWidth / 2;
+	const totalRight = cx + totalWidth / 2;
+	layDigits(
+		out.total,
+		shown,
+		SCORE_PITCH,
+		totalLeft,
+		cy,
+		SCORE_PITCH * SCORE_DOT_SCALE,
+		scale,
+		cx,
+		cy,
+		0,
+		1,
+		true,
+	);
+	// Where a point lands: the last digit's centre
+	const landX = totalRight - (GLYPH_COLS / 2) * SCORE_PITCH;
+	const landY = cy;
+
+	if (style === "feed") {
+		packFeed(list, now, totalRight, cy, landX, landY, out.dots);
+	} else {
+		packTransfer(
+			list,
+			now,
+			totalRight,
+			cy + (GLYPH_ROWS / 2) * SCORE_PITCH,
+			landX,
+			landY,
+			out.dots,
 		);
 	}
 }
