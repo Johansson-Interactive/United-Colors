@@ -13,7 +13,7 @@
  */
 
 import type { GameEvent } from "../../domain/types";
-import { COMBO_AMBER, WHITE } from "../theme/theme";
+import { payColor, WHITE } from "../theme/theme";
 import type { NewBurst } from "./burstFrames";
 
 /** A point on the stage */
@@ -62,12 +62,7 @@ export function stepBursts(catchSpot: Spot, event: GameEvent, player: BurstPlaye
 		case "collectPoint": {
 			const at = event.sameTick ? catchSpot : { x, y };
 			const bursts: NewBurst[] = [
-				{
-					kind: "pop",
-					...at,
-					text: `${event.value}`,
-					color: event.step > 1 ? COMBO_AMBER : color,
-				},
+				{ kind: "pop", ...at, text: `${event.value}`, color: payColor(event.step, color) },
 			];
 			if (event.type === "collectPoint") {
 				bursts.push({ kind: "ring", ...at, color, size: POINT_RING_SIZE });

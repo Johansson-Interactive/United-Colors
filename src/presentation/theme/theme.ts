@@ -1,4 +1,5 @@
 import { GAME_COLORS } from "../../domain/constants";
+import { comboPay } from "../../domain/run";
 
 /**
  * Visual language of Tiltling: everything is a dot.
@@ -14,6 +15,14 @@ export const TRIO = GAME_COLORS;
 
 /** Score pops for catches that carry a combo on (Amber 500) */
 export const COMBO_AMBER = "#FFC107";
+
+/**
+ * The colour a catch's pay shows in, a catch of `color` at combo step `step`: combo amber once
+ * it pays a combo bonus (see comboPay), from a combo's second catch on; its own colour before
+ */
+export function payColor(step: number, color: string): string {
+	return comboPay(step) > 0 ? COMBO_AMBER : color;
+}
 
 /** Diameter of the big ring shared by the title, level and pause screens */
 export const BOWL_SIZE = 236;

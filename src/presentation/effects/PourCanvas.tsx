@@ -15,9 +15,8 @@ import { glareOffset } from "../dotSprites";
 import { mergeUniformsByName } from "../mergeShader";
 import { recordPicture } from "../recordPicture";
 import { drawGlareAt, MERGE_EFFECT } from "../sceneDrawer";
-import { COMBO_AMBER, INK } from "../theme/theme";
+import { COMBO_AMBER, INK, TRIO } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
-import { BURST_COLORS } from "./burstFrames";
 import { POUR_DIGIT_SCALE, type PourFrame, pourBody } from "./pourScene";
 
 interface PourCanvasProps {
@@ -32,12 +31,14 @@ interface PourCanvasProps {
 
 const AMBER = Skia.Color(COMBO_AMBER);
 /**
- * Every colour the pour draws in (the game's, as its catches have), parsed once: as Skia
- * colours for the paints and as RGBA for the merge shader
+ * Every colour the pour draws in, parsed once: the game's, as its catches and the drop have,
+ * and combo amber, as a combo body has; as Skia colours for the paints and as RGBA for the
+ * merge shader
  */
+const POUR_COLORS = [...TRIO, COMBO_AMBER];
 const FILLS: Record<string, SkColor> = {};
 const RGBA: Record<string, number[]> = {};
-for (const c of BURST_COLORS) {
+for (const c of POUR_COLORS) {
 	FILLS[c] = Skia.Color(c);
 	RGBA[c] = convertToRGBA(c);
 }
@@ -55,7 +56,8 @@ COLOR_PAINT.setAntiAlias(true);
 /**
  * The pour, drawn as the play canvas draws the player taking in a catch (see GameCanvas.tsx):
  * catches of another colour; then the drop and the catches merging into it as one body under
- * the merge shader, amber under its wavy surface; then the glare, the tally and `+N` over it. Every frame, on the UI thread, from `frame`.
+ * the merge shader, amber under its wavy surface; then the glare, the tally and `+N` over it.
+ * Every frame, on the UI thread, from `frame`.
  */
 export const PourCanvas: React.FC<PourCanvasProps> = ({ frame, x, y, scale, pitch }) => {
 	const top = -y / scale;

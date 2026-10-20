@@ -98,10 +98,11 @@ describe("pourAt", () => {
 			Math.ceil(POUR_START_MS + span / 2),
 			Math.ceil(POUR_START_MS + span),
 		]);
+		expect(short.endMs).toBeCloseTo(POUR_START_MS + span, 9);
 		expect(pourAt(short, POUR_START_MS + span / 2 + 1).clock).toBe("0:04");
-		expect(pourAt(short, POUR_START_MS + span).clock).toBe("0:08");
-		expect(pourAt(short, POUR_START_MS + span + POUR_SETTLE_MS - 1).settled).toBe(false);
-		expect(pourAt(short, POUR_START_MS + span + POUR_SETTLE_MS).settled).toBe(true);
+		expect(pourAt(short, short.endMs).clock).toBe("0:08");
+		expect(pourAt(short, short.endMs + POUR_SETTLE_MS - 1).settled).toBe(false);
+		expect(pourAt(short, short.endMs + POUR_SETTLE_MS).settled).toBe(true);
 		// A run at the threshold already takes the whole span
 		const full = plan({ catches: [caught(30), caught(600)], ticks: seconds(POUR_FULL_SPAN_S) });
 		expect(landings(full).at(-1)?.ms).toBe(POUR_START_MS + POUR_SPAN_MS);
@@ -202,9 +203,9 @@ describe("pourAt", () => {
 	it("drops each catch from above in its colour, falling then merging", () => {
 		const p = plan({
 			catches: [caught(10), caught(400, { point: true, color: BLUE, value: 5 })],
-			ticks: seconds(POUR_FULL_SPAN_S),
+			ticks: 450,
 		});
-		const end = POUR_START_MS + POUR_SPAN_MS;
+		const end = p.endMs;
 		expect(pourAt(p, end - POUR_FALL_MS - 1).flights).toEqual([]);
 		const falling = pourAt(p, end - POUR_FALL_MS / 2).flights;
 		expect(falling).toEqual([expect.objectContaining({ color: BLUE, fall: 0.5, merge: 0 })]);
@@ -227,7 +228,7 @@ describe("pourAt", () => {
 				caught(600, { color: BLUE }),
 				caught(600, { step: 2, value: 3 }),
 			],
-			ticks: seconds(POUR_FULL_SPAN_S),
+			ticks: seconds(60),
 		});
 		expect(p.bodies.map((b) => b.color)).toEqual([
 			RED,
@@ -453,36 +454,19 @@ describe("pourAt", () => {
 		expect(landed).toHaveLength(101);
 	});
 
-	it("lands every catch, combo and point dot alike, without a pop or a ring", () => {
-		const p = plan({
-			catches: [
-				caught(10),
-				caught(11, { step: 2, value: 3 }),
-				caught(200, { point: true, color: BLUE, value: 5 }),
-				caught(201, { point: true, color: GREEN, value: 7, step: 2 }),
-			],
-			ticks: 300,
-		});
-		// A landing is where it lands and whether it knocks as a point dot, nothing to draw
-		expect(landings(p).map(({ ms: _, ...landing }) => Object.keys(landing).sort())).toEqual(
-			Array(4).fill(["point", "x", "y"]),
-		);
-	});
-
 	it("settles only once the last catch has landed and the drop has had time to come to rest", () => {
-		const end = POUR_START_MS + POUR_SPAN_MS;
 		for (const catches of [[caught(10), caught(90)], []]) {
-			const p = plan({ catches, ticks: seconds(POUR_FULL_SPAN_S) });
+			const p = plan({ catches, ticks: 120 });
 			expect(pourAt(p, 0).settled).toBe(false);
-			expect(pourAt(p, end).settled).toBe(false);
-			expect(pourAt(p, end + POUR_SETTLE_MS - 1).settled).toBe(false);
-			expect(pourAt(p, end + POUR_SETTLE_MS).settled).toBe(true);
+			expect(pourAt(p, p.endMs).settled).toBe(false);
+			expect(pourAt(p, p.endMs + POUR_SETTLE_MS - 1).settled).toBe(false);
+			expect(pourAt(p, p.endMs + POUR_SETTLE_MS).settled).toBe(true);
 		}
 	});
 
 	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
-			const p = plan({ catches, ticks: seconds(POUR_FULL_SPAN_S) });
+			const p = plan({ catches, ticks: 120 });
 			expect(pourAt(p, 10_000)).toMatchObject({
 				amberLevel: null,
 				bonusLabel: null,
@@ -516,8 +500,8 @@ describe("pourAt", () => {
 });
 
 describe("the amber layer", () => {
-	const SETTLE_AT = POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS;
-	const RESTED = SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS;
+	/** The pour once its amber has risen and its `+N` faded in */
+	const rested = (p: PourPlan) => pourAt(p, p.settleMs + POUR_RISE_MS + POUR_FADE_MS);
 
 	/** A combo of `length` small dots, then `alone` more on their own: length² + alone scored */
 	function comboRun(length: number, alone: number): RunRecord {
@@ -525,10 +509,7 @@ describe("the amber layer", () => {
 			caught(10 + i, { step: i + 1, value: 2 * i + 1 }),
 		);
 		const lone = Array.from({ length: alone }, (_, i) => caught(100 + 20 * i));
-		return {
-			catches: [...combo, ...lone],
-			ticks: Math.max(130 + 20 * alone, seconds(POUR_FULL_SPAN_S)),
-		};
+		return { catches: [...combo, ...lone], ticks: 130 + 20 * alone };
 	}
 
 	/** The amber surface's height from the drop's centre (px, down) */
@@ -571,7 +552,7 @@ describe("the amber layer", () => {
 
 	it("raises a small combo bonus's share so the layer holds +N at the smallest readable size", () => {
 		// A +2 combo bonus in a score of 102: under 2% of the drop
-		const view = pourAt(plan(comboRun(2, 98)), RESTED);
+		const view = rested(plan(comboRun(2, 98)));
 		expect(view.drop.tally).toBe(102);
 		expect(amberShareOf(view)).toBeGreaterThan(5 * (2 / 102));
 		const label = labelOf(view);
@@ -582,7 +563,7 @@ describe("the amber layer", () => {
 
 	it("draws a larger combo bonus at its true share, +N growing with the layer", () => {
 		// A combo of five pays 25, 20 of it bonus, in a score of 75
-		const view = pourAt(plan(comboRun(5, 50)), RESTED);
+		const view = rested(plan(comboRun(5, 50)));
 		expect(view.drop.tally).toBe(75);
 		expect(amberShareOf(view)).toBeCloseTo(20 / 75);
 		const { pitch, dots } = labelOf(view);
@@ -594,7 +575,7 @@ describe("the amber layer", () => {
 
 	it("never draws +N larger than the tally's dots", () => {
 		// A combo of ten pays 100, 90 of it bonus, its tally set close
-		const view = pourAt(planPour({ record: comboRun(10, 0), color: RED, pitch: 6 }), RESTED);
+		const view = rested(planPour({ record: comboRun(10, 0), color: RED, pitch: 6 }));
 		expect(amberShareOf(view)).toBeCloseTo(0.9);
 		expect(labelOf(view).pitch).toBe(6);
 		expectInAmber(view);
@@ -602,34 +583,35 @@ describe("the amber layer", () => {
 
 	it("pours the amber in from the bottom over about half a second, then fades +N in", () => {
 		const p = plan(comboRun(10, 0));
+		const settleAt = p.settleMs;
 		expect(POUR_RISE_MS).toBeGreaterThanOrEqual(400);
 		expect(POUR_RISE_MS).toBeLessThanOrEqual(600);
-		expect(pourAt(p, SETTLE_AT - 1).amberLevel).toBeNull();
-		expect(pourAt(p, SETTLE_AT).amberLevel).toBeNull();
+		expect(pourAt(p, settleAt - 1).amberLevel).toBeNull();
+		expect(pourAt(p, settleAt).amberLevel).toBeNull();
 		let last = 0;
-		for (let ms = SETTLE_AT; ms <= SETTLE_AT + POUR_RISE_MS; ms += 10) {
+		for (let ms = settleAt; ms <= settleAt + POUR_RISE_MS; ms += 10) {
 			const view = pourAt(p, ms);
 			expect(amberShareOf(view)).toBeGreaterThanOrEqual(last);
 			last = amberShareOf(view);
 			expect(labelOf(view).opacity).toBe(0);
 		}
-		const halfway = amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS / 2));
+		const halfway = amberShareOf(pourAt(p, settleAt + POUR_RISE_MS / 2));
 		expect(halfway).toBeGreaterThan(0.1);
 		expect(halfway).toBeLessThan(0.8);
-		expect(amberShareOf(pourAt(p, SETTLE_AT + POUR_RISE_MS))).toBeCloseTo(0.9);
-		const fading = labelOf(pourAt(p, SETTLE_AT + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
+		expect(amberShareOf(pourAt(p, settleAt + POUR_RISE_MS))).toBeCloseTo(0.9);
+		const fading = labelOf(pourAt(p, settleAt + POUR_RISE_MS + POUR_FADE_MS / 2)).opacity;
 		expect(fading).toBeGreaterThan(0);
 		expect(fading).toBeLessThan(1);
-		expect(labelOf(pourAt(p, RESTED)).opacity).toBe(1);
+		expect(labelOf(rested(p)).opacity).toBe(1);
 	});
 
 	it("centres the settled tally in the player's colour, between the amber and the drop's top", () => {
-		const view = pourAt(plan(comboRun(5, 50)), RESTED);
+		const view = rested(plan(comboRun(5, 50)));
 		expect(tallyBox(view).middle).toBeCloseTo((surfaceOf(view) - view.drop.radius) / 2);
 	});
 
 	it("lifts the tally just clear of the amber when there's no room, out of the drop's top", () => {
-		const view = pourAt(plan(comboRun(10, 0)), RESTED);
+		const view = rested(plan(comboRun(10, 0)));
 		const { top, bottom } = tallyBox(view);
 		expect(bottom).toBeLessThanOrEqual(surfaceOf(view));
 		expect(bottom).toBeGreaterThan(surfaceOf(view) - PITCH);
@@ -641,8 +623,9 @@ describe("the amber layer", () => {
 
 	it("lifts the tally with the amber as it rises, always clear of it", () => {
 		const p = plan(comboRun(10, 0));
-		expect(tallyBox(pourAt(p, SETTLE_AT - 1)).middle).toBeCloseTo(0);
-		for (let ms = SETTLE_AT; ms <= RESTED; ms += 10) {
+		const settleAt = p.settleMs;
+		expect(tallyBox(pourAt(p, settleAt - 1)).middle).toBeCloseTo(0);
+		for (let ms = settleAt; ms <= settleAt + POUR_RISE_MS + POUR_FADE_MS; ms += 10) {
 			const view = pourAt(p, ms);
 			expect(tallyBox(view).bottom).toBeLessThanOrEqual(surfaceOf(view) + 1e-6);
 		}

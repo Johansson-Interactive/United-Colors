@@ -2,9 +2,9 @@
  * Pure stepper behind the game over's pour: the run replayed as its catches falling in, in the
  * order and rhythm they happened, and merging into one drop of the player's liquid, while a
  * clock runs up to the run time. Every run of POUR_FULL_SPAN_S or more pours in the same span
- * (POUR_SPAN_MS), whatever its length, and a shorter one at the same pace, so in less; once it
- * settles, the combo bonus rises in as an amber layer at the drop's bottom, the
- * tally lifting clear of it, and its `+N` fades in inside it.
+ * (POUR_SPAN_MS), whatever its length, and a shorter one in its share of it, so a short run
+ * pours quickly. Once it settles, the combo bonus rises in as an amber layer at the drop's
+ * bottom, the tally lifting clear of it, and its `+N` fades in inside it.
  *
  * planPour works a run's pour out once, on the JS thread; pourAt then samples it at a replay
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
@@ -16,21 +16,23 @@
 
 import { catchPitch } from "../../application/catchCue";
 import { MERGE_MAX_DOTS } from "../../application/renderScene";
-import { comboBonus, runSeconds } from "../../domain/run";
+import { comboBonus, comboPay, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
 import { amberWaveReach } from "../mergeShader";
-import { COMBO_AMBER } from "../theme/theme";
+import { payColor } from "../theme/theme";
 
 /** The first catch lands this long after the game over appears (ms) */
 export const POUR_START_MS = 500;
-/** From the first catch's landing to the last, and the clock's run up, for a long run (ms)... */
+/** From the first catch's landing to the last, and the clock's run up, at most (ms)... */
 export const POUR_SPAN_MS = 2200;
-/**
- * ...one this long or longer (s); a shorter run pours over its share of the span, so a run of a
- * few catches lands them close together rather than dripping them in
- */
+/** ...taken by a run this long or longer (s) */
 export const POUR_FULL_SPAN_S = 30;
+/**
+ * The span a second of run time takes, up to POUR_SPAN_MS (ms): a short run pours at the pace a
+ * run of POUR_FULL_SPAN_S does, so quickly, rather than stretched over the whole span
+ */
+const POUR_MS_PER_RUN_S = POUR_SPAN_MS / POUR_FULL_SPAN_S;
 /** A catch falls this long before it lands (ms), then merges into the drop for MERGE_MS */
 export const POUR_FALL_MS = 420;
 const MERGE_MS = 260;
@@ -93,10 +95,7 @@ interface PourSound {
 	point: boolean;
 }
 
-/**
- * One catch's landing: where, and whether a point dot, which knocks the drop harder. It neither
- * pops nor rings, as it did in play: the tally tells what it paid.
- */
+/** One catch's landing: where, and whether a point dot, which knocks the drop harder */
 interface PourLanding extends PourSpot {
 	point: boolean;
 }
@@ -149,9 +148,8 @@ interface PlannedCatch extends PourLanding, PourSound {
 
 /**
  * One body falling into the drop: a catch, or a flurry's catches landing within
- * POUR_STAGGER_MS of the first of them. It falls in combo amber with a combo catch in it, as a
- * combo catch's pay floated in play; otherwise it looks like its first point dot, or its first
- * catch. It lands with its first catch; the others land into it as it merges, at their own times.
+ * POUR_STAGGER_MS of the first of them, in its colour (see bodyColor). It lands with its first
+ * catch; the others land into it as it merges, at their own times.
  */
 interface PlannedBody extends PourSpot {
 	color: string;
@@ -169,8 +167,9 @@ export interface PourPlan {
 	digits: readonly (readonly PourDigitDot[])[];
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
-	/** From the first catch's landing to the last, and the clock's run up (ms) */
-	spanMs: number;
+	/** When the last catch lands, and the clock reaches the run time (ms) */
+	endMs: number;
+	/** When the drop comes to rest, POUR_SETTLE_MS after that (ms) */
 	settleMs: number;
 	/**
 	 * The settled amber layer's level, in radii below the drop's centre: where it cuts off the
@@ -207,22 +206,20 @@ export interface PourView {
 	settled: boolean;
 }
 
-/** The span a run of `seconds` pours over (ms): all of it from POUR_FULL_SPAN_S on */
+/** The span a run of `seconds` pours over (ms): POUR_MS_PER_RUN_S a second, up to POUR_SPAN_MS */
 function spanOf(seconds: number): number {
-	return POUR_SPAN_MS * Math.min(1, seconds / POUR_FULL_SPAN_S);
+	return Math.min(POUR_SPAN_MS, seconds * POUR_MS_PER_RUN_S);
 }
 
 /**
  * When each catch lands: its run tick mapped onto a span of `spanMs`, the first at its start
- * and the last at its end (all at the end when they share one tick), so the run keeps its rhythm
+ * and the last exactly at its end (all at the end when they share one tick), so the run keeps
+ * its rhythm
  */
 function landTimes(ticks: readonly number[], spanMs: number): number[] {
 	const first = ticks[0];
 	const runSpan = ticks[ticks.length - 1] - first;
-	const end = POUR_START_MS + spanMs;
-	return ticks.map((tick) =>
-		runSpan > 0 ? POUR_START_MS + (spanMs * (tick - first)) / runSpan : end,
-	);
+	return ticks.map((tick) => POUR_START_MS + spanMs * (runSpan > 0 ? (tick - first) / runSpan : 1));
 }
 
 /**
@@ -240,19 +237,26 @@ function bodiesOf(
 	for (let i = 0; i < catches.length; ) {
 		const landMs = times[i];
 		const spot = landingSpot(i, drops[i].radius);
-		let look = catches[i];
-		let combo = look.step > 1;
 		spots.push(spot);
 		let next = i + 1;
 		for (; next < catches.length && times[next] < landMs + POUR_STAGGER_MS; next++) {
-			if (catches[next].point && !look.point) look = catches[next];
-			if (catches[next].step > 1) combo = true;
 			spots.push(spot);
 		}
-		bodies.push({ color: combo ? COMBO_AMBER : look.color, landMs, ...spot });
+		bodies.push({ color: bodyColor(catches.slice(i, next)), landMs, ...spot });
 		i = next;
 	}
 	return { bodies, spots };
+}
+
+/**
+ * The colour a body of `catches` falls in: as its first catch that pays a combo bonus would
+ * float its pay in play, in combo amber (see payColor); without one, its first point dot's,
+ * which recolours the drop; otherwise its first catch's
+ */
+function bodyColor(catches: readonly RunCatch[]): string {
+	const look =
+		catches.find((c) => comboPay(c.step) > 0) ?? catches.find((c) => c.point) ?? catches[0];
+	return payColor(look.step, look.color);
 }
 
 /**
@@ -406,6 +410,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
 	const seconds = runSeconds(record.ticks);
 	const spanMs = spanOf(seconds);
+	const endMs = POUR_START_MS + spanMs;
 	const times = landTimes(
 		catches.map((c) => c.tick),
 		spanMs,
@@ -431,8 +436,8 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		settledDrop,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
 		seconds,
-		spanMs,
-		settleMs: POUR_START_MS + spanMs + POUR_SETTLE_MS,
+		endMs,
+		settleMs: endMs + POUR_SETTLE_MS,
 		level: amber?.level ?? 1,
 		lift: amber ? tallyLift(radius, amber.level * radius, tallyHeight) : 0,
 		bonusLabel: amber?.label ?? null,
@@ -453,13 +458,12 @@ function formatClock(seconds: number): string {
 }
 
 /**
- * How far the clock has run up at `ms`, 0..1: all the way from the end of a span of `spanMs`
- * on, exactly, as the time to it rounds
+ * How far the clock has run up at `ms`, 0..1, reaching 1 at `endMs`: checked, not divided out,
+ * as dividing can round to just under 1, a second short, and a run without time has no span
  */
-function clockShare(spanMs: number, ms: number): number {
+function clockShare(endMs: number, ms: number): number {
 	"worklet";
-	const end = POUR_START_MS + spanMs;
-	return ms >= end ? 1 : clamp01((ms - POUR_START_MS) / spanMs);
+	return ms >= endMs ? 1 : clamp01((ms - POUR_START_MS) / (endMs - POUR_START_MS));
 }
 
 /** The pour at `ms` since the game over appeared, with the landings since `sinceMs` */
@@ -509,7 +513,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		flights,
 		drop,
 		digits,
-		clock: formatClock(plan.seconds * clockShare(plan.spanMs, ms)),
+		clock: formatClock(plan.seconds * clockShare(plan.endMs, ms)),
 		amberLevel: amberLevel < 1 ? amberLevel : null,
 		bonusLabel: bonusLabel && {
 			dots: bonusLabel.dots,
