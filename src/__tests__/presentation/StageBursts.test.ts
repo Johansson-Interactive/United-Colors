@@ -2,8 +2,6 @@ import type { GameEvent } from "../../domain/types";
 import { NO_CATCH_SPOT, stepBursts } from "../../presentation/effects/stageBursts";
 
 const PINK = "#E91E63";
-/** Combo amber, written out so a change to it shows here */
-const AMBER = "#FFC107";
 const PLAYER = { x: 120, y: 340, color: PINK };
 
 const collect = (value: number, step: number, sameTick = false): GameEvent => ({
@@ -14,30 +12,26 @@ const collect = (value: number, step: number, sameTick = false): GameEvent => ({
 });
 
 describe("stage bursts", () => {
-	it("pops what a small-dot catch paid at the player, in the player's colour", () => {
+	it("shows nothing where a small-dot catch landed: the score counts it in at the top", () => {
 		const step = stepBursts(NO_CATCH_SPOT, collect(5, 1), PLAYER);
-		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "5", color: PINK }]);
+		expect(step.bursts).toEqual([]);
 		expect(step.shake).toBe(false);
+		expect(step.catchSpot).toEqual({ x: 120, y: 340 });
 	});
 
-	it("pops in combo amber from the second catch of a combo on", () => {
-		const step = stepBursts(NO_CATCH_SPOT, collect(3, 2), PLAYER);
-		expect(step.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "3", color: AMBER }]);
-	});
-
-	it("pops a point-dot catch and rings it in the player's colour at the same spot", () => {
+	it("rings a point-dot catch in the player's colour where it landed", () => {
 		const point: GameEvent = { type: "collectPoint", value: 10, step: 1, sameTick: false };
 		expect(stepBursts(NO_CATCH_SPOT, point, PLAYER).bursts).toEqual([
-			{ kind: "pop", x: 120, y: 340, text: "10", color: PINK },
 			{ kind: "ring", x: 120, y: 340, color: PINK, size: 80 },
 		]);
 	});
 
-	it("pops a same-tick catch where the catch before it did, and keeps that spot", () => {
+	it("rings a same-tick catch where the catch before it landed, and keeps that spot", () => {
 		const first = stepBursts(NO_CATCH_SPOT, collect(1, 1), PLAYER);
 		const moved = { ...PLAYER, x: 130, y: 350 };
-		const second = stepBursts(first.catchSpot, collect(3, 2, true), moved);
-		expect(second.bursts).toEqual([{ kind: "pop", x: 120, y: 340, text: "3", color: AMBER }]);
+		const point: GameEvent = { type: "collectPoint", value: 10, step: 2, sameTick: true };
+		const second = stepBursts(first.catchSpot, point, moved);
+		expect(second.bursts).toEqual([{ kind: "ring", x: 120, y: 340, color: PINK, size: 80 }]);
 		expect(second.catchSpot).toEqual(first.catchSpot);
 	});
 

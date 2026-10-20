@@ -55,6 +55,17 @@ import {
 	packBursts,
 } from "./effects/burstFrames";
 import {
+	packTally,
+	packTallySprites,
+	type Tally,
+	type TallyFrame,
+	type TallyGeometry,
+	type TallySprites,
+	type TallyStyle,
+	tallyFrame,
+	tallySprites,
+} from "./effects/scoreTally";
+import {
 	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
 	type MergeUniformsByName,
@@ -297,6 +308,38 @@ export function drawBursts(canvas: SkCanvas, bursts: readonly Burst[], now: numb
 		RING_PAINT.setStrokeWidth(ring.width);
 		canvas.drawCircle(ring.x, ring.y, ring.radius, RING_PAINT);
 	}
+}
+
+/** The meter's buffers for the thread drawing it, made there on its first frame */
+function tallyBuffers(): { frame: TallyFrame; sprites: TallySprites<SkRSXform, SkRect> } {
+	"worklet";
+	const g = globalThis as {
+		__tiltlingTally?: { frame: TallyFrame; sprites: TallySprites<SkRSXform, SkRect> };
+	};
+	if (g.__tiltlingTally === undefined) {
+		g.__tiltlingTally = { frame: tallyFrame(), sprites: tallySprites(skiaKit()) };
+	}
+	return g.__tiltlingTally;
+}
+
+/**
+ * Draw the score meter (see scoreTally.ts) at frame time `now`: every dot's glow, then every
+ * dot, as sprites, the total in `scoreColor`
+ */
+export function drawTally(
+	canvas: SkCanvas,
+	tally: Tally,
+	now: number,
+	style: TallyStyle,
+	geometry: TallyGeometry,
+	scoreColor: Float32Array,
+) {
+	"worklet";
+	const { frame, sprites } = tallyBuffers();
+	packTally(tally, now, style, geometry, frame);
+	packTallySprites(frame, BURST_FILLS, scoreColor, sprites);
+	drawSprites(canvas, sprites.glows, true);
+	drawSprites(canvas, sprites.dots, true);
 }
 
 /**

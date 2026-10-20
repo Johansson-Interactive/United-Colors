@@ -1,10 +1,9 @@
 /**
  * Pure stepper behind the stage's bursts: what the stage shows, and where, as the game reports
- * what happened. A catch pops what it paid where it landed, in the player's colour on its own
- * or first in a combo and in combo amber from the second catch on; a point-dot catch rings
- * there too. A pop is the bare number, without a `+`. A catch on the same tick as the one
- * before pops where that one did, a moment later (see catchCue). A refusal, which ends the run,
- * rings white at the player and shakes the stage.
+ * what happened. A point-dot catch rings in the player's colour where it landed; what a catch
+ * paid is counted into the score at the top instead (see scoreTally.ts). A catch on the same
+ * tick as the one before rings where that one did, a moment later (see catchCue). A refusal,
+ * which ends the run, rings white at the player and shakes the stage.
  *
  * Each step answers with the bursts to add, still to be laid out (see layOutBurst), whether
  * the stage shakes, and whether it waits on the catch stagger as a same-tick catch. Every step
@@ -13,7 +12,7 @@
  */
 
 import type { GameEvent } from "../../domain/types";
-import { payColor, WHITE } from "../theme/theme";
+import { WHITE } from "../theme/theme";
 import type { NewBurst } from "./burstFrames";
 
 /** A point on the stage */
@@ -61,12 +60,10 @@ export function stepBursts(catchSpot: Spot, event: GameEvent, player: BurstPlaye
 		case "collect":
 		case "collectPoint": {
 			const at = event.sameTick ? catchSpot : { x, y };
-			const bursts: NewBurst[] = [
-				{ kind: "pop", ...at, text: `${event.value}`, color: payColor(event.step, color) },
-			];
-			if (event.type === "collectPoint") {
-				bursts.push({ kind: "ring", ...at, color, size: POINT_RING_SIZE });
-			}
+			const bursts: NewBurst[] =
+				event.type === "collectPoint"
+					? [{ kind: "ring", ...at, color, size: POINT_RING_SIZE }]
+					: [];
 			return { catchSpot: at, bursts, shake: false, sameTick: event.sameTick };
 		}
 		case "gameOver": {
