@@ -5,6 +5,9 @@ import type { GameSettings } from "./types";
  * All ratios are relative to screen density (applied at runtime).
  */
 
+/** The pixel density the ratios are applied at as the game plays */
+export const GAME_DENSITY = 400;
+
 /** Game simulation runs at 30 Hz fixed step */
 export const GAME_HERTZ = 30.0;
 

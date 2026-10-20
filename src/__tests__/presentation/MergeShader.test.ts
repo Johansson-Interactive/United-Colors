@@ -16,6 +16,7 @@ import {
 import type { DotView, RenderFrame } from "../../domain/types";
 import { LIQUID_WOBBLE } from "../../presentation/liquidShader";
 import {
+	amberWaveReach,
 	DENT_GAP,
 	DENT_SOFTNESS,
 	MERGE_BLEND,
@@ -23,6 +24,7 @@ import {
 	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
 	mergeUniformsByName,
+	NO_AMBER,
 	packMergeUniforms,
 } from "../../presentation/mergeShader";
 
@@ -170,7 +172,7 @@ describe("merge uniforms by name", () => {
 
 	it("names every uniform the shader declares, in order, with its size", () => {
 		const values = Array.from({ length: MERGE_PACKED_LENGTH }, (_, i) => i);
-		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1]);
+		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1], NO_AMBER, [1, 0.7, 0, 1]);
 		expect(Object.keys(named)).toEqual(declared().map(([name]) => name));
 		for (const [name, size] of declared()) {
 			const value = named[name];
@@ -191,10 +193,41 @@ describe("merge uniforms by name", () => {
 		);
 		const packed = packMergeUniforms(scene);
 		expect(packed?.values.length).toBe(MERGE_PACKED_LENGTH);
-		const named = mergeUniformsByName(packed?.values ?? [], [0, 0, 0, 1]);
+		const named = mergeUniformsByName(packed?.values ?? [], [0, 0, 0, 1], NO_AMBER, [0, 0, 0, 1]);
 		const flat = declared()
-			.slice(0, -1)
+			.slice(0, -3)
 			.flatMap(([name]) => named[name]);
 		expect(flat).toEqual(packed?.values);
+	});
+
+	it("draws no amber layer at NO_AMBER, as in play", () => {
+		expect(MERGE_SKSL).toContain("uniform float amber;");
+		expect(MERGE_SKSL).toContain(`if (amber < ${NO_AMBER.toFixed(1)})`);
+	});
+
+	it("carries the amber layer's level and colour", () => {
+		const values = Array.from({ length: MERGE_PACKED_LENGTH }, () => 0);
+		const named = mergeUniformsByName(values, [0.1, 0.2, 0.3, 1], 12, [1, 0.7, 0, 1]);
+		expect(named.amber).toBe(12);
+		expect(named.amberColor).toEqual([1, 0.7, 0, 1]);
+		expect(named.color).toEqual([0.1, 0.2, 0.3, 1]);
+	});
+});
+
+describe("amberWaveReach", () => {
+	const STILL = { stretchX: 0, stretchY: 0 };
+
+	it("keeps a gentle wave at rest, never ruler-flat, in proportion to the drop", () => {
+		expect(amberWaveReach(STILL, 50)).toBeGreaterThan(0);
+		expect(amberWaveReach(STILL, 100)).toBeCloseTo(2 * amberWaveReach(STILL, 50));
+	});
+
+	it("waves further as the liquid sloshes, and further still sloshing sideways", () => {
+		const down = amberWaveReach({ stretchX: 0, stretchY: JELLY_MAX_STRETCH }, 50);
+		const across = amberWaveReach({ stretchX: JELLY_MAX_STRETCH, stretchY: 0 }, 50);
+		expect(down).toBeGreaterThan(amberWaveReach(STILL, 50));
+		expect(across).toBeGreaterThan(down);
+		// Never so far it would swamp a drop: under a sixth of its radius at full slosh
+		expect(across).toBeLessThan(50 / 6);
 	});
 });

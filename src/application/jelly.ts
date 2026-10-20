@@ -104,6 +104,15 @@ export function stepJelly(
 	return { lagX, lagY, lagVX, lagVY, wobble, lastX: x, lastY: y };
 }
 
+/**
+ * `body` with its mass knocked at (`vx`, `vy`) px/s, as by a catch landing on the drop: it
+ * sloshes along the knock and settles as after a sudden stop. A worklet.
+ */
+export function kickJelly(body: JellyBody, vx: number, vy: number): JellyBody {
+	"worklet";
+	return { ...body, lagVX: body.lagVX + vx, lagVY: body.lagVY + vy };
+}
+
 /** The shape to draw for `body` on a drop of radius `radius` */
 export function jellyShape(body: JellyBody, radius: number): JellyState {
 	"worklet";

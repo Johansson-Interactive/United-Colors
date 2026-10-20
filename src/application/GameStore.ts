@@ -8,6 +8,8 @@ export interface BestVerdict {
 	best: number;
 	/** The run's score beat the stored personal best */
 	newBest: boolean;
+	/** The personal best before this run, the one it was judged against */
+	previous: number;
 }
 
 export interface GameStoreState {

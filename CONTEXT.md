@@ -23,6 +23,10 @@ _Avoid_: "points" (when meaning the dot), bonus dot, switch-color dot
 
 ### Play
 
+**Run**:
+One game, from its start until the refusal that ends it.
+_Avoid_: round, session
+
 **Catch**:
 The player touching a small dot of its own colour, or any point dot, and taking it in.
 _Avoid_: grab, collect, eat
@@ -41,6 +45,34 @@ _Avoid_: streak, chain, multiplier
 
 **Combo step**:
 A catch's place in its combo: 1 for the first (or a catch on its own), 2 for the next, and so on. A catch pays its own value plus two for every catch before it in the combo, so a combo of small dots alone totals its length squared.
+
+**Combo bonus**:
+What a catch paid beyond its own value: two for every catch before it in its combo. A run's combo bonus is the sum over its catches, so its score less its combo bonus is what its catches were worth on their own. Three small dots in one combo pay 1 + 3 + 5 = 9, of which 6 (2 + 4) is combo bonus.
+_Avoid_: combo points, multiplier bonus
+
+**Run time**:
+How long a run lasted, counting only time the game was being played: not paused, and not the refusal that ends it. Shown as `M:SS`, rounded down.
+_Avoid_: duration, survival time
+
+**Run record**:
+What a run did, as the game keeps it for its game over: its catches in order (each with the tick it landed on, what it paid, its combo step, its colour and whether it was a point dot) and its run time. It is never stored, and it is not the personal best.
+_Avoid_: history, log, "record" on its own
+
+**Pour**:
+The game over's replay of a run: its catches pour in as small dots, in their order and rhythm, and merge into the drop while a clock runs up to the run time, until the drop settles and its amber layer rises in.
+_Avoid_: recap, summary animation
+
+**Drop**:
+The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land; it holds the tally and, once settled, the amber layer.
+_Avoid_: blob, ball, cup
+
+**Amber layer**:
+The combo bonus, drawn as amber liquid at the bottom of the settled drop with its `+N` in ink inside it. Its share of the drop is the combo bonus's share of the score, except that it is never too small to hold a readable `+N`: a small combo bonus is deliberately drawn larger than its true share.
+_Avoid_: bonus bar, combo fill
+
+**Tally**:
+The running total inside the pour's drop: what the catches landed so far paid. It counts up to the run's score as the last catch lands, then lifts clear of the amber layer as it rises.
+_Avoid_: counter, subtotal
 
 ### Ranking
 

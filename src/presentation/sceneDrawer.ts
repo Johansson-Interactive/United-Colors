@@ -59,6 +59,7 @@ import {
 	MERGE_SKSL,
 	type MergeUniformsByName,
 	mergeUniformsByName,
+	NO_AMBER,
 	packMergeUniforms,
 } from "./mergeShader";
 import {
@@ -94,6 +95,26 @@ GLARE_PAINT.setShader(
 		TileMode.Clamp,
 	),
 );
+
+/**
+ * The glare on a dot at (x, y) of `radius`, turned toward the light by the offsets glareOffset
+ * gives (`gx`, `gy`), as the scene draws it on every dot
+ */
+export function drawGlareAt(
+	canvas: SkCanvas,
+	x: number,
+	y: number,
+	radius: number,
+	gx: number,
+	gy: number,
+) {
+	"worklet";
+	canvas.save();
+	canvas.translate(x + gx * radius, y + gy * radius);
+	canvas.scale(radius, radius);
+	canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
+	canvas.restore();
+}
 
 function compileEffect(name: string, sksl: string): SkRuntimeEffect {
 	const effect = Skia.RuntimeEffect.Make(sksl);
@@ -308,15 +329,22 @@ export function liquidBody(dots: Float32Array): LiquidBody {
 	if (merge === null) {
 		const zeros: number[] = [];
 		for (let i = 0; i < MERGE_PACKED_LENGTH; i++) zeros.push(0);
-		return { x: 0, y: 0, width: 0, height: 0, uniforms: mergeUniformsByName(zeros, NO_BODY_COLOR) };
+		return {
+			x: 0,
+			y: 0,
+			width: 0,
+			height: 0,
+			uniforms: mergeUniformsByName(zeros, NO_BODY_COLOR, NO_AMBER, NO_BODY_COLOR),
+		};
 	}
 	const player = readDot(dots, findPlayer(dots), sceneDot());
+	const fill = FILL_COLORS[player.color];
 	return {
 		x: merge.left,
 		y: merge.top,
 		width: merge.right - merge.left,
 		height: merge.bottom - merge.top,
-		uniforms: mergeUniformsByName(merge.values, FILL_COLORS[player.color]),
+		uniforms: mergeUniformsByName(merge.values, fill, NO_AMBER, fill),
 	};
 }
 
@@ -423,11 +451,7 @@ export function drawScene(
 	}
 	// The glare on a dot, from its place and size
 	function drawGlare(x: number, y: number, radius: number) {
-		canvas.save();
-		canvas.translate(x + gx * radius, y + gy * radius);
-		canvas.scale(radius, radius);
-		canvas.drawCircle(-gx, -gy, 1, GLARE_PAINT);
-		canvas.restore();
+		drawGlareAt(canvas, x, y, radius, gx, gy);
 	}
 	// A small dot at a wall past the canvas's slots: its body by the wall shader, then its glare
 	function drawWallDrop(drop: SceneDot) {
