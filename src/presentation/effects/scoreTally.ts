@@ -10,6 +10,7 @@ import {
 	type SpriteKit,
 	spriteBatch,
 } from "../dotSprites";
+import { COMBO_AMBER } from "../theme/theme";
 import { BURST_COLORS, NOT_STARTED } from "./burstFrames";
 import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
 
@@ -28,6 +29,8 @@ import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
  * the catch before it has drained. Each point flies to the total's last digit and is counted
  * when it lands, with a small bump; a catch's last point bumps the total hard. A catch past
  * MAX_PENDING is counted at once, so a long combo never queues further than the eye follows.
+ * While a combo's catches (those in combo amber, see payColor) count in, the total turns amber
+ * too, from the first of their points leaving until the last has landed (see tallyInCombo).
  *
  * The list lives on the UI thread, as the bursts do (see burstFrames.ts): the JS thread queues
  * a catch (withCatch), the UI thread stamps and schedules it on its first frame and drops it
@@ -66,6 +69,8 @@ export const SHIFT_MS = 160;
 const POINT_BUMP = 0.35;
 /** Catches queued at once; one more counts the oldest at once */
 export const MAX_PENDING = 8;
+/** The combo's amber, by index into BURST_COLORS */
+const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
 /** Rows of a glyph */
 const GLYPH_ROWS = 7;
 const GLYPH_COLS = 5;
@@ -208,6 +213,23 @@ export function shownScore(tally: Tally, now: number): number {
 	return shown;
 }
 
+/**
+ * Whether the total shows in combo amber at `now`: while the catch counting in, the first
+ * with a point still to land, is in amber and its first point has left. A combo's catches
+ * drain back to back, so the total stays amber across them, and turns back as the last
+ * point of the combo's last catch lands, or as a catch outside the combo starts to count.
+ */
+export function tallyInCombo(tally: Tally, now: number): boolean {
+	"worklet";
+	const list = tally.catches;
+	for (let i = 0; i < list.length; i++) {
+		const c = list[i];
+		if (landed(c, now) >= c.value) continue;
+		return c.color === AMBER && departed(c, now) > 0;
+	}
+	return false;
+}
+
 /** Whether nothing is moving at `now`, so the frame clock may stop */
 export function tallyIdle(tally: Tally, now: number): boolean {
 	"worklet";
@@ -230,6 +252,8 @@ export const DOT_STRIDE = 5;
 export interface TallyFrame {
 	/** The score drawn */
 	shown: number;
+	/** Whether the total shows in combo amber (see tallyInCombo) */
+	combo: boolean;
 	/** The total's dots: x, y, radius per dot */
 	total: number[];
 	/** Every other dot: x, y, radius, colour index (BURST_COLORS), alpha per dot */
@@ -238,7 +262,7 @@ export interface TallyFrame {
 
 export function tallyFrame(): TallyFrame {
 	"worklet";
-	return { shown: 0, total: [], dots: [] };
+	return { shown: 0, combo: false, total: [], dots: [] };
 }
 
 /** Out-quad: quick off the mark, settling in */
@@ -442,6 +466,7 @@ export function packTally(
 	// The total, bumped by the newest landing: hard for a catch's last point, lightly otherwise
 	const shown = shownScore(tally, now);
 	out.shown = shown;
+	out.combo = tallyInCombo(tally, now);
 	let bumpAt = tally.lastLand;
 	let bumpFinal = true;
 	for (let i = 0; i < list.length; i++) {
@@ -520,7 +545,8 @@ export function tallySprites<P, R>(kit: SpriteKit<P, R>): TallySprites<P, R> {
 }
 
 /**
- * Pack a packed frame's dots as sprites into `out`: the total in `scoreColor`, every other
+ * Pack a packed frame's dots as sprites into `out`: the total in `scoreColor`, or in combo
+ * amber while the frame says so, every other
  * dot in its colour from `colors` (BURST_COLORS as Skia colours) at its alpha
  */
 export function packTallySprites<P, R>(
@@ -543,6 +569,7 @@ export function packTallySprites<P, R>(
 	const dotColors = dots.colors[n];
 	const glowHalf = POP_GLOW_CELL / 2;
 	const dotHalf = POP_DOT_CELL / 2;
+	const totalColor = frame.combo ? colors[AMBER] : scoreColor;
 	let d = 0;
 	for (let i = 0; i < n; i++) {
 		let x: number;
@@ -554,10 +581,10 @@ export function packTallySprites<P, R>(
 			x = frame.total[o];
 			y = frame.total[o + 1];
 			radius = frame.total[o + 2];
-			tint[0] = scoreColor[0];
-			tint[1] = scoreColor[1];
-			tint[2] = scoreColor[2];
-			tint[3] = scoreColor[3];
+			tint[0] = totalColor[0];
+			tint[1] = totalColor[1];
+			tint[2] = totalColor[2];
+			tint[3] = totalColor[3];
 		} else {
 			const o = (i - totalCount) * DOT_STRIDE;
 			x = frame.dots[o];

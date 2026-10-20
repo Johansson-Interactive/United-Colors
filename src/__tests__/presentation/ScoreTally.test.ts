@@ -26,6 +26,7 @@ import {
 	TICK_MIN_MS,
 	tallyFrame,
 	tallyIdle,
+	tallyInCombo,
 	tallySprites,
 	tickFor,
 	withCatch,
@@ -335,10 +336,72 @@ describe("the transfer", () => {
 	});
 });
 
+describe("the total in a combo", () => {
+	// A plain catch, then a combo's two: points land 1260; 1320, 1380, 1440; 1500 to 1740
+	const combo = () =>
+		tallyWith(
+			10,
+			[
+				[1, PINK],
+				[3, COMBO_AMBER],
+				[5, COMBO_AMBER],
+			],
+			1000,
+		);
+
+	it("stays in the score colour while a catch outside a combo counts in", () => {
+		expect(tallyInCombo(combo(), 1000)).toBe(false);
+		expect(tallyInCombo(combo(), 1259)).toBe(false);
+		expect(pack(combo(), 1259).combo).toBe(false);
+	});
+
+	it("turns amber as the combo's points count in, and stays amber across its catches", () => {
+		for (const now of [1260, 1380, 1440, 1441, 1500, 1739]) {
+			expect(tallyInCombo(combo(), now)).toBe(true);
+		}
+		expect(pack(combo(), 1400).combo).toBe(true);
+		// Still amber once the catches before have been dropped
+		expect(tallyInCombo(advanceTally(combo(), 1600), 1600)).toBe(true);
+	});
+
+	it("turns back as the combo's last point lands", () => {
+		expect(tallyInCombo(combo(), 1740)).toBe(false);
+		expect(tallyInCombo(advanceTally(combo(), 1900), 1900)).toBe(false);
+	});
+
+	it("turns back as a catch outside the combo starts to count in", () => {
+		const tally = tallyWith(
+			0,
+			[
+				[3, COMBO_AMBER],
+				[2, PINK],
+			],
+			1000,
+		);
+		expect(tallyInCombo(tally, 1379)).toBe(true);
+		expect(tallyInCombo(tally, 1380)).toBe(false);
+	});
+
+	it("waits for the combo's first point to leave before turning amber", () => {
+		const tally = tallyWith(0, [[3, COMBO_AMBER]], 1000);
+		expect(tallyInCombo(tally, 1000 + HOLD_MS - 1)).toBe(false);
+		expect(tallyInCombo(tally, 1000 + HOLD_MS)).toBe(true);
+	});
+});
+
 describe("packing the sprites", () => {
+	it("draws the total in combo amber while the frame is in a combo", () => {
+		const frame = pack(tallyWith(42, [[3, COMBO_AMBER]], 1000), 1200);
+		const out = tallySprites(plainKit());
+		const colors = BURST_COLORS.map((_, i) => Float32Array.of(i, i, i, 1));
+		packTallySprites(frame, colors, Float32Array.of(9, 9, 9, 1), out);
+		expect(out.dots.colors[out.dots.count][0]).toEqual(colors[AMBER]);
+	});
+
 	it("places a glow and a dot per dot, the total in the score colour, the rest tinted", () => {
 		const tally = tallyWith(42, [[3, COMBO_AMBER]], 1000);
-		const frame = pack(tally, 1200);
+		// Before its first point leaves, so the total is not yet in the combo
+		const frame = pack(tally, 1100);
 		const out = tallySprites(plainKit());
 		const colors = BURST_COLORS.map((_, i) => Float32Array.of(i, i, i, 1));
 		const score = Float32Array.of(9, 9, 9, 1);
