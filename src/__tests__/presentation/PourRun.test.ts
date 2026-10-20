@@ -6,6 +6,7 @@ import {
 	POUR_BONUS_MIN_PITCH,
 	POUR_FADE_MS,
 	POUR_FALL_MS,
+	POUR_FULL_SPAN_S,
 	POUR_MAX_RADIUS,
 	POUR_RISE_MS,
 	POUR_SETTLE_MS,
@@ -74,8 +75,8 @@ function fallStarts(p: PourPlan, landed: readonly number[]): number[] {
 }
 
 describe("pourAt", () => {
-	it("pours a 20 s run and a 5 min run in the same fixed span", () => {
-		const short = plan({ catches: [caught(30), caught(200), caught(560)], ticks: seconds(20) });
+	it("pours a 30 s run and a 5 min run in the same fixed span", () => {
+		const short = plan({ catches: [caught(30), caught(200), caught(560)], ticks: seconds(30) });
 		const long = plan({
 			catches: [caught(30), caught(2000), caught(8800)],
 			ticks: seconds(300),
@@ -84,6 +85,31 @@ describe("pourAt", () => {
 			const times = landings(p).map((l) => l.ms);
 			expect(times).toEqual([POUR_START_MS, expect.any(Number), POUR_START_MS + POUR_SPAN_MS]);
 		}
+	});
+
+	it("pours a run shorter than POUR_FULL_SPAN_S faster, at a long run's pace", () => {
+		// 8 s, a couple of catches: over in a fraction of the span, not dripping in
+		const short = plan({ catches: [caught(30), caught(120), caught(210)], ticks: seconds(8) });
+		const span = (POUR_SPAN_MS * 8) / POUR_FULL_SPAN_S;
+		// Sampled each millisecond: a landing is found on the first one at or after it
+		expect(landings(short).map((l) => l.ms)).toEqual([
+			POUR_START_MS,
+			Math.ceil(POUR_START_MS + span / 2),
+			Math.ceil(POUR_START_MS + span),
+		]);
+		expect(pourAt(short, POUR_START_MS + span / 2 + 1).clock).toBe("0:04");
+		expect(pourAt(short, POUR_START_MS + span).clock).toBe("0:08");
+		expect(pourAt(short, POUR_START_MS + span + POUR_SETTLE_MS - 1).settled).toBe(false);
+		expect(pourAt(short, POUR_START_MS + span + POUR_SETTLE_MS).settled).toBe(true);
+		// A run at the threshold already takes the whole span
+		const full = plan({ catches: [caught(30), caught(600)], ticks: seconds(POUR_FULL_SPAN_S) });
+		expect(landings(full).at(-1)?.ms).toBe(POUR_START_MS + POUR_SPAN_MS);
+	});
+
+	it("pours a run without time at once", () => {
+		const p = plan({ catches: [], ticks: 0 });
+		expect(pourAt(p, POUR_START_MS).clock).toBe("0:00");
+		expect(pourAt(p, POUR_START_MS + POUR_SETTLE_MS).settled).toBe(true);
 	});
 
 	it("lands every catch in order at its real time in the run, mapped onto the span", () => {
@@ -175,7 +201,7 @@ describe("pourAt", () => {
 	it("drops each catch from above in its colour, falling then merging", () => {
 		const p = plan({
 			catches: [caught(10), caught(400, { point: true, color: BLUE, value: 5 })],
-			ticks: 450,
+			ticks: seconds(POUR_FULL_SPAN_S),
 		});
 		const end = POUR_START_MS + POUR_SPAN_MS;
 		expect(pourAt(p, end - POUR_FALL_MS - 1).flights).toEqual([]);
@@ -419,7 +445,7 @@ describe("pourAt", () => {
 	it("settles only once the last catch has landed and the drop has had time to come to rest", () => {
 		const end = POUR_START_MS + POUR_SPAN_MS;
 		for (const catches of [[caught(10), caught(90)], []]) {
-			const p = plan({ catches, ticks: 120 });
+			const p = plan({ catches, ticks: seconds(POUR_FULL_SPAN_S) });
 			expect(pourAt(p, 0).settled).toBe(false);
 			expect(pourAt(p, end).settled).toBe(false);
 			expect(pourAt(p, end + POUR_SETTLE_MS - 1).settled).toBe(false);
@@ -429,7 +455,7 @@ describe("pourAt", () => {
 
 	it("has no amber and no +N when the run earned no combo bonus, or no score", () => {
 		for (const catches of [[caught(10), caught(90, { point: true, value: 5 })], []]) {
-			const p = plan({ catches, ticks: 120 });
+			const p = plan({ catches, ticks: seconds(POUR_FULL_SPAN_S) });
 			expect(pourAt(p, 10_000)).toMatchObject({
 				amberLevel: null,
 				bonusLabel: null,
@@ -472,7 +498,10 @@ describe("the amber layer", () => {
 			caught(10 + i, { step: i + 1, value: 2 * i + 1 }),
 		);
 		const lone = Array.from({ length: alone }, (_, i) => caught(100 + 20 * i));
-		return { catches: [...combo, ...lone], ticks: 130 + 20 * alone };
+		return {
+			catches: [...combo, ...lone],
+			ticks: Math.max(130 + 20 * alone, seconds(POUR_FULL_SPAN_S)),
+		};
 	}
 
 	/** The amber surface's height from the drop's centre (px, down) */

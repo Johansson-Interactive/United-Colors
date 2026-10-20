@@ -1,8 +1,9 @@
 /**
  * Pure stepper behind the game over's pour: the run replayed as its catches falling in, in the
  * order and rhythm they happened, and merging into one drop of the player's liquid, while a
- * clock runs up to the run time. Every run pours in the same span (POUR_SPAN_MS), whatever its
- * length; once it settles, the combo bonus rises in as an amber layer at the drop's bottom, the
+ * clock runs up to the run time. Every run of POUR_FULL_SPAN_S or more pours in the same span
+ * (POUR_SPAN_MS), whatever its length, and a shorter one at the same pace, so in less; once it
+ * settles, the combo bonus rises in as an amber layer at the drop's bottom, the
  * tally lifting clear of it, and its `+N` fades in inside it.
  *
  * planPour works a run's pour out once, on the JS thread; pourAt then samples it at a replay
@@ -22,8 +23,13 @@ import { amberWaveReach } from "../mergeShader";
 
 /** The first catch lands this long after the game over appears (ms) */
 export const POUR_START_MS = 500;
-/** From the first catch's landing to the last, and the clock's run up, whatever the run (ms) */
+/** From the first catch's landing to the last, and the clock's run up, for a long run (ms)... */
 export const POUR_SPAN_MS = 2200;
+/**
+ * ...one this long or longer (s); a shorter run pours over its share of the span, so a run of a
+ * few catches lands them close together rather than dripping them in
+ */
+export const POUR_FULL_SPAN_S = 30;
 /** A catch falls this long before it lands (ms), then merges into the drop for MERGE_MS */
 export const POUR_FALL_MS = 420;
 const MERGE_MS = 260;
@@ -161,6 +167,8 @@ export interface PourPlan {
 	digits: readonly (readonly PourDigitDot[])[];
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
+	/** From the first catch's landing to the last, and the clock's run up (ms) */
+	spanMs: number;
 	settleMs: number;
 	/**
 	 * The settled amber layer's level, in radii below the drop's centre: where it cuts off the
@@ -197,16 +205,21 @@ export interface PourView {
 	settled: boolean;
 }
 
+/** The span a run of `seconds` pours over (ms): all of it from POUR_FULL_SPAN_S on */
+function spanOf(seconds: number): number {
+	return POUR_SPAN_MS * Math.min(1, seconds / POUR_FULL_SPAN_S);
+}
+
 /**
- * When each catch lands: its run tick mapped onto the span, the first at its start and the
- * last at its end (all at the end when they share one tick), so the run keeps its rhythm
+ * When each catch lands: its run tick mapped onto a span of `spanMs`, the first at its start
+ * and the last at its end (all at the end when they share one tick), so the run keeps its rhythm
  */
-function landTimes(ticks: readonly number[]): number[] {
+function landTimes(ticks: readonly number[], spanMs: number): number[] {
 	const first = ticks[0];
 	const runSpan = ticks[ticks.length - 1] - first;
-	const end = POUR_START_MS + POUR_SPAN_MS;
+	const end = POUR_START_MS + spanMs;
 	return ticks.map((tick) =>
-		runSpan > 0 ? POUR_START_MS + (POUR_SPAN_MS * (tick - first)) / runSpan : end,
+		runSpan > 0 ? POUR_START_MS + (spanMs * (tick - first)) / runSpan : end,
 	);
 }
 
@@ -387,7 +400,12 @@ function tallyLift(radius: number, surface: number, height: number): number {
 /** Work out a run's pour */
 export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const { catches } = record;
-	const times = landTimes(catches.map((c) => c.tick));
+	const seconds = runSeconds(record.ticks);
+	const spanMs = spanOf(seconds);
+	const times = landTimes(
+		catches.map((c) => c.tick),
+		spanMs,
+	);
 	const drops = dropsOf(record, color);
 	const cues = catches.map((c) => ({ pitch: catchPitch(c.step), point: c.point }));
 	const sounding = soundingOf(cues, times);
@@ -408,8 +426,9 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		drops,
 		settledDrop,
 		digits: drops.map((drop) => digitsOf(drop, pitch)),
-		seconds: runSeconds(record.ticks),
-		settleMs: POUR_START_MS + POUR_SPAN_MS + POUR_SETTLE_MS,
+		seconds,
+		spanMs,
+		settleMs: POUR_START_MS + spanMs + POUR_SETTLE_MS,
 		level: amber?.level ?? 1,
 		lift: amber ? tallyLift(radius, amber.level * radius, tallyHeight) : 0,
 		bonusLabel: amber?.label ?? null,
@@ -427,6 +446,16 @@ function formatClock(seconds: number): string {
 	const whole = Math.floor(seconds);
 	const ss = whole % 60;
 	return `${Math.floor(whole / 60)}:${ss < 10 ? "0" : ""}${ss}`;
+}
+
+/**
+ * How far the clock has run up at `ms`, 0..1: all the way from the end of a span of `spanMs`
+ * on, exactly, as the time to it rounds
+ */
+function clockShare(spanMs: number, ms: number): number {
+	"worklet";
+	const end = POUR_START_MS + spanMs;
+	return ms >= end ? 1 : clamp01((ms - POUR_START_MS) / spanMs);
 }
 
 /** The pour at `ms` since the game over appeared, with the landings since `sinceMs` */
@@ -476,7 +505,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		flights,
 		drop,
 		digits,
-		clock: formatClock(plan.seconds * clamp01((ms - POUR_START_MS) / POUR_SPAN_MS)),
+		clock: formatClock(plan.seconds * clockShare(plan.spanMs, ms)),
 		amberLevel: amberLevel < 1 ? amberLevel : null,
 		bonusLabel: bonusLabel && {
 			dots: bonusLabel.dots,
