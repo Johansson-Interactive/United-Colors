@@ -20,6 +20,7 @@ import { comboBonus, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
 import { layoutDotMatrix } from "../dotmatrix/layout";
 import { amberWaveReach } from "../mergeShader";
+import { COMBO_AMBER } from "../theme/theme";
 
 /** The first catch lands this long after the game over appears (ms) */
 export const POUR_START_MS = 500;
@@ -148,8 +149,9 @@ interface PlannedCatch extends PourLanding, PourSound {
 
 /**
  * One body falling into the drop: a catch, or a flurry's catches landing within
- * POUR_STAGGER_MS of the first of them. It looks like its first point dot, or its first catch,
- * and lands with its first catch; the others land into it as it merges, at their own times.
+ * POUR_STAGGER_MS of the first of them. It falls in combo amber with a combo catch in it, as a
+ * combo catch's pay floated in play; otherwise it looks like its first point dot, or its first
+ * catch. It lands with its first catch; the others land into it as it merges, at their own times.
  */
 interface PlannedBody extends PourSpot {
 	color: string;
@@ -239,13 +241,15 @@ function bodiesOf(
 		const landMs = times[i];
 		const spot = landingSpot(i, drops[i].radius);
 		let look = catches[i];
+		let combo = look.step > 1;
 		spots.push(spot);
 		let next = i + 1;
 		for (; next < catches.length && times[next] < landMs + POUR_STAGGER_MS; next++) {
 			if (catches[next].point && !look.point) look = catches[next];
+			if (catches[next].step > 1) combo = true;
 			spots.push(spot);
 		}
-		bodies.push({ color: look.color, landMs, ...spot });
+		bodies.push({ color: combo ? COMBO_AMBER : look.color, landMs, ...spot });
 		i = next;
 	}
 	return { bodies, spots };

@@ -19,6 +19,7 @@ import {
 	planPour,
 	pourAt,
 } from "../../presentation/effects/pourRun";
+import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 const RED = "#E53935";
 const BLUE = "#1E88E5";
@@ -212,6 +213,32 @@ describe("pourAt", () => {
 		expect(merging[0].fall).toBe(1);
 		expect(merging[0].merge).toBeGreaterThan(0);
 		expect(pourAt(p, end + 2000).flights).toEqual([]);
+	});
+
+	it("drops a combo catch in combo amber, as its pay floated in play", () => {
+		// A combo's first catch falls in its colour and the rest in amber, a point dot among
+		// them too; a flurry falling as one body is amber with a combo catch in it
+		const p = plan({
+			catches: [
+				caught(10),
+				caught(200, { color: BLUE }),
+				caught(260, { step: 2, value: 3 }),
+				caught(320, { step: 3, value: 9, point: true, color: GREEN }),
+				caught(600, { color: BLUE }),
+				caught(600, { step: 2, value: 3 }),
+			],
+			ticks: seconds(POUR_FULL_SPAN_S),
+		});
+		expect(p.bodies.map((b) => b.color)).toEqual([
+			RED,
+			BLUE,
+			COMBO_AMBER,
+			COMBO_AMBER,
+			COMBO_AMBER,
+		]);
+		const [, , combo] = p.bodies;
+		const falling = pourAt(p, combo.landMs - POUR_FALL_MS / 2).flights.filter((f) => f.fall < 1);
+		expect(falling).toEqual([expect.objectContaining({ color: COMBO_AMBER, fall: 0.5 })]);
 	});
 
 	it("lands each catch on the drop's curved top, within 70% of its radius to either side", () => {
