@@ -171,10 +171,13 @@ const UNIFORM_SIZES = [
 export function mergeUniformsByName(
 	values: number[],
 	color: ArrayLike<number>,
-	amber = NO_AMBER,
+	amber?: number,
 	amberColor: ArrayLike<number> = color,
 ): MergeUniformsByName {
 	"worklet";
+	// Defaulted here, not in the signature: on the UI thread captured constants are unpacked at
+	// the top of the body, after default parameters have run
+	const level = amber ?? NO_AMBER;
 	let at = 0;
 	const take = (size: number) => {
 		const part = values.slice(at, at + size);
@@ -197,7 +200,7 @@ export function mergeUniformsByName(
 		walls,
 		neck,
 		color: [color[0], color[1], color[2], color[3]],
-		amber,
+		amber: level,
 		amberColor: [amberColor[0], amberColor[1], amberColor[2], amberColor[3]],
 	};
 }
