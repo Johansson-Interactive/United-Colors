@@ -12,6 +12,7 @@ import {
 	type FlowAction,
 	type FlowEvent,
 	type FlowState,
+	type GameFacts,
 	INITIAL_FLOW,
 	type Screen,
 	screenOf,
@@ -38,7 +39,20 @@ export interface GameControls {
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
 	/** Adopt `zero` as the level pose for the side the screen faced */
 	calibrate: (zero: TiltZero, facingDown: boolean) => void;
+	/** Whether a level pose is set */
+	levelPoseSet: () => boolean;
+	/** Whether there is a tilt sensor to hold level with */
+	tiltPresent: () => boolean;
+	/** The player's colour right now */
+	playerColor: () => string;
 }
+
+/** The game's answers to what the flow asks, as they stand at this moment */
+const ask = (controls: GameControls): GameFacts => ({
+	levelPoseSet: controls.levelPoseSet(),
+	tiltPresent: controls.tiltPresent(),
+	playerColor: controls.playerColor(),
+});
 
 /** Carry out `action` on the game */
 function perform(controls: GameControls, action: FlowAction) {
@@ -84,7 +98,7 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 	}));
 
 	const apply = (event: FlowEvent) => {
-		const step = stepFlow(flow, event);
+		const step = stepFlow(flow, event, ask(controls));
 		flow = step.state;
 		store.setState({ screen: step.screen });
 		return step;

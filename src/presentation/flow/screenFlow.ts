@@ -56,27 +56,45 @@ export type Screen =
 	| { kind: "settle"; color: string }
 	| { kind: "gameOver" };
 
+/**
+ * What the game answers when the flow asks, as it steps. The taps carry only what the tap itself
+ * knows; the rest is asked for here.
+ */
+export interface GameFacts {
+	/** A level pose is set, so PLAY needs no bowl first */
+	levelPoseSet: boolean;
+	/** There is tilt to hold level with, so the pause's play dot goes through Get ready */
+	tiltPresent: boolean;
+	/** The player's colour, which play from the pause or the game over keeps */
+	playerColor: string;
+}
+
+/**
+ * The taps carry what the tap itself knows: where it landed, and on the title the colour the play
+ * dot showed, which the run, the bowl's dot or the speed view's dot takes
+ */
 export type FlowEvent =
-	/** PLAY on the title, in the colour the play dot held; `hasZero`: a level pose is set */
-	| { type: "startPressed"; color: string; hasZero: boolean; at: PressPoint }
-	/** The level button on the title or the pause, in the colour the bowl's dot takes */
-	| { type: "levelPressed"; from: "menu" | "pause"; color: string }
+	/** PLAY on the title */
+	| { type: "startPressed"; color: string; at: PressPoint }
+	/** A run starts straight into play, with no bowl whether a level pose is set or not (the bench run) */
+	| { type: "startedStraight"; color: string; at: PressPoint }
+	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
+	| { type: "levelPressed"; from: "menu"; color: string }
+	| { type: "levelPressed"; from: "pause" }
 	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
 	| { type: "settled"; zero: TiltZero; facingDown: boolean; at: PressPoint }
 	| { type: "settleBacked" }
-	/** The speed button on the title or the pause, in the colour the bowl's dot takes */
-	| { type: "speedPressed"; from: "menu" | "pause"; color: string }
+	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
+	| { type: "speedPressed"; from: "menu"; color: string }
+	| { type: "speedPressed"; from: "pause" }
 	/** BACK on the speed view */
 	| { type: "speedBacked" }
-	/** RETRY on the game over, in the player's colour */
-	| { type: "retryPressed"; color: string; at: PressPoint }
+	/** RETRY on the game over; the next run keeps the player's colour */
+	| { type: "retryPressed"; at: PressPoint }
 	/** QUIT on the pause or BACK on the game over */
 	| { type: "leavePressed"; at: PressPoint }
-	/**
-	 * The corner dot, which does what it shows (see cornerDot); `tiltAvailable`: there is tilt to
-	 * hold level with, so its play goes through Get ready
-	 */
-	| { type: "cornerPressed"; tiltAvailable: boolean }
+	/** The corner dot, which does what it shows (see cornerDot) */
+	| { type: "cornerPressed" }
 	/** The player left the app (home, app switcher, an incoming call) */
 	| { type: "appLeft" }
 	/** Get ready's hold completed: the ring closed on the player */
@@ -200,12 +218,19 @@ const startFlood = (
 /** Back to the title or the pause screen from whatever is over it */
 const closeOver = (state: FlowState): BareStep => ({ state: { ...state, over: null } });
 
-export function stepFlow(state: FlowState, event: FlowEvent): FlowStep {
-	const step = bareStep(state, event);
+/** The colour the bowl or the speed view opens in: the play dot's on the title, the player's on the pause */
+const openingColor = (
+	event: Extract<FlowEvent, { type: "levelPressed" | "speedPressed" }>,
+	game: GameFacts,
+) => (event.from === "menu" ? event.color : game.playerColor);
+
+/** Step `event`, with `game` answering what the tap does not carry */
+export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): FlowStep {
+	const step = bareStep(state, event, game);
 	return { ...step, screen: screenOf(step.state) };
 }
 
-function bareStep(state: FlowState, event: FlowEvent): BareStep {
+function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep {
 	// The phase is the game's to report, flood or not
 	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
 	// The flood decides the next screen; nothing under it can change that
@@ -218,12 +243,14 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 	}
 	switch (event.type) {
 		case "startPressed":
-			return event.hasZero
+			return game.levelPoseSet
 				? startFlood(state, { color: event.color, at: event.at, action: play(event.color) })
 				: { state: { ...state, settle: { from: "start", color: event.color } }, act: HALT_KIOSK };
+		case "startedStraight":
+			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "levelPressed":
 			return {
-				state: { ...state, settle: { from: event.from, color: event.color } },
+				state: { ...state, settle: { from: event.from, color: openingColor(event, game) } },
 				...(event.from === "menu" && { act: HALT_KIOSK }),
 			};
 		case "settled": {
@@ -251,7 +278,10 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 			};
 		case "speedPressed":
 			return {
-				state: { ...state, over: { kind: "speed", from: event.from, color: event.color } },
+				state: {
+					...state,
+					over: { kind: "speed", from: event.from, color: openingColor(event, game) },
+				},
 				...(event.from === "menu" && { act: HALT_KIOSK }),
 			};
 		case "speedBacked": {
@@ -259,7 +289,11 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 			return { ...closeOver(state), ...(fromMenu && { act: RUN_KIOSK }) };
 		}
 		case "retryPressed":
-			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
+			return startFlood(state, {
+				color: game.playerColor,
+				at: event.at,
+				action: play(game.playerColor),
+			});
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "kiosk" } });
 		case "cornerPressed":
@@ -269,7 +303,7 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 					return gettingReady ? closeOver(state) : { state, act: PAUSE };
 				case "play":
 					// Without tilt there is no level to hold, so nothing stands between the pause and play
-					return event.tiltAvailable
+					return game.tiltPresent
 						? { state: { ...state, over: { kind: "getReady" } } }
 						: { state, act: RESUME };
 				default:

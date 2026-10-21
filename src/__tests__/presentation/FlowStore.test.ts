@@ -6,8 +6,9 @@ import { INK_LIFT } from "../../presentation/theme/theme";
 const AT = { x: 10, y: 20 };
 const ZERO = { x: 0.3, y: -0.1 };
 const PINK = "#E91E63";
+const BLUE = "#2196F3";
 
-/** Game controls that do nothing */
+/** Game controls that do nothing, for a player with a level pose set and tilt */
 const IDLE: GameControls = {
 	play: () => {},
 	pause: () => {},
@@ -17,15 +18,19 @@ const IDLE: GameControls = {
 	runKiosk: () => {},
 	flood: () => {},
 	calibrate: () => {},
+	levelPoseSet: () => true,
+	tiltPresent: () => true,
+	playerColor: () => PINK,
 };
 
 /**
  * A game store and a flow store on it, following the game, with game controls that write every
- * call to one list
+ * call to one list and answer the flow's questions from `answers`, which the test can change
  */
 function setup() {
 	const game = createGameStore();
 	const calls: string[] = [];
+	const answers = { levelPoseSet: true, tiltPresent: true, playerColor: PINK };
 	let cover: (() => void) | null = null;
 	const { store: flow, follow } = createFlowStore(game, {
 		play: (color) => calls.push(`play ${color}`),
@@ -40,6 +45,9 @@ function setup() {
 		},
 		calibrate: (zero, facingDown) =>
 			calls.push(`calibrate ${zero.x},${zero.y}${facingDown ? " down" : ""}`),
+		levelPoseSet: () => answers.levelPoseSet,
+		tiltPresent: () => answers.tiltPresent,
+		playerColor: () => answers.playerColor,
 	});
 	const unfollow = follow();
 	const publish = (phase: GamePhase) =>
@@ -49,6 +57,7 @@ function setup() {
 		follow,
 		unfollow,
 		calls,
+		answers,
 		publish,
 		screen: () => flow.getState().screen,
 		/** The flood in flight reports that it covers the screen */
@@ -74,32 +83,59 @@ describe("flow store", () => {
 	it("a pause tap pauses the game at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("RUNNING");
-		flow.getState().dispatch({ type: "cornerPressed", tiltAvailable: true });
+		flow.getState().dispatch({ type: "cornerPressed" });
 		expect(calls).toEqual(["pause"]);
 	});
 
-	it("the play dot on the pause resumes at once on a device without tilt", () => {
-		const { flow, calls, publish } = setup();
+	it("the play dot on the pause opens Get ready when there is tilt", () => {
+		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "cornerPressed", tiltAvailable: false });
+		flow.getState().dispatch({ type: "cornerPressed" });
+		expect(screen()).toEqual({ kind: "getReady" });
+		expect(calls).toEqual([]);
+	});
+
+	it("the play dot on the pause resumes at once on a device without tilt", () => {
+		const { flow, calls, answers, publish, screen } = setup();
+		answers.tiltPresent = false;
+		publish("PAUSED");
+		flow.getState().dispatch({ type: "cornerPressed" });
 		expect(calls).toEqual(["resume"]);
+		expect(screen()).toEqual({ kind: "pause" });
 	});
 
 	it("Get ready's hold resumes at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "cornerPressed", tiltAvailable: true });
+		flow.getState().dispatch({ type: "cornerPressed" });
 		flow.getState().dispatch({ type: "readyHeld" });
 		expect(calls).toEqual(["resume"]);
 	});
 
-	it("retry floods, and plays in its colour only once the flood covers", () => {
-		const { flow, calls, publish, covers } = setup();
+	it("the pause's level button opens the bowl in the player's colour", () => {
+		const { flow, answers, publish, screen } = setup();
+		answers.playerColor = BLUE;
+		publish("PAUSED");
+		flow.getState().dispatch({ type: "levelPressed", from: "pause" });
+		expect(screen()).toEqual({ kind: "settle", color: BLUE });
+	});
+
+	it("the pause's speed button opens the speed view in the player's colour", () => {
+		const { flow, answers, publish, screen } = setup();
+		answers.playerColor = BLUE;
+		publish("PAUSED");
+		flow.getState().dispatch({ type: "speedPressed", from: "pause" });
+		expect(screen()).toEqual({ kind: "speed", color: BLUE });
+	});
+
+	it("retry floods in the player's colour, and plays in it only once the flood covers", () => {
+		const { flow, calls, answers, publish, covers } = setup();
+		answers.playerColor = BLUE;
 		publish("GAME_OVER");
-		flow.getState().dispatch({ type: "retryPressed", color: PINK, at: AT });
-		expect(calls).toEqual([`flood ${PINK} 10,20`]);
+		flow.getState().dispatch({ type: "retryPressed", at: AT });
+		expect(calls).toEqual([`flood ${BLUE} 10,20`]);
 		covers();
-		expect(calls).toEqual([`flood ${PINK} 10,20`, `play ${PINK}`]);
+		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
 	});
 
 	it("leaving the game over floods, and starts the kiosk only once the flood covers", () => {
@@ -129,17 +165,36 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "title" });
 	});
 
+	it("the title's level and speed buttons open in the colour the play dot showed", () => {
+		const { flow, screen } = setup();
+		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: BLUE });
+		expect(screen()).toEqual({ kind: "settle", color: BLUE });
+		flow.getState().dispatch({ type: "settleBacked" });
+		flow.getState().dispatch({ type: "speedPressed", from: "menu", color: BLUE });
+		expect(screen()).toEqual({ kind: "speed", color: BLUE });
+	});
+
 	it("PLAY with a level pose set floods, and plays only once the flood covers", () => {
 		const { flow, calls, covers } = setup();
-		flow.getState().dispatch({ type: "startPressed", color: PINK, hasZero: true, at: AT });
+		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
 		expect(calls).toEqual([`flood ${PINK} 10,20`]);
 		covers();
 		expect(calls).toEqual([`flood ${PINK} 10,20`, `play ${PINK}`]);
 	});
 
-	it("a settled bowl adopts the pose, then floods into play", () => {
-		const { flow, calls, screen, covers } = setup();
-		flow.getState().dispatch({ type: "startPressed", color: PINK, hasZero: false, at: AT });
+	it("starting straight into play floods into a run without the bowl, level pose or not", () => {
+		const { flow, calls, answers, screen, covers } = setup();
+		answers.levelPoseSet = false;
+		flow.getState().dispatch({ type: "startedStraight", color: BLUE, at: AT });
+		expect(screen()).toEqual({ kind: "title" });
+		covers();
+		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
+	});
+
+	it("PLAY with no level pose set opens the bowl; settling adopts the pose, then floods into play", () => {
+		const { flow, calls, answers, screen, covers } = setup();
+		answers.levelPoseSet = false;
+		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
 		expect(screen()).toEqual({ kind: "settle", color: PINK });
 		flow.getState().dispatch({ type: "settled", zero: ZERO, facingDown: true, at: AT });
 		covers();
@@ -162,9 +217,9 @@ describe("flow store", () => {
 	it("ignores taps while a flood is on its way", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("GAME_OVER");
-		flow.getState().dispatch({ type: "retryPressed", color: PINK, at: AT });
+		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		flow.getState().dispatch({ type: "leavePressed", at: AT });
-		flow.getState().dispatch({ type: "retryPressed", color: PINK, at: AT });
+		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		expect(calls).toEqual([`flood ${PINK} 10,20`]);
 		expect(screen()).toEqual({ kind: "gameOver" });
 	});
@@ -172,7 +227,7 @@ describe("flow store", () => {
 	it("follows the game's phase while a flood is on its way", () => {
 		const { flow, publish, screen, covers } = setup();
 		publish("GAME_OVER");
-		flow.getState().dispatch({ type: "retryPressed", color: PINK, at: AT });
+		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		publish("RUNNING");
 		expect(screen()).toEqual({ kind: "hud" });
 		covers();
