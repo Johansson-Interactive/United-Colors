@@ -26,7 +26,7 @@
 		"doctor:react": "CI=true react-doctor . --blocking warning --no-score",
 		"doctor:expo": "EXPO_NO_TELEMETRY=1 expo-doctor",
 		"lint:unused": "knip",
-		"doctors": "pnpm run doctor:react && pnpm run doctor:expo",
+		"doctors": "scripts/quiet.sh react-doctor pnpm run doctor:react && scripts/quiet.sh expo-doctor pnpm run doctor:expo",
 		"verify": "biome ci . && pnpm run typecheck && pnpm run test && pnpm run lint:unused && pnpm run doctors",
 		"preflight": "biome check --write . && pnpm run verify",
 		"test": "vitest run --config vitest.config.mts",
