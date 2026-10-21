@@ -92,9 +92,9 @@ export type FlowAction =
 	| { kind: "pause" }
 	| { kind: "resume" }
 	| { kind: "kiosk" }
-	/** Stop the kiosk and hide it, so only the bowl over it moves */
+	/** Stop the kiosk, so only the bowl over it moves (the stage look hides it) */
 	| { kind: "haltKiosk" }
-	/** Show the kiosk again and run it on from where it stopped */
+	/** Run the kiosk on from where it stopped */
 	| { kind: "runKiosk" };
 
 export interface FlowStep {

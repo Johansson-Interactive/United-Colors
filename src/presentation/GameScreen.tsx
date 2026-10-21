@@ -1,7 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import { useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
@@ -135,16 +134,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
 	}, [session, corners]);
 
-	// The stage fades out while the kiosk is halted under the settle bowl or the speed view
-	const stageOpacity = useSharedValue(1);
-
 	// What a step does to the game, straight away or once its flood covers the screen
 	const perform = useCallback(
 		(action: FlowAction) => {
 			switch (action.kind) {
 				case "play":
-					// A game started from the bowl shows at once as its flood lifts
-					stageOpacity.set(1);
 					session.start(action.color);
 					detectGyro();
 					return;
@@ -159,15 +153,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					return;
 				case "haltKiosk":
 					session.halt();
-					stageOpacity.set(withTiming(0, { duration: 300 }));
 					return;
 				case "runKiosk":
-					stageOpacity.set(withTiming(1, { duration: 400 }));
 					session.run();
 					return;
 			}
 		},
-		[session, detectGyro, stageOpacity],
+		[session, detectGyro],
 	);
 
 	const { screen, dispatch } = useScreenFlow(store, {
@@ -176,9 +168,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
 	});
 
-	// The frost and the edge wash follow the screen, shake and bursts react to the store; the
-	// flood is the transition
-	const { frost, frostWindow, accent } = useStageLook({ screen, phase, playerColor });
+	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
+	// the store; the flood is the transition
+	const { frost, frostWindow, accent, stageOpacity } = useStageLook({ screen, phase, playerColor });
 	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
