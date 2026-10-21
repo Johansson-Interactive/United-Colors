@@ -17,7 +17,7 @@ import { bindAppLeave } from "../application/useCases/BindAppLeave";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
-import { CornerMenusProvider } from "./components/CornerMenusProvider";
+import { CornerMenusProvider, type MenuOpening } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
@@ -172,12 +172,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		(at: PressPoint, color: string) => dispatch({ type: "startPressed", color, at }),
 		[dispatch],
 	);
-	const handleCalibratePress = useCallback(
-		() => dispatch({ type: "levelPressed", from: "pause" }),
-		[dispatch],
-	);
-	const handleMenuCalibratePress = useCallback(
-		(color: string) => dispatch({ type: "levelPressed", from: "menu", color }),
+	const handleLevelPress = useCallback(
+		(opening: MenuOpening) => dispatch({ type: "levelPressed", ...opening }),
 		[dispatch],
 	);
 	const handleSettled = useCallback(
@@ -193,11 +189,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		dispatch({ type: "readyHeld" });
 	}, [handleSnap, dispatch]);
 	const handleSpeedPress = useCallback(
-		() => dispatch({ type: "speedPressed", from: "pause" }),
-		[dispatch],
-	);
-	const handleMenuSpeedPress = useCallback(
-		(color: string) => dispatch({ type: "speedPressed", from: "menu", color }),
+		(opening: MenuOpening) => dispatch({ type: "speedPressed", ...opening }),
 		[dispatch],
 	);
 	const handleSpeedBack = useCallback(() => dispatch({ type: "speedBacked" }), [dispatch]);
@@ -245,26 +237,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
 						{/* The title's and the pause's corner menus read and change their settings here */}
-						<CornerMenusProvider store={store} storage={storage}>
+						<CornerMenusProvider
+							store={store}
+							storage={storage}
+							sensitivity={sensitivity}
+							onLevel={handleLevelPress}
+							onSpeed={handleSpeedPress}
+						>
 							{screen.kind === "title" && (
 								<KioskOverlay
 									highScore={highScore}
 									onStart={handleStartPress}
-									onCalibrate={handleMenuCalibratePress}
 									sensitivity={sensitivity}
-									onSpeed={handleMenuSpeedPress}
 									versionTag={versionTag}
 								/>
 							)}
 
 							{screen.kind === "pause" && (
-								<PauseOverlay
-									color={playerColor}
-									onQuit={handleLeavePress}
-									onCalibrate={handleCalibratePress}
-									sensitivity={sensitivity}
-									onSpeed={handleSpeedPress}
-								/>
+								<PauseOverlay color={playerColor} onQuit={handleLeavePress} />
 							)}
 						</CornerMenusProvider>
 
