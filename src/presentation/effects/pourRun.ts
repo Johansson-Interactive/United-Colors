@@ -195,7 +195,11 @@ export interface PourPlan {
 	bonusBody: PlannedBody | null;
 	/** The tally's count from what the catches were worth alone up to the score, by tick */
 	counts: readonly PourCount[];
-	/** The drop once the bonus has poured in: the run's score, in its final colour */
+	/**
+	 * The drop once settled, the bonus poured in: the run's score, in its final colour, never
+	 * smaller than holds its figures readably (see settledRadius). The drop swells to it as it
+	 * settles where the bonus pours in or the last catch's drop is smaller.
+	 */
 	settledDrop: PourDrop;
 	/** The run time (s), which the clock reaches at the last landing */
 	seconds: number;
@@ -203,7 +207,10 @@ export interface PourPlan {
 	endMs: number;
 	/** When the drop comes to rest, POUR_SETTLE_MS after that, and the bonus lands (ms) */
 	settleMs: number;
-	/** When the pour is settled: POUR_RISE_MS after the bonus lands, or at settleMs without one */
+	/**
+	 * When the pour is settled: POUR_RISE_MS after settleMs where the drop swells as it settles
+	 * (see settledDrop), otherwise at settleMs
+	 */
 	restMs: number;
 	/**
 	 * The settled amber layer's level, in radii below the drop's centre: where it cuts off the
@@ -500,9 +507,9 @@ function wholeDropPitch(
  * `pitch`, the bonus under the level and the tally over it. The level sits at the bonus's share
  * of the drop, raised where needed to hold the bonus figure at POUR_MIN_PITCH, and lowered where
  * the tally would come out smaller than the bonus figure, to where the two match: the total
- * never reads as less than its part. A drop too small to hold the tally at POUR_MIN_PITCH keeps
- * it at `pitch`, just clear of the amber and out of the drop's top. A bare bonus figure: the
- * bonus is seen pouring into the tally, so there is no `+` to add.
+ * never reads as less than its part. A bare bonus figure: the bonus is seen pouring into the
+ * tally, so there is no `+` to add. Either figure comes out under POUR_MIN_PITCH in a drop too
+ * small to hold it readably, which settledRadius never settles at.
  */
 function settledOf(bonus: number, score: number, radius: number, pitch: number) {
 	const bonusLayout = layoutDotMatrix(String(bonus));
@@ -525,13 +532,8 @@ function settledOf(bonus: number, score: number, radius: number, pitch: number) 
 		}
 		surface = hi;
 	}
-	let tally = tallyAt(surface);
-	let lift = -(tally.top + (tallyLayout.rows * tally.pitch) / 2);
-	if (tally.pitch < POUR_MIN_PITCH) {
-		surface = share;
-		tally = { pitch, top: 0 };
-		lift = surface - AMBER_CLEAR - (tallyLayout.rows * pitch) / 2;
-	}
+	const tally = tallyAt(surface);
+	const lift = -(tally.top + (tallyLayout.rows * tally.pitch) / 2);
 	const fittedBonus = bonusAt(surface);
 	const dots = bonusLayout.dots.map(({ col, row }) => ({
 		x: (col + 0.5 - bonusLayout.cols / 2) * fittedBonus.pitch,
@@ -543,6 +545,40 @@ function settledOf(bonus: number, score: number, radius: number, pitch: number) 
 		tallyPitch: tally.pitch,
 		lift,
 	};
+}
+
+/**
+ * Whether a settled drop of `radius` holds its figures at POUR_MIN_PITCH or more: the tally in
+ * the whole drop, or with a combo bonus, the tally over the amber and the bonus figure in it
+ */
+function holdsFigures(bonus: number, score: number, radius: number, pitch: number): boolean {
+	// A fit's search lands a hair under the size that just fits
+	const readable = (fitted: number) => fitted >= POUR_MIN_PITCH - 1e-6;
+	if (bonus === 0) {
+		const { cols, rows } = layoutDotMatrix(String(score));
+		return readable(fitUnder(radius, Number.NEGATIVE_INFINITY, cols, rows, pitch).pitch);
+	}
+	const settled = settledOf(bonus, score, radius, pitch);
+	return readable(settled.tallyPitch) && readable(settled.label.pitch);
+}
+
+/**
+ * The settled drop's radius: the score's own (see radiusOf), or where that is too small to hold
+ * its figures readably (see holdsFigures), the smallest that does. This bends "the drop's area
+ * follows the tally" for tiny scores only, once settled: the catches still land at their worth.
+ * An empty run has no figure to hold.
+ */
+function settledRadius(bonus: number, score: number, pitch: number): number {
+	const radius = radiusOf(score);
+	if (score === 0 || holdsFigures(bonus, score, radius, pitch)) return radius;
+	let lo = radius;
+	let hi = POUR_MAX_RADIUS;
+	for (let i = 0; i < 40; i++) {
+		const mid = (lo + hi) / 2;
+		if (holdsFigures(bonus, score, mid, pitch)) hi = mid;
+		else lo = mid;
+	}
+	return hi;
 }
 
 /** Work out a run's pour */
@@ -561,8 +597,10 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const poured = drops[drops.length - 1];
 	const bonus = comboBonus(record);
 	const score = poured.tally + bonus;
-	const radius = radiusOf(score);
+	const radius = settledRadius(bonus, score, pitch);
 	const settledDrop: PourDrop = { radius, color: poured.color, tally: score };
+	// The drop swells as it settles when the bonus pours in, or to hold its tally readably
+	const swells = bonus > 0 || radius > poured.radius;
 	const amber = bonus > 0 ? settledOf(bonus, score, radius, pitch) : null;
 	const { cols, rows } = layoutDotMatrix(String(score));
 	const tallyCells = { cols, rows };
@@ -586,10 +624,12 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		seconds,
 		endMs,
 		settleMs,
-		restMs: amber ? settleMs + POUR_RISE_MS : settleMs,
+		restMs: swells ? settleMs + POUR_RISE_MS : settleMs,
 		level: amber?.level ?? 1,
 		pitch,
-		tallyPitch: amber?.tallyPitch ?? wholeDropPitch({ settledDrop, tallyCells, pitch }, radius),
+		tallyPitch: amber
+			? Math.max(POUR_MIN_PITCH, amber.tallyPitch)
+			: wholeDropPitch({ settledDrop, tallyCells, pitch }, radius),
 		lift: amber?.lift ?? 0,
 		tallyCells,
 		bonusLabel: amber?.label ?? null,
@@ -659,6 +699,18 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	let lift = 0;
 	let tallyPitch = wholeDropPitch(plan, drop.radius);
 	let swell = 0;
+	if (plan.restMs > plan.settleMs && ms >= plan.settleMs) {
+		// The drop swells to its settled size, easing in and out, its area growing evenly, and
+		// the tally with it
+		const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
+		const risen = t * t * (3 - 2 * t);
+		const poured = plan.drops[plan.drops.length - 1];
+		const from = poured.radius ** 2;
+		const radius = Math.sqrt(from + (plan.settledDrop.radius ** 2 - from) * risen);
+		swell = radius - poured.radius;
+		drop = { radius, color: plan.settledDrop.color, tally: poured.tally };
+		tallyPitch = wholeDropPitch(plan, radius);
+	}
 	if (bonusBody && ms >= plan.settleMs) {
 		// The bonus pours in: the amber's surface and the tally above it rise together, easing
 		// in and out, while the drop swells, the tally ticks up to the score and shrinks into
@@ -667,9 +719,8 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		const risen = t * t * (3 - 2 * t);
 		const poured = plan.drops[plan.drops.length - 1];
 		const count = plan.counts[Math.round(risen * (plan.counts.length - 1))];
-		const radius = radiusOf(poured.tally + plan.bonus * risen);
-		swell = radius - poured.radius;
-		drop = { radius, color: plan.settledDrop.color, tally: count.tally };
+		const { radius } = drop;
+		drop = { radius, color: drop.color, tally: count.tally };
 		lift = plan.lift * risen;
 		const from = wholeDropPitch(plan, poured.radius);
 		tallyPitch = from + (plan.tallyPitch - from) * risen;
