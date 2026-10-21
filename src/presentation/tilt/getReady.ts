@@ -8,10 +8,12 @@
  * play dot can't start play.
  *
  * The hold (stepGetReady) is the rule; the roll, the window and the rim are what shows it.
+ * advanceGetReady puts them together into one step a frame, which is all the overlay runs.
  */
 
 import type { Disc } from "../../application/sceneRecord";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
+import type { FrostWindow } from "../effects/frost";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
@@ -233,4 +235,114 @@ export function rimOpacity(progress: number, seated: number, pulse: number): num
 	const away = (0.35 + 0.5 * pulse) * (1 - seated);
 	const home = 0.75 * seated;
 	return (away + home) * (1 - smoothstep((progress - RIM_GONE_FROM) / (1 - RIM_GONE_FROM)));
+}
+
+// ---- The frame: one step of all of the above, as the overlay runs it each frame ----
+
+/** Everything Get ready carries from one frame to the next */
+export interface GetReadyFrameState {
+	hold: GetReadyState;
+	/** The rolling dot; null until the first frame sets it on the seat */
+	roll: Roll | null;
+	/**
+	 * Whether the caption is up: down while the hold grows, back as soon as it breaks. Kept
+	 * rather than read off the last two holds, so it stays down once fired.
+	 */
+	caption: boolean;
+}
+
+/** Get ready as it opens */
+export const OPEN_GET_READY: GetReadyFrameState = {
+	hold: INITIAL_GET_READY,
+	roll: null,
+	caption: true,
+};
+
+/**
+ * With no player in the frozen scene (it should always have one here) Get ready still runs, on
+ * a seat of no size in the corner, but nothing is drawn
+ */
+const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
+
+/** This frame's inputs: where the seat is, the tilt and the time since the last frame */
+export interface GetReadyInputs {
+	/** The dot at rest: where the player dot froze, at its radius; null with no player */
+	seat: Disc | null;
+	/** Radians, relative to the level pose */
+	tilt: Point;
+	dt: number;
+	field: FieldSize;
+	sensitivity: number;
+}
+
+/** What Get ready draws and reports this frame */
+export interface GetReadyFrame {
+	/** Whether the seat, the rim and the dot are drawn at all: not without a player */
+	drawn: boolean;
+	/** The rolling dot's centre */
+	dot: Point;
+	/** The clear window in the frost */
+	window: FrostWindow;
+	/** How strongly the rim on the window's edge shows, 0..1 */
+	rim: number;
+	/** Whether the caption is up (the overlay fades it on the edges) */
+	caption: boolean;
+	/** True on the one frame Get ready fired on: play resumes */
+	fired: boolean;
+}
+
+/**
+ * What a state draws at the seat. The window breathes by the roll the state holds, which is
+ * this frame's stepped roll, the same one the dot and the rim are drawn from, so the window,
+ * its rim and the dot agree on how far from home the dot is. (The overlay once breathed the
+ * window by the roll before the step, a frame behind the rim; nothing called for that.)
+ */
+function drawFrame(
+	state: GetReadyFrameState,
+	player: Disc | null,
+	field: FieldSize,
+	fired: boolean,
+): GetReadyFrame {
+	"worklet";
+	const seat = player ?? NO_SEAT;
+	const { hold, caption } = state;
+	const roll = state.roll ?? rollAt(seat);
+	const home = seated(roll, seat);
+	const pulse = seatPulse(hold.elapsedMs);
+	return {
+		drawn: player !== null,
+		dot: { x: roll.x, y: roll.y },
+		window: {
+			x: seat.x,
+			y: seat.y,
+			radius: windowRadius(
+				hold.progress,
+				seat.radius,
+				windowReach(seat, field),
+				pulse * (1 - home),
+			),
+		},
+		rim: rimOpacity(hold.progress, home, pulse),
+		caption,
+		fired,
+	};
+}
+
+/**
+ * Advance Get ready one frame: the roll first, then the hold. Once fired it is inert: the
+ * state comes back unchanged and the frame leaves the window open where it was, so the frost
+ * can lift behind it unseen, and it never fires again.
+ */
+export function advanceGetReady(
+	state: GetReadyFrameState,
+	inputs: GetReadyInputs,
+): { state: GetReadyFrameState; frame: GetReadyFrame } {
+	"worklet";
+	const { tilt, dt, field, sensitivity } = inputs;
+	if (state.hold.fired) return { state, frame: drawFrame(state, inputs.seat, field, false) };
+	const seat = inputs.seat ?? NO_SEAT;
+	const roll = stepRoll(state.roll ?? rollAt(seat), rollTarget(seat, tilt, sensitivity, field), dt);
+	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt);
+	const next = { hold, roll, caption: !isHolding(state.hold, hold) };
+	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired) };
 }

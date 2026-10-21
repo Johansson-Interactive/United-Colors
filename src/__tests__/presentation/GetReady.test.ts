@@ -2,10 +2,14 @@ import { cornerExtent, holdInside } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import {
 	ARMING_MS,
+	advanceGetReady,
+	type GetReadyFrame,
+	type GetReadyFrameState,
 	type GetReadyState,
 	HOLD_MS,
 	INITIAL_GET_READY,
 	isHolding,
+	OPEN_GET_READY,
 	PULSE_MS,
 	type Roll,
 	rimOpacity,
@@ -248,5 +252,143 @@ describe("get-ready caption", () => {
 		expect(isHolding(...frame(held, 0.3))).toBe(false);
 		const drained = run(held, 0.3, 0, 2000);
 		expect(isHolding(...frame(drained, 0.3))).toBe(false);
+	});
+});
+
+describe("get-ready frame step", () => {
+	const field = { width: 400, height: 800, cornerExtent: 0 };
+	const seat = { x: 150, y: 300, radius: 20 };
+	const LEVEL = { x: 0, y: 0 };
+	/** Frames of 16 ms that fit wholly inside the arming delay; the next straddles its end and counts */
+	const ARMING_FRAMES = 12;
+
+	/** Frames of `dt` ms for `ms`, at one tilt, as the overlay's frame callback would step them */
+	function play(
+		from: GetReadyFrameState,
+		tilt: { x: number; y: number },
+		ms: number,
+		dt = 16,
+	): { state: GetReadyFrameState; frames: GetReadyFrame[] } {
+		let state = from;
+		const frames: GetReadyFrame[] = [];
+		for (let t = 0; t < ms; t += dt) {
+			const next = advanceGetReady(state, { seat, tilt, dt, field, sensitivity: 1 });
+			state = next.state;
+			frames.push(next.frame);
+		}
+		return { state, frames };
+	}
+
+	it("fires on exactly one frame, and is inert after it", () => {
+		const { state, frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS * 2);
+		const firing = frames.filter((f) => f.fired);
+		expect(firing).toHaveLength(1);
+		const at = frames.indexOf(firing[0]);
+		const open = { x: seat.x, y: seat.y, radius: windowReach(seat, field) };
+		expect(firing[0].window).toEqual(open);
+		for (const after of frames.slice(at + 1)) {
+			expect(after.fired).toBe(false);
+			expect(after.window).toEqual(open);
+		}
+		const tipped = advanceGetReady(state, {
+			seat,
+			tilt: { x: 0.5, y: 0.5 },
+			dt: 16,
+			field,
+			sensitivity: 1,
+		});
+		expect(tipped.state).toBe(state);
+		expect(tipped.frame.fired).toBe(false);
+		expect(tipped.frame.window).toEqual(open);
+	});
+
+	it("hides the caption on the frame the hold starts growing, without flicker as it holds", () => {
+		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
+		expect(frames.slice(0, ARMING_FRAMES).every((f) => f.caption)).toBe(true);
+		expect(frames.slice(ARMING_FRAMES).every((f) => !f.caption)).toBe(true);
+	});
+
+	it("shows the caption on the frame the hold breaks, and keeps it while off level", () => {
+		const held = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2).state;
+		const { frames } = play(held, { x: 0.3, y: 0 }, 2000);
+		expect(frames.every((f) => f.caption)).toBe(true);
+	});
+
+	it("counts no hold during the arming delay: the window rests at the seat", () => {
+		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_FRAMES * 16);
+		expect(frames).toHaveLength(ARMING_FRAMES);
+		const rest = frames[0].window.radius;
+		expect(rest).toBeLessThan(seat.radius * 2);
+		expect(frames.every((f) => f.window.radius === rest && !f.fired)).toBe(true);
+	});
+
+	it("grows the window with the hold and shrinks it when the hold breaks", () => {
+		const { state, frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
+		const held = frames.slice(ARMING_FRAMES).map((f) => f.window.radius);
+		for (let i = 1; i < held.length; i++) expect(held[i]).toBeGreaterThan(held[i - 1]);
+		const broken = play(state, { x: 0.3, y: 0 }, 160).frames.map((f) => f.window.radius);
+		expect(broken[0]).toBeLessThan(held[held.length - 1]);
+		for (let i = 1; i < broken.length; i++) expect(broken[i]).toBeLessThan(broken[i - 1]);
+	});
+
+	it("rolls the dot off the seat with the tilt and back home when level", () => {
+		const first = play(OPEN_GET_READY, LEVEL, 16).frames[0];
+		expect(first.dot).toEqual({ x: seat.x, y: seat.y });
+		const away = play(OPEN_GET_READY, { x: 0.2, y: 0 }, 1000);
+		expect(away.frames[away.frames.length - 1].dot.x).toBeCloseTo(seat.x + 30, 0);
+		const home = play(away.state, LEVEL, 1000).frames;
+		expect(home[home.length - 1].dot.x).toBeCloseTo(seat.x, 0);
+	});
+
+	it("breathes the window by this frame's roll, not the last frame's", () => {
+		// On the seat at the top of a pulse, flung off it hard enough to leave home in one frame
+		const flung: GetReadyFrameState = {
+			...OPEN_GET_READY,
+			hold: { ...INITIAL_GET_READY, elapsedMs: PULSE_MS / 2 - 16 },
+			roll: { x: seat.x, y: seat.y, vx: 3000, vy: 0 },
+		};
+		const reach = windowReach(seat, field);
+		const { frames } = play(flung, { x: 0.3, y: 0 }, 16);
+		expect(frames[0].dot.x - seat.x).toBeGreaterThan(seat.radius * 1.5);
+		// Away from home the window breathes in full; by the last frame's roll it would rest
+		expect(frames[0].window.radius).toBeCloseTo(windowRadius(0, seat.radius, reach, 1), 9);
+		expect(frames[0].window.radius).toBeGreaterThan(windowRadius(0, seat.radius, reach, 0));
+	});
+
+	it("fades the rim out as the thaw passes the walls, gone by the firing frame", () => {
+		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS * 2);
+		const at = frames.findIndex((f) => f.fired);
+		const rims = frames.slice(0, at + 1).map((f) => f.rim);
+		expect(rims[0]).toBeGreaterThan(0.5);
+		for (let i = 1; i < rims.length; i++) expect(rims[i]).toBeLessThanOrEqual(rims[i - 1]);
+		expect(rims[Math.floor(rims.length / 2)]).toBe(rims[0]);
+		expect(rims[at]).toBe(0);
+		expect(frames.slice(at).every((f) => f.rim === 0)).toBe(true);
+	});
+
+	it("beats the rim with the pulse while the dot is away from home", () => {
+		const away = play(OPEN_GET_READY, { x: 0.5, y: 0 }, 2000).frames.map((f) => f.rim);
+		expect(Math.max(...away) - Math.min(...away)).toBeGreaterThan(0.3);
+	});
+
+	it("draws the seat, the dot and the rim when the frozen scene has a player", () => {
+		expect(play(OPEN_GET_READY, LEVEL, 16).frames[0].drawn).toBe(true);
+	});
+
+	it("draws nothing when the frozen scene has no player", () => {
+		const { frame } = advanceGetReady(OPEN_GET_READY, {
+			seat: null,
+			tilt: LEVEL,
+			dt: 16,
+			field,
+			sensitivity: 1,
+		});
+		expect(frame.drawn).toBe(false);
+	});
+
+	it("keeps the caption hidden once fired", () => {
+		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS * 2);
+		const at = frames.findIndex((f) => f.fired);
+		expect(frames.slice(at).every((f) => !f.caption)).toBe(true);
 	});
 });
