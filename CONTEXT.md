@@ -55,8 +55,16 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Get ready**:
-The step between the pause and play, entered from the play dot: the player holds their dot's outline on the dot, at their level pose, until the ring around the dot closes on it, and play resumes that instant. The game stays paused throughout. On a device without tilt, the play dot resumes play directly.
+The step between the pause and play, entered from the play dot: the field stays frosted, the seat is the one clear window in the frost, and a solid copy of the player dot rolls off the seat with the tilt. The player rolls it home and holds their level pose; the window thaws outward from the seat, and play resumes the instant the whole field is clear. The game stays paused throughout. On a device without tilt, the play dot resumes play directly.
 _Avoid_: calibrate, level gate, resume screen
+
+**Seat**:
+Where the player dot froze when the run paused, shown in Get ready as the dot's dimple under the clear window. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
+_Avoid_: socket, target, home position
+
+**Window**:
+The circle of the frosted field left sharp and full colour in Get ready. It rests a little clear of the seat, its rim pulsing in the player's colour like a point dot while the dot is away, and thaws outward with the hold until the field is clear.
+_Avoid_: hole, spotlight, clearing
 
 **Run record**:
 What a run did, as the game keeps it for its game over: its catches in order (each with the tick it landed on, what it paid, its combo step, its colour and whether it was a point dot) and its run time. It is never stored, and it is not the personal best.

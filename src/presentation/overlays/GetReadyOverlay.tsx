@@ -1,6 +1,6 @@
-import { Canvas, Circle, Group, vec } from "@shopify/react-native-skia";
+import { BlurMask, Canvas, Circle, Group, vec } from "@shopify/react-native-skia";
 import type React from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
 	FadeIn,
@@ -13,59 +13,92 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { playerDisc } from "../../application/sceneRecord";
+import { playerDisc, type StretchedDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
+import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
 import { SCORE_CENTRE_Y, SCORE_PITCH } from "../effects/scoreTally";
 import { useStageBox } from "../layout/StageFrame";
+import { LIQUID_WOBBLE } from "../liquidShader";
+import { glass, INK, shade } from "../theme/theme";
 import {
 	INITIAL_GET_READY,
 	isHolding,
-	outlineCentre,
-	ringRadius,
+	type Roll,
+	rimOpacity,
+	rollAt,
+	rollTarget,
+	seated,
+	seatPulse,
 	stepGetReady,
+	stepRoll,
+	windowRadius,
+	windowReach,
 } from "../tilt/getReady";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface GetReadyOverlayProps {
-	/** The frozen scene, for where the player dot is drawn and how big */
+	/** The frozen scene, for where the player dot froze (the seat) and how big it is */
 	scene: SharedValue<Float32Array>;
-	/** The player's colour: the ring, the outline and the caption wear it */
+	/** The player's colour: the rolling dot, the rim and the caption wear it */
 	color: string;
-	/** The outline moves this many times its usual distance per tilt, like the player dot */
+	/** The rolling dot moves this many times its usual distance per tilt, like the player dot */
 	sensitivity: number;
-	/** How the stage's corners are rounded, so the outline slides round them (null: square) */
+	/** How the stage's corners are rounded, so the dot rolls round them (null: square) */
 	corners: Corners | null;
-	/** Fired once, the moment the ring closes on the dot */
+	/** The clear window in the frost, which this keeps on the seat and widens with the hold */
+	frostWindow: SharedValue<FrostWindow>;
+	/** Fired once, the moment the thaw clears the field */
 	onReady: () => void;
 }
 
-const CAPTION = "HOLD LEVEL";
+const CAPTION = "ROLL IT HOME";
 /** The caption's pitch where it fits, the same as the PAUSED it stands in for */
 const CAPTION_PITCH = 8;
 /** Room the caption keeps from the stage's sides */
 const CAPTION_MARGIN = 48;
 /** The caption's top: below the score waiting at the HUD's spot (see scoreSink.ts), with room */
 const CAPTION_TOP = SCORE_CENTRE_Y + SCORE_PITCH * 3.5 + 16;
-const STROKE = 2;
 const CAPTION_FADE_MS = 250;
+const RIM_STROKE = 2;
+/** The rim's soft glow: a wider, blurred stroke under it */
+const RIM_GLOW_STROKE = 6;
+const RIM_GLOW_BLUR = 6;
+/** The glare on the rolling dot, as fractions of its radius; the light is frozen with the field */
+const GLARE_OFFSET = -0.28;
+const GLARE_RADIUS = 0.4;
+/** The shade the rolling dot casts once off the seat, and how far it trails downhill */
+const SHADE_MAX = 0.35;
+const SHADE_FULL_AT = 40;
+const SHADE_TRAIL = 8;
+
+/** With no player in the scene (it should always have one here) nothing is drawn */
+const NO_SEAT: StretchedDisc = { x: 0, y: 0, radius: 0, stretchX: 0, stretchY: 0 };
+/** The cover over the frozen player reaches past its ripples (see LIQUID_WOBBLE) and its edge */
+const COVER_SCALE = 1 + LIQUID_WOBBLE;
+const COVER_MARGIN = 0.5;
 
 /**
- * Get ready: over the unfrosted frozen field, a ring sits around the player dot and a hollow
- * outline of the dot follows the tilt. Holding the outline on the dot contracts the ring onto
- * it, and the moment it closes play resumes. One caption says what to do; it fades while the
- * player holds and comes back when the hold breaks. Taps go through to nothing. The paused
- * score waits dimmed at the top (see PausedScore), so the caption sits under it.
+ * Get ready: the field stays frosted from the pause, and the seat, where the player dot froze,
+ * is the one clear window in it, its rim pulsing in the player's colour like a point dot. A
+ * solid copy of the dot rolls off the seat with the tilt, with a little weight to it. Rolling
+ * it home and holding level thaws the frost outward from the seat, and the moment the field
+ * is clear play resumes; the window is left open, so the frost lifts behind it unseen. One
+ * caption says what to do; it fades while the player holds and comes back when the hold
+ * breaks. Taps go through to nothing. The paused score waits dimmed at the top (see
+ * PausedScore), so the caption sits under it.
  *
- * The rules live in the get-ready stepper, run here on the UI thread where the tilt is.
+ * The rules live in the get-ready stepper, run here on the UI thread where the tilt is. The
+ * window itself is cut by the game canvas, which this drives through `frostWindow`.
  */
 export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	scene,
 	color,
 	sensitivity,
 	corners,
+	frostWindow,
 	onReady,
 }) => {
 	const tilt = useTilt();
@@ -83,12 +116,28 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	// The caption's opacity: up until the hold grows, back as soon as it breaks
 	const caption = useSharedValue(1);
 
+	// The scene is frozen, so the seat is where the player is drawn in it throughout
+	const seat = useDerivedValue(() => playerDisc(scene.get()) ?? NO_SEAT);
+	const roll = useSharedValue<Roll | null>(null);
+
 	useFrameCallback((info) => {
+		const dt = info.timeSincePreviousFrame ?? 16;
+		const at = seat.get();
+		const tiltNow = { x: tilt.x.get(), y: tilt.y.get() };
+		const rolling = roll.get() ?? rollAt(at);
+		roll.set(stepRoll(rolling, rollTarget(at, tiltNow, sensitivity, field), dt));
+
 		const prev = state.get();
-		const next = stepGetReady(prev, tilt.x.get(), tilt.y.get(), info.timeSincePreviousFrame ?? 16);
-		// Once fired the stepper answers with the same state, so this fires once
+		const next = stepGetReady(prev, tiltNow.x, tiltNow.y, dt);
+		// Once fired the stepper answers with the same state, so what follows runs once
 		if (next === prev) return;
 		state.set(next);
+		const breath = seatPulse(next.elapsedMs) * (1 - seated(rolling, at));
+		frostWindow.set({
+			x: at.x,
+			y: at.y,
+			radius: windowRadius(next.progress, at.radius, windowReach(at, field), breath),
+		});
 		const nowHolding = isHolding(prev, next);
 		if (nowHolding !== holding.get()) {
 			holding.set(nowHolding);
@@ -97,26 +146,56 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		if (next.fired) scheduleOnRN(onReady);
 	});
 
-	// With no player in the scene (it should always have one here) nothing is drawn
-	const disc = useDerivedValue(() => playerDisc(scene.get()));
-	const shown = useDerivedValue(() => (disc.get() ? 1 : 0));
+	// Closed again when Get ready closes without firing (the pause dot, leaving the app), so the
+	// pause screen is frosted all over; fired, it is left open for the frost to lift behind it
+	useEffect(
+		() => () => {
+			if (!state.get().fired) frostWindow.set(NO_FROST_WINDOW);
+		},
+		[state, frostWindow],
+	);
+
+	const shown = useDerivedValue(() => (seat.get().radius > 0 ? 1 : 0));
+	const seatCentre = useDerivedValue(() => vec(seat.get().x, seat.get().y));
+	const seatRadius = useDerivedValue(() => seat.get().radius);
+	// The frozen player is stretched along its jelly stretch, so its cover is too (see drawScene)
+	const coverRadius = useDerivedValue(() => seat.get().radius * COVER_SCALE + COVER_MARGIN);
+	const coverTransform = useDerivedValue(() => {
+		const { stretchX, stretchY } = seat.get();
+		const k = 1 + Math.hypot(stretchX, stretchY);
+		const angle = Math.atan2(stretchY, stretchX);
+		return [{ rotate: angle }, { scaleX: k }, { scaleY: 1 / k }, { rotate: -angle }];
+	});
+	const rimRadius = useDerivedValue(() => frostWindow.get().radius);
+	const rim = useDerivedValue(() => {
+		const r = roll.get();
+		const s = state.get();
+		const home = r ? seated(r, seat.get()) : 1;
+		return rimOpacity(s.progress, home, seatPulse(s.elapsedMs));
+	});
+	const rimGlow = useDerivedValue(() => rim.get() * 0.4);
+
 	const dotCentre = useDerivedValue(() => {
-		const d = disc.get();
-		return d ? vec(d.x, d.y) : vec(0, 0);
+		const r = roll.get() ?? seat.get();
+		return vec(r.x, r.y);
 	});
-	const dotRadius = useDerivedValue(() => disc.get()?.radius ?? 0);
-	const ring = useDerivedValue(() => ringRadius(state.get().progress, dotRadius.get()));
-	const outline = useDerivedValue(() => {
-		const d = disc.get();
-		if (!d) return vec(0, 0);
-		const at = outlineCentre(
-			{ x: d.x, y: d.y, radius: d.radius + STROKE / 2 },
-			{ x: tilt.x.get(), y: tilt.y.get() },
-			sensitivity,
-			field,
-		);
-		return vec(at.x, at.y);
+	const shadeCentre = useDerivedValue(() => {
+		const r = roll.get() ?? seat.get();
+		return vec(r.x + tilt.x.get() * SHADE_TRAIL, r.y + tilt.y.get() * SHADE_TRAIL + 2);
 	});
+	const shadeOpacity = useDerivedValue(() => {
+		const r = roll.get();
+		const s = seat.get();
+		if (!r) return 0;
+		return SHADE_MAX * Math.min(1, Math.hypot(r.x - s.x, r.y - s.y) / SHADE_FULL_AT);
+	});
+	const glareCentre = useDerivedValue(() => {
+		const c = dotCentre.get();
+		const off = GLARE_OFFSET * seatRadius.get();
+		return vec(c.x + off, c.y + off);
+	});
+	const glareRadius = useDerivedValue(() => GLARE_RADIUS * seatRadius.get());
+	const glareBlur = useDerivedValue(() => 0.3 * seatRadius.get());
 
 	const captionPitch = useMemo(
 		() => pitchToFit(layoutDotMatrix(CAPTION), width - CAPTION_MARGIN, CAPTION_PITCH),
@@ -133,8 +212,39 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		>
 			<Canvas style={StyleSheet.absoluteFill}>
 				<Group opacity={shown}>
-					<Circle c={dotCentre} r={ring} color={color} style="stroke" strokeWidth={STROKE} />
-					<Circle c={outline} r={dotRadius} color={color} style="stroke" strokeWidth={STROKE} />
+					{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
+					<Group transform={coverTransform} origin={seatCentre}>
+						<Circle c={seatCentre} r={coverRadius} color={INK} />
+					</Group>
+					{/* The rim on the window's edge, glowing softly */}
+					<Group opacity={rimGlow}>
+						<Circle
+							c={seatCentre}
+							r={rimRadius}
+							color={color}
+							style="stroke"
+							strokeWidth={RIM_GLOW_STROKE}
+						>
+							<BlurMask blur={RIM_GLOW_BLUR} style="normal" />
+						</Circle>
+					</Group>
+					<Group opacity={rim}>
+						<Circle
+							c={seatCentre}
+							r={rimRadius}
+							color={color}
+							style="stroke"
+							strokeWidth={RIM_STROKE}
+						/>
+					</Group>
+					{/* The rolling dot: its shade, its body and its glare */}
+					<Group opacity={shadeOpacity}>
+						<Circle c={shadeCentre} r={seatRadius} color={shade(1)} />
+					</Group>
+					<Circle c={dotCentre} r={seatRadius} color={color} />
+					<Circle c={glareCentre} r={glareRadius} color={glass(0.5)}>
+						<BlurMask blur={glareBlur} style="normal" />
+					</Circle>
 				</Group>
 			</Canvas>
 			<View style={styles.top}>

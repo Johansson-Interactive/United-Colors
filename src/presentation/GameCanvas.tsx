@@ -7,8 +7,11 @@ import {
 	Picture,
 	RadialGradient,
 	Rect,
+	rect,
+	rrect,
 	Shader,
 	Skia,
+	type SkPicture,
 	type SkPoint,
 	vec,
 } from "@shopify/react-native-skia";
@@ -24,6 +27,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScreenSize } from "../domain/types";
 import type { Burst } from "./effects/burstFrames";
+import { FROST_MAX_DIM, type FrostWindow } from "./effects/frost";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
 import {
@@ -39,6 +43,7 @@ import {
 import {
 	drawBursts,
 	drawScene,
+	type LiquidBody,
 	liquidBody,
 	MERGE_EFFECT,
 	WALL_DROP_EFFECT,
@@ -52,8 +57,10 @@ interface GameCanvasProps {
 	/** All dots to draw this frame (player last) as flat records, written every frame by the session */
 	scene: SharedValue<Float32Array>;
 	onLayout: (size: ScreenSize) => void;
-	/** 0 = live; 1 = fully frosted (blurred) for pause / game over */
+	/** 0 = live; 1 = fully frosted (blurred and dimmed) for pause / game over */
 	frost: SharedValue<number>;
+	/** The circle of the frosted field left clear and sharp (see frost.ts); none at radius 0 */
+	frostWindow: SharedValue<FrostWindow>;
 	/** Colour washed into the room's edges (the player's colour while playing) */
 	accent: SharedValue<string>;
 	/** How much of the stage (the scene) shows over the room, 0..1 */
@@ -133,6 +140,39 @@ const WallDrop: React.FC<WallDropProps> = ({ drops, slot }) => {
 	);
 };
 
+interface SceneLayersProps {
+	below: SharedValue<SkPicture>;
+	drops: SharedValue<WallDropSlot[]>;
+	dropGlares: SharedValue<SkPicture>;
+	body: SharedValue<LiquidBody>;
+	above: SharedValue<SkPicture>;
+}
+
+/**
+ * The scene in layers with the wall drops and the liquid body between them (see
+ * sceneDrawer.ts): drawn once under the frost, and again sharp through the frost window
+ */
+const SceneLayers: React.FC<SceneLayersProps> = ({ below, drops, dropGlares, body, above }) => {
+	const bodyX = useDerivedValue(() => body.get().x);
+	const bodyY = useDerivedValue(() => body.get().y);
+	const bodyWidth = useDerivedValue(() => body.get().width);
+	const bodyHeight = useDerivedValue(() => body.get().height);
+	const bodyUniforms = useDerivedValue(() => body.get().uniforms);
+	return (
+		<>
+			<Picture picture={below} />
+			{DROP_SLOTS.map((slot) => (
+				<WallDrop key={slot} drops={drops} slot={slot} />
+			))}
+			<Picture picture={dropGlares} />
+			<Rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight}>
+				<Shader source={MERGE_EFFECT} uniforms={bodyUniforms} />
+			</Rect>
+			<Picture picture={above} />
+		</>
+	);
+};
+
 /** A TextureView on Android, an opaque Metal layer on iOS (see GameCanvas) */
 const OPAQUE_CANVAS = Platform.OS !== "android";
 
@@ -141,7 +181,9 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * frame from the `scene` shared value with no React reconciliation per frame: recorded
  * pictures, with the wall drops and the liquid body as shader nodes between them; how the dots
  * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
- * from follows the device tilt, and freezes while frosted.
+ * from follows the device tilt, and freezes while frosted. The frost is the scene blurred and
+ * dimmed; Get ready's window in it is the room and the scene drawn again, sharp, clipped to
+ * the window's circle, so the field is clear there and frosted around it.
  *
  * The canvas draws everything behind the interface itself, so it can be opaque. On iOS it is,
  * which saves a blend. On Android it stays a TextureView: an opaque canvas there is a
@@ -149,13 +191,14 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * which Android 12 can hold for about 5 ms when it arrives early in the period (see
  * docs/android-performance-2026-10-15.md). The stage fade and the shake are drawn here, and so
  * are the bursts over the scene: they shake and fade with it but stay sharp while it frosts.
- * The blur layer only exists while frosted and the fade cover only while fading, so a live
- * scene pays for neither.
+ * The blur layer, the dim and the window only exist while frosted and the fade cover only
+ * while fading, so a live scene pays for none of them.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
 	scene,
 	onLayout,
 	frost,
+	frostWindow,
 	accent,
 	stageOpacity,
 	shake,
@@ -168,6 +211,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
 	const [frosted, setFrosted] = useState(false);
+	const [windowOpen, setWindowOpen] = useState(false);
 	const [fading, setFading] = useState(false);
 
 	// Only track the light while live: frosted scenes stay still even as the phone moves
@@ -178,6 +222,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 			if (current.frozen) return;
 			lightX.set(current.x);
 			lightY.set(current.y);
+		},
+	);
+
+	useAnimatedReaction(
+		() => frostWindow.get().radius > 0,
+		(current, previous) => {
+			if (current !== previous) scheduleOnRN(setWindowOpen, current);
 		},
 	);
 
@@ -235,9 +286,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 		return colors;
 	});
 
-	// The scene in layers with the wall drops and the liquid body between them (see
-	// sceneDrawer.ts), each recorded every frame and so into the same recorder each time (see
-	// recordPicture.ts)
+	// The scene's layers (see SceneLayers), each recorded every frame and so into the same
+	// recorder each time (see recordPicture.ts)
 	const [belowRecorder] = useState(() => Skia.PictureRecorder());
 	const [dropsRecorder] = useState(() => Skia.PictureRecorder());
 	const [aboveRecorder] = useState(() => Skia.PictureRecorder());
@@ -263,13 +313,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	);
 	const drops = useDerivedValue(() => wallDrops(scene.get()));
 	const body = useDerivedValue(() => liquidBody(scene.get()));
-	const bodyX = useDerivedValue(() => body.get().x);
-	const bodyY = useDerivedValue(() => body.get().y);
-	const bodyWidth = useDerivedValue(() => body.get().width);
-	const bodyHeight = useDerivedValue(() => body.get().height);
-	const bodyUniforms = useDerivedValue(() => body.get().uniforms);
 
 	const frostSigma = useDerivedValue(() => frost.get() * FROST_MAX_SIGMA);
+	const frostDim = useDerivedValue(() => frost.get() * FROST_MAX_DIM);
+	const windowClip = useDerivedValue(() => {
+		const { x, y, radius } = frostWindow.get();
+		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
+	});
 	const shakeTransform = useDerivedValue(() => [{ translateX: shake.get() }]);
 	const cover = useDerivedValue(() => stageCover(stageOpacity.get()));
 
@@ -294,18 +344,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 							) : undefined
 						}
 					>
-						<Picture picture={below} />
-						{DROP_SLOTS.map((slot) => (
-							<WallDrop key={slot} drops={drops} slot={slot} />
-						))}
-						<Picture picture={dropGlares} />
-						<Rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight}>
-							<Shader source={MERGE_EFFECT} uniforms={bodyUniforms} />
-						</Rect>
-						<Picture picture={above} />
+						<SceneLayers
+							below={below}
+							drops={drops}
+							dropGlares={dropGlares}
+							body={body}
+							above={above}
+						/>
 					</Group>
 					<Picture picture={burstPicture} />
 				</Group>
+				{frosted ? <Fill color={INK} opacity={frostDim} /> : null}
+				{frosted && windowOpen ? (
+					<Group clip={windowClip}>
+						<Room width={width} height={height} light={light} wash={wash} />
+						<SceneLayers
+							below={below}
+							drops={drops}
+							dropGlares={dropGlares}
+							body={body}
+							above={above}
+						/>
+					</Group>
+				) : null}
 				{fading ? (
 					<Group layer={<Paint opacity={cover} />}>
 						<Room width={width} height={height} light={light} wash={wash} />

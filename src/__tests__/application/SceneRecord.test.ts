@@ -125,11 +125,13 @@ describe("the scene record", () => {
 		expect(findPlayer(new Float32Array(0))).toBe(-1);
 	});
 
-	it("gives where the player is drawn and how big, for what is drawn around it on screen", () => {
+	it("gives where the player is drawn, how big and how stretched, for what is drawn around it on screen", () => {
 		const scene = new Float32Array(sceneLength(2));
 		writeDot(scene, 0, "small", 10, 20, 4, 1);
 		writeDot(scene, 1, "player", 120, 340, 18, 2);
-		expect(playerDisc(scene)).toEqual({ x: 120, y: 340, radius: 18 });
+		expect(playerDisc(scene)).toEqual({ x: 120, y: 340, radius: 18, stretchX: 0, stretchY: 0 });
+		setStretch(scene, 1, 0.125, -0.25);
+		expect(playerDisc(scene)).toMatchObject({ stretchX: 0.125, stretchY: -0.25 });
 	});
 
 	it("gives no player disc for a scene without the player", () => {
