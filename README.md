@@ -31,6 +31,13 @@ On devices without motion sensors (simulators) every gyro-driven control falls b
 
 The icons and the splash mark are derived from the artwork in `assets/icon-source.png` by
 `scripts/derive-icons.py` (Python 3 + Pillow). Replace the artwork and rerun it to change them.
+The store graphics are composed from the game's own pieces by `scripts/store-assets.py` (Google
+Play, see `docs/google-play/store-listing.md`) and `scripts/app-store-assets.py` (App Store, see
+`docs/app-store/product-page.md`). The App Store captures come from the capture build: built with
+`EXPO_PUBLIC_CAPTURE=1`, the game is steered by the pilot (`src/application/pilot.ts`) instead of
+the phone, so an iPhone 16 Pro simulator plays real runs at the required 1206 × 2622 for the
+screenshots, and `xcrun simctl io booted recordVideo` can record one for the app preview, which
+`scripts/app-store-preview.sh` cuts to Apple's size.
 The music in `assets/music/` (menu loop, game loop, game-over stinger) is synthesised by
 `scripts/generate-music.py`, the catch sounds and the spawn cue in `assets/sounds/` by
 `scripts/generate-sounds.py` (Python 3 plus `afconvert` or `ffmpeg`; the spawn cue needs

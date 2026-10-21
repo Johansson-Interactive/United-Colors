@@ -52,6 +52,11 @@ export class GameSession {
 		this.engine?.setScreen(size);
 	}
 
+	/** The screen the game plays on, as last laid out */
+	getScreen(): ScreenSize {
+		return this.screen;
+	}
+
 	/** Show the title's drifting dots */
 	startKiosk(): void {
 		this.getEngine().startKiosk();

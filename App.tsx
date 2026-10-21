@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { type BenchRun, benchSessionOptions, benchTilt } from "./src/application/bench";
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
+import { createPilot } from "./src/application/pilot";
 import { bindPersonalBest } from "./src/application/useCases/BindPersonalBest";
 import { bindRunInPlay } from "./src/application/useCases/BindRunInPlay";
 import type { Corners } from "./src/domain/types";
@@ -34,6 +35,12 @@ const BENCH_FLAG = process.env.EXPO_PUBLIC_BENCH;
 const BENCH = BENCH_FLAG === "1" || BENCH_FLAG === "drips";
 const BENCH_RUN: BenchRun = BENCH_FLAG === "drips" ? "drips" : "steady";
 const BENCH_COLOR = "#E91E63";
+/**
+ * A capture build (built with EXPO_PUBLIC_CAPTURE=1) is steered by the pilot instead of the
+ * phone, so a simulator can play real runs for the store screenshots and the app preview (see
+ * src/application/pilot.ts); shipped builds never set it
+ */
+const CAPTURE = process.env.EXPO_PUBLIC_CAPTURE === "1";
 
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
@@ -47,9 +54,18 @@ const session = new GameSession({
 
 /**
  * One device-motion source: the interface tilt owns it, the game listens to it. The bench run
- * steers with a scripted tilt instead.
+ * steers with a scripted tilt instead, and a capture build with the pilot's.
  */
-const sensor = BENCH ? new ScriptedTiltSensor(benchTilt) : new DeviceMotionAdapter();
+const sensor = BENCH
+	? new ScriptedTiltSensor(benchTilt)
+	: CAPTURE
+		? new ScriptedTiltSensor(
+				createPilot(
+					() => store.getState(),
+					() => session.getScreen(),
+				),
+			)
+		: new DeviceMotionAdapter();
 
 const audio = new AudioService(
 	{
