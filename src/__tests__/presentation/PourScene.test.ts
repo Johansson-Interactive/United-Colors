@@ -435,6 +435,34 @@ describe("stepPour", () => {
 		expect(playback.frame.radius).toBeLessThan(playback.frame.view.drop.radius);
 	});
 
+	it("sizes the tally by the drop as drawn, so the figure grows with its vessel", () => {
+		// Two big catches: the drop is soon large enough to hold the tally above its smallest size
+		const big = planPour({
+			record: {
+				catches: [10, 90].map((tick) => ({ tick, value: 60, step: 1, color: RED, point: false })),
+				ticks: 120,
+			},
+			color: RED,
+			pitch: 14,
+		});
+		const { steps } = play(POUR_START_MS + 2000, NO_BEST, big);
+		const landed = steps.findIndex((s) => s.playback.frame.view.drop.tally > 0);
+		let lagged = 0;
+		for (const { playback } of steps.slice(landed)) {
+			const { view, radius } = playback.frame;
+			const stepper = pourAt(big, playback.sampled);
+			if (radius < view.drop.radius - 0.5) {
+				lagged++;
+				expect(view.tallyPitch).toBeLessThan(stepper.tallyPitch);
+			}
+			expect(view.tallyPitch).toBeCloseTo(
+				pourAt(big, playback.sampled, playback.sampled, radius).tallyPitch,
+			);
+			for (const d of view.digits) expect(d.ink).toBe(Math.hypot(d.x, d.y) < radius);
+		}
+		expect(lagged).toBeGreaterThan(0);
+	});
+
 	it("integrates no more than a short frame's worth of a stall", () => {
 		const { playback } = play(POUR_START_MS + 100);
 		const now = frameAt(POUR_START_MS + 100) + 400;

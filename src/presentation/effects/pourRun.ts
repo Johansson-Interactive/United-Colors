@@ -3,12 +3,15 @@
  * order and rhythm they happened, and merging into one drop of the player's liquid, while a
  * clock runs up to the run time. Every run of POUR_FULL_SPAN_S or more pours in the same span
  * (POUR_SPAN_MS), whatever its length, and a shorter one in its share of it, so a short run
- * pours quickly. The catches count in at what they were worth on their own. Once the drop
- * settles, the combo bonus pours in: an amber body falls in, the amber rises as a layer at the
- * drop's bottom, the drop swells and the tally counts up to the score, so the bonus is seen
- * going into the total rather than written beside it. The tally rises into the drop's top part,
- * above the amber, shrinking to fit it as it goes, and the bonus fades in inside the amber as a
- * bare figure, with no sign to add: each figure held inside its own layer of the drop.
+ * pours quickly. The catches count in at what they were worth on their own. The tally sits in
+ * the drop throughout, as large as the drop holds it (see tallyFit), growing with it, and only
+ * spilling past its edge, at the smallest readable size, while the drop is still too small.
+ * Once the drop settles, the combo bonus pours in: an amber body falls in, the amber rises as a
+ * layer at the drop's bottom, the drop swells and the tally counts up to the score, so the bonus
+ * is seen going into the total rather than written beside it. The tally rises into the drop's
+ * top part, above the amber, fitting it as it goes, and the bonus fades in inside the amber as a
+ * bare figure, with no sign to add: each figure held inside its own layer of the drop. A drop
+ * too small to hold its figures readably swells as it settles until it does, bonus or not.
  *
  * planPour works a run's pour out once, on the JS thread; pourAt then samples it at a replay
  * time (ms since the game over appeared) as a plain view of everything the shell draws. pourAt
@@ -242,16 +245,22 @@ export interface PourView {
 	flights: PourFlight[];
 	/** The bonus body's landing, when it landed after the previous sample, up to this one */
 	bonusLanding: PourLanding | null;
-	/** The drop: swelling from what the catches were worth alone to the score as the bonus pours in */
+	/**
+	 * The drop: at what the catches were worth alone, then swelling to its settled size as the
+	 * bonus pours in or to hold its tally readably
+	 */
 	drop: PourDrop;
 	/**
-	 * How far the bonus pour has swelled the drop's radius so far (px); 0 before it and without
-	 * one. Already smooth, unlike the landings' jumps, so the shell need not ease it.
+	 * How far the drop has swelled as it settles so far (px); 0 before then and for a pour that
+	 * does not swell. Already smooth, unlike the landings' jumps, so the shell need not ease it.
 	 */
 	swell: number;
-	/** The tally's dots, lifted with the amber as it rises and shrinking into the top part */
+	/**
+	 * The tally's dots, inside the drop as drawn where it holds them, lifted with the amber as it
+	 * rises into the top part
+	 */
 	digits: readonly PourDigitDot[];
-	/** Their spacing (px), which the shell sizes them by */
+	/** Their spacing (px), which the shell sizes them by: as large as the drop holds them */
 	tallyPitch: number;
 	/** The clock: run time so far as `M:SS`, rounded down */
 	clock: string;
@@ -658,15 +667,53 @@ function clockShare(endMs: number, ms: number): number {
 	return ms >= endMs ? 1 : clamp01((ms - POUR_START_MS) / (endMs - POUR_START_MS));
 }
 
-/** The pour at `ms` since the game over appeared, with the landings since `sinceMs` */
-export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
+/** How many catches have landed by `ms` */
+function landedBy(plan: PourPlan, ms: number): number {
+	"worklet";
+	let landed = 0;
+	for (const c of plan.catches) if (c.landMs <= ms) landed++;
+	return landed;
+}
+
+/**
+ * How far the drop has swelled to its settled size at `ms`, 0..1, easing in and out over
+ * POUR_RISE_MS from settleMs; null before then, and for a pour that does not swell
+ */
+function swellShare(plan: PourPlan, ms: number): number | null {
+	"worklet";
+	if (plan.restMs === plan.settleMs || ms < plan.settleMs) return null;
+	const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
+	return t * t * (3 - 2 * t);
+}
+
+/**
+ * The drop at `ms`, at what the catches landed so far were worth, then swelling to its settled
+ * size, its area growing evenly; and how far it has swelled (see PourView)
+ */
+export function dropAt(plan: PourPlan, ms: number): Pick<PourView, "drop" | "swell"> {
+	"worklet";
+	const risen = swellShare(plan, ms);
+	if (risen === null) return { drop: plan.drops[landedBy(plan, ms)], swell: 0 };
+	const poured = plan.drops[plan.drops.length - 1];
+	const from = poured.radius ** 2;
+	const radius = Math.sqrt(from + (plan.settledDrop.radius ** 2 - from) * risen);
+	const tally = plan.bonusBody
+		? plan.counts[Math.round(risen * (plan.counts.length - 1))].tally
+		: poured.tally;
+	return { drop: { radius, color: plan.settledDrop.color, tally }, swell: radius - poured.radius };
+}
+
+/**
+ * The pour at `ms` since the game over appeared, with the landings since `sinceMs`, its tally
+ * fitted to the drop drawn at `drawn` px, which may lag the stepper's (see dropAt) as the shell
+ * eases it; the stepper's own by default
+ */
+export function pourAt(plan: PourPlan, ms: number, sinceMs = ms, drawn?: number): PourView {
 	"worklet";
 	const landings: PourLanding[] = [];
 	const sounds: PourSound[] = [];
 	const flights: PourFlight[] = [];
-	let landed = 0;
 	for (const c of plan.catches) {
-		if (c.landMs <= ms) landed++;
 		if (c.landMs > sinceMs && c.landMs <= ms) {
 			landings.push({ x: c.x, y: c.y, point: c.point });
 			if (c.heard) sounds.push({ pitch: c.pitch, point: c.point });
@@ -693,50 +740,35 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		for (const c of plan.catches) top = Math.max(top, c.pitch);
 		sounds.push({ pitch: top, point: false });
 	}
-	let drop = plan.drops[landed];
-	let digits = plan.digits[landed];
+	const { drop, swell } = dropAt(plan, ms);
+	const radius = drawn ?? drop.radius;
+	// The tally's size follows the drop as drawn, by the one rule
+	let tallyPitch = wholeDropPitch(plan, radius);
+	let digits = plan.digits[landedBy(plan, ms)];
 	let amberLevel: number | null = null;
 	let lift = 0;
-	let tallyPitch = wholeDropPitch(plan, drop.radius);
-	let swell = 0;
-	if (plan.restMs > plan.settleMs && ms >= plan.settleMs) {
-		// The drop swells to its settled size, easing in and out, its area growing evenly, and
-		// the tally with it
-		const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
-		const risen = t * t * (3 - 2 * t);
+	const risen = swellShare(plan, ms);
+	if (bonusBody && risen !== null) {
+		// The bonus pours in: the amber's surface and the tally above it rise together, while
+		// the drop swells, the tally ticks up to the score and eases from its size in the whole
+		// drop to its size in the top part
 		const poured = plan.drops[plan.drops.length - 1];
-		const from = poured.radius ** 2;
-		const radius = Math.sqrt(from + (plan.settledDrop.radius ** 2 - from) * risen);
-		swell = radius - poured.radius;
-		drop = { radius, color: plan.settledDrop.color, tally: poured.tally };
-		tallyPitch = wholeDropPitch(plan, radius);
-	}
-	if (bonusBody && ms >= plan.settleMs) {
-		// The bonus pours in: the amber's surface and the tally above it rise together, easing
-		// in and out, while the drop swells, the tally ticks up to the score and shrinks into
-		// the top part
-		const t = clamp01((ms - plan.settleMs) / POUR_RISE_MS);
-		const risen = t * t * (3 - 2 * t);
-		const poured = plan.drops[plan.drops.length - 1];
-		const count = plan.counts[Math.round(risen * (plan.counts.length - 1))];
-		const { radius } = drop;
-		drop = { radius, color: drop.color, tally: count.tally };
+		digits = plan.counts[Math.round(risen * (plan.counts.length - 1))].digits;
 		lift = plan.lift * risen;
 		const from = wholeDropPitch(plan, poured.radius);
 		tallyPitch = from + (plan.tallyPitch - from) * risen;
 		// Never up into the tally: the amber waits under it until the lift and the swell make
 		// room, so the tally's ink never stands in amber
-		const clear = (lift + (plan.tallyCells.rows * tallyPitch) / 2 + AMBER_CLEAR) / radius;
+		const clear = (lift + (plan.tallyCells.rows * tallyPitch) / 2 + AMBER_CLEAR) / drop.radius;
 		const level = Math.max(1 + (plan.level - 1) * risen, clear);
 		amberLevel = level < 1 ? level : null;
-		digits = count.digits;
 	}
 	const shrink = tallyPitch / plan.pitch;
 	const sized: PourDigitDot[] = [];
 	for (const dot of digits) {
 		const x = dot.x * shrink;
 		const y = dot.y * shrink + lift;
-		sized.push({ x, y, ink: Math.hypot(x, y) < drop.radius });
+		sized.push({ x, y, ink: Math.hypot(x, y) < radius });
 	}
 	const { bonusLabel } = plan;
 	return {

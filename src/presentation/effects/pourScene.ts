@@ -17,6 +17,7 @@ import { GAME_DENSITY, SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunRecord } from "../../domain/types";
 import { LIQUID_REACH, MERGE_BLEND, MERGE_MAX_BLOBS, NO_AMBER } from "../mergeShader";
 import {
+	dropAt,
 	POUR_DOT_RADIUS,
 	type PourFlight,
 	type PourInput,
@@ -214,8 +215,17 @@ export function stepPour(
 	const start = playback.start ?? now;
 	const ms = now - start - POUR_DELAY_MS;
 	const dt = Math.min(MAX_FRAME_MS, dtMs);
-	const view = pourAt(plan, ms, playback.sampled);
 	const before = playback.frame;
+	// The landings' jumps are eased; the swell as it settles is smooth already, and followed
+	// exactly. The tally is sized by the drop as drawn, so figure and vessel move together.
+	const target = dropAt(plan, ms);
+	const landed = easeToward(
+		before.radius - before.view.swell,
+		target.drop.radius - target.swell,
+		dt,
+	);
+	const radius = landed + target.swell;
+	const view = pourAt(plan, ms, playback.sampled, radius);
 	let body = playback.body;
 	for (const landing of view.landings) {
 		const kick = landingKick(landing, view.drop.radius);
@@ -226,9 +236,6 @@ export function stepPour(
 		body = kickJelly(body, kick.x, kick.y);
 	}
 	body = stepJelly(body, 0, 0, view.drop.radius, dt);
-	// The landings' jumps are eased; the bonus pour's swell is smooth already, and followed exactly
-	const landed = easeToward(before.radius - before.view.swell, view.drop.radius - view.swell, dt);
-	const radius = landed + view.swell;
 	const status = statusOf(view, best);
 	const changed = !sameStatus(status, playback.status);
 	return {
