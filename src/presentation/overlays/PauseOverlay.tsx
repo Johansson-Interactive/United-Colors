@@ -1,21 +1,15 @@
 import type React from "react";
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
-import { BowlStage } from "../components/BowlStage";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
-import { LevelGate } from "../components/LevelGate";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
-import { BOWL_SIZE, WHITE } from "../theme/theme";
-import type { LevelGatePhase } from "../tilt/levelGate";
-import { useTiltAvailable } from "../tilt/useTiltAvailable";
+import { WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
-	/** Player dot colour at the moment of pausing; the level shows it while levelling back in */
+	/** Player dot colour at the moment of pausing; the level pose button wears it */
 	color: string;
-	onResume: () => void;
 	onQuit: (point: PressPoint) => void;
 	/** Open the settle bowl to set the level pose again */
 	onCalibrate: () => void;
@@ -32,14 +26,12 @@ interface PauseOverlayProps {
 }
 
 /**
- * Paused: the scene frosts over and a spirit level takes the middle. Tipping the bubble out
- * of the inner circle and then holding the phone level resumes, so play restarts from rest;
- * tapping the level resumes immediately. The corners hold the settings (level pose and tilt
- * speed) and the sound.
+ * Paused: the scene frosts over, a calm place to look around, change settings or quit. The
+ * HUD's corner dot, a play dot here, carries on through Get ready. The corners hold the
+ * settings (level pose and tilt speed) and the sound.
  */
 export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	color,
-	onResume,
 	onQuit,
 	onCalibrate,
 	soundEnabled,
@@ -50,13 +42,6 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	onSpeed,
 	children,
 }) => {
-	const tiltAvailable = useTiltAvailable();
-	const [gatePhase, setGatePhase] = useState<LevelGatePhase>("leave");
-	const caption = !tiltAvailable
-		? "tap the ring to resume"
-		: gatePhase === "leave"
-			? "tip the dot out of the circle\nor tap the ring to continue"
-			: "bring it back and hold level\nor tap the ring";
 	return (
 		<Animated.View
 			style={styles.container}
@@ -66,17 +51,6 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 			<View style={styles.top} pointerEvents="none">
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />
 			</View>
-
-			<BowlStage caption={caption}>
-				<LevelGate
-					size={BOWL_SIZE}
-					color={color}
-					onLevelHeld={onResume}
-					onTap={onResume}
-					onPhaseChange={setGatePhase}
-					sensitivity={sensitivity}
-				/>
-			</BowlStage>
 
 			<View style={styles.footer}>
 				<DotButton

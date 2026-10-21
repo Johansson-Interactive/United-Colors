@@ -7,6 +7,7 @@ import {
 	HAS_WALL_SKSL,
 	hasWall,
 	KIND_CODE,
+	playerDisc,
 	readDot,
 	readScene,
 	type SceneKind,
@@ -122,6 +123,18 @@ describe("the scene record", () => {
 		expect(findPlayer(sceneOf(["small", "merging", "player"]))).toBe(2);
 		expect(findPlayer(sceneOf(["small", "point"]))).toBe(-1);
 		expect(findPlayer(new Float32Array(0))).toBe(-1);
+	});
+
+	it("gives where the player is drawn and how big, for what is drawn around it on screen", () => {
+		const scene = new Float32Array(sceneLength(2));
+		writeDot(scene, 0, "small", 10, 20, 4, 1);
+		writeDot(scene, 1, "player", 120, 340, 18, 2);
+		expect(playerDisc(scene)).toEqual({ x: 120, y: 340, radius: 18 });
+	});
+
+	it("gives no player disc for a scene without the player", () => {
+		expect(playerDisc(sceneOf(["small", "point"]))).toBeNull();
+		expect(playerDisc(new Float32Array(0))).toBeNull();
 	});
 
 	it("has at most one refused dot denting the player: the first", () => {

@@ -60,7 +60,7 @@ describe("flow store", () => {
 	it("a pause tap pauses the game at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("RUNNING");
-		flow.getState().dispatch({ type: "pausePressed" });
+		flow.getState().dispatch({ type: "cornerPressed", tiltAvailable: true });
 		expect(calls).toEqual(["act pause"]);
 	});
 
