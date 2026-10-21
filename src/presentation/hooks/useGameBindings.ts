@@ -36,7 +36,7 @@ export function useGameBindings(
 	// A buzz as the player spits out a wrong-colour dot
 	useEffect(() => bindHaptics(store, haptics), [store, haptics]);
 
-	// Restore persisted settings and high score
+	// Restore the saved settings and personal best
 	useEffect(() => {
 		void loadSettings(store, storage);
 		void loadHighScore(store, storage);
