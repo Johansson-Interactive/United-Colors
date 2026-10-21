@@ -210,17 +210,17 @@ export interface PourPlan {
 	 * combo bonus's share of the drop, raised to hold its figure; 1, the drop's bottom, without one
 	 */
 	level: number;
-	/** The tally's dot spacing (px) until the bonus pours in, as given */
+	/** The tally's dot spacing in play (px), as given: the most it is ever drawn at */
 	pitch: number;
 	/**
-	 * The settled tally's dot spacing (px): `pitch`, or with a combo bonus, as large as the drop's
-	 * top part above the amber holds, up to `pitch`
+	 * The settled tally's dot spacing (px), by the one rule (see tallyFit): as large as its room
+	 * holds, the whole drop, or with a combo bonus the drop's top part above the amber
 	 */
 	tallyPitch: number;
 	/** How far the settled tally's middle sits from the drop's centre (px, so negative: up) */
 	lift: number;
-	/** The tally's height (px) at `pitch`: its rows of dots, whatever its digits */
-	tallyHeight: number;
+	/** The score's figure in cells, which the tally is fitted as all through the pour */
+	tallyCells: { cols: number; rows: number };
 	/** The settled bonus figure; null without a combo bonus */
 	bonusLabel: Omit<PourBonusLabel, "opacity"> | null;
 }
@@ -432,6 +432,7 @@ function levelForShare(share: number): number {
  * when it does not fit
  */
 function roomUnder(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+	"worklet";
 	const half = (cols * pitch) / 2;
 	// How far from the centre the drop is still as wide as the box
 	const reach = half < radius ? Math.sqrt(radius * radius - half * half) : 0;
@@ -453,6 +454,7 @@ function lowestSurface(radius: number, cols: number, rows: number): number | nul
  * `radius`: as large as it fits, up to `pitch`, and centred in the room it has there; its top
  */
 function fitUnder(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+	"worklet";
 	let fitted = pitch;
 	if (roomUnder(radius, surface, cols, rows, pitch).spare < 0) {
 		let lo = 0;
@@ -474,7 +476,22 @@ function fitUnder(radius: number, surface: number, cols: number, rows: number, p
  * its room), as large as fits, never more than `pitch` nor less than POUR_MIN_PITCH
  */
 function tallyFit(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+	"worklet";
 	return Math.max(POUR_MIN_PITCH, fitUnder(radius, -surface, cols, rows, pitch).pitch);
+}
+
+/**
+ * The tally's dot spacing in a drop of `radius` with no amber in it, by the one rule (see
+ * tallyFit), fitted as the score's figure, the widest it gets, so its size follows the drop and
+ * never jumps as a digit is added; an empty run's `pitch`, as it has no drop to fit its 0 into
+ */
+function wholeDropPitch(
+	{ settledDrop, tallyCells, pitch }: Pick<PourPlan, "settledDrop" | "tallyCells" | "pitch">,
+	radius: number,
+): number {
+	"worklet";
+	if (settledDrop.tally === 0) return pitch;
+	return tallyFit(radius, Number.POSITIVE_INFINITY, tallyCells.cols, tallyCells.rows, pitch);
 }
 
 /**
@@ -547,8 +564,8 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const radius = radiusOf(score);
 	const settledDrop: PourDrop = { radius, color: poured.color, tally: score };
 	const amber = bonus > 0 ? settledOf(bonus, score, radius, pitch) : null;
-	const tallyLayout = layoutDotMatrix(String(score));
-	const tallyHeight = tallyLayout.rows * pitch;
+	const { cols, rows } = layoutDotMatrix(String(score));
+	const tallyCells = { cols, rows };
 	const { bodies, spots } = bodiesOf(catches, times, drops);
 	const settleMs = endMs + POUR_SETTLE_MS;
 	return {
@@ -572,14 +589,9 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		restMs: amber ? settleMs + POUR_RISE_MS : settleMs,
 		level: amber?.level ?? 1,
 		pitch,
-		// An empty run has no drop to fit its 0 into
-		tallyPitch:
-			amber?.tallyPitch ??
-			(score > 0
-				? tallyFit(radius, Number.POSITIVE_INFINITY, tallyLayout.cols, tallyLayout.rows, pitch)
-				: pitch),
+		tallyPitch: amber?.tallyPitch ?? wholeDropPitch({ settledDrop, tallyCells, pitch }, radius),
 		lift: amber?.lift ?? 0,
-		tallyHeight,
+		tallyCells,
 		bonusLabel: amber?.label ?? null,
 	};
 }
@@ -645,9 +657,8 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	let digits = plan.digits[landed];
 	let amberLevel: number | null = null;
 	let lift = 0;
-	let shrink = 1;
+	let tallyPitch = wholeDropPitch(plan, drop.radius);
 	let swell = 0;
-	if (!bonusBody && ms >= plan.settleMs) shrink = plan.tallyPitch / plan.pitch;
 	if (bonusBody && ms >= plan.settleMs) {
 		// The bonus pours in: the amber's surface and the tally above it rise together, easing
 		// in and out, while the drop swells, the tally ticks up to the score and shrinks into
@@ -660,22 +671,21 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		swell = radius - poured.radius;
 		drop = { radius, color: plan.settledDrop.color, tally: count.tally };
 		lift = plan.lift * risen;
-		shrink = 1 + (plan.tallyPitch / plan.pitch - 1) * risen;
+		const from = wholeDropPitch(plan, poured.radius);
+		tallyPitch = from + (plan.tallyPitch - from) * risen;
 		// Never up into the tally: the amber waits under it until the lift and the swell make
 		// room, so the tally's ink never stands in amber
-		const clear = (lift + (plan.tallyHeight * shrink) / 2 + AMBER_CLEAR) / radius;
+		const clear = (lift + (plan.tallyCells.rows * tallyPitch) / 2 + AMBER_CLEAR) / radius;
 		const level = Math.max(1 + (plan.level - 1) * risen, clear);
 		amberLevel = level < 1 ? level : null;
 		digits = count.digits;
 	}
-	if (lift !== 0 || shrink !== 1) {
-		const lifted: PourDigitDot[] = [];
-		for (const dot of digits) {
-			const x = dot.x * shrink;
-			const y = dot.y * shrink + lift;
-			lifted.push({ x, y, ink: Math.hypot(x, y) < drop.radius });
-		}
-		digits = lifted;
+	const shrink = tallyPitch / plan.pitch;
+	const sized: PourDigitDot[] = [];
+	for (const dot of digits) {
+		const x = dot.x * shrink;
+		const y = dot.y * shrink + lift;
+		sized.push({ x, y, ink: Math.hypot(x, y) < drop.radius });
 	}
 	const { bonusLabel } = plan;
 	return {
@@ -685,8 +695,8 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 		bonusLanding,
 		drop,
 		swell,
-		digits,
-		tallyPitch: plan.pitch * shrink,
+		digits: sized,
+		tallyPitch,
 		clock: formatClock(plan.seconds * clockShare(plan.endMs, ms)),
 		amberLevel,
 		bonusLabel: bonusLabel && {

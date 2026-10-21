@@ -356,14 +356,14 @@ describe("pourAt", () => {
 	});
 
 	it("lays the tally out as dots centred on the drop, ink exactly where inside the drop", () => {
-		const many = Array.from({ length: 40 }, (_, i) => caught(10 + i * 20, { value: 3 }));
+		const many = Array.from({ length: 40 }, (_, i) => caught(10 + i * 20, { value: i ? 3 : 1 }));
 		const p = plan({ catches: many, ticks: 1000 });
 		for (const { ms } of landings(p)) {
 			const { drop, digits } = pourAt(p, ms);
 			expect(digits).toHaveLength(layoutDotMatrix(String(drop.tally)).dots.length);
 			for (const dot of digits) expect(dot.ink).toBe(Math.hypot(dot.x, dot.y) < drop.radius);
 		}
-		// The first catch's small drop holds only the middle of its "3"; the final one all of "120"
+		// The first catch's small drop holds only the middle of its "1"; the final one all of "118"
 		const first = pourAt(p, POUR_START_MS).digits;
 		expect(first.some((d) => d.ink)).toBe(true);
 		expect(first.some((d) => !d.ink)).toBe(true);
@@ -710,16 +710,21 @@ describe("the bonus pour and its amber layer", () => {
 		expectInAmber(view);
 	});
 
-	it("shrinks the tally into the top part as the bonus pours in", () => {
-		const p = plan(comboRun(10, 0));
-		expect(pourAt(p, p.settleMs - 1).tallyPitch).toBe(PITCH);
-		let last = PITCH;
-		for (let ms = p.settleMs; ms <= p.restMs; ms += 5) {
-			const { tallyPitch } = pourAt(p, ms);
-			expect(tallyPitch).toBeLessThanOrEqual(last);
-			last = tallyPitch;
+	it("eases the tally from its size in the whole drop to its size in the top part as the bonus pours in", () => {
+		// A large run's tally shrinks into the top part; a short one's grows with the swell
+		const large = planPour({ record: comboRun(5, 50), color: RED, pitch: 14 });
+		for (const p of [large, plan(comboRun(10, 0))]) {
+			const from = pourAt(p, p.settleMs - 1).tallyPitch;
+			const way = Math.sign(p.tallyPitch - from);
+			expect(way).not.toBe(0);
+			let last = from;
+			for (let ms = p.settleMs; ms <= p.restMs; ms += 5) {
+				const { tallyPitch } = pourAt(p, ms);
+				expect((tallyPitch - last) * way).toBeGreaterThanOrEqual(-1e-9);
+				last = tallyPitch;
+			}
+			expect(last).toBeCloseTo(p.tallyPitch);
 		}
-		expect(last).toBeCloseTo(p.tallyPitch);
 	});
 
 	it("keeps the tally of a drop too small to hold it readably at full size, standing on the amber", () => {
@@ -796,5 +801,25 @@ describe("the tally in the drop", () => {
 		expect(view.tallyPitch).toBe(PITCH);
 		expectInDrop(view);
 		expect(p.restMs).toBe(p.settleMs);
+	});
+
+	it("holds the tally inside the drop as it fills, at the smallest readable size until it can", () => {
+		const p = plan(loneRun(50));
+		let spilled = 0;
+		let held = 0;
+		for (const { ms } of landings(p)) {
+			const view = pourAt(p, ms);
+			if (view.tallyPitch > POUR_MIN_PITCH + 1e-9) {
+				held++;
+				expect(spilled).toBeGreaterThan(0);
+				expectInDrop(view);
+			} else {
+				spilled++;
+				expect(held).toBe(0);
+				expect(view.tallyPitch).toBe(POUR_MIN_PITCH);
+				for (const d of view.digits) expect(d.ink).toBe(Math.hypot(d.x, d.y) < view.drop.radius);
+			}
+		}
+		expect(held).toBeGreaterThan(0);
 	});
 });
