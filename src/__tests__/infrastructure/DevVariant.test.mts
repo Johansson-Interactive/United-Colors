@@ -32,7 +32,7 @@ describe("Dev variant", () => {
 		expect(configurations.debug).toMatchObject({
 			buildSettings: {
 				APP_DISPLAY_NAME: '"Tiltling Dev"',
-				PRODUCT_BUNDLE_IDENTIFIER: '"com.example.tiltling.dev"',
+				PRODUCT_BUNDLE_IDENTIFIER: '"com.example.tiltling.debug"',
 			},
 		});
 		expect(configurations.release).toMatchObject({

@@ -6,7 +6,7 @@ const { withInfoPlist, withXcodeProject } = require("expo/config-plugins");
 
 const SETTING = "APP_DISPLAY_NAME";
 const DEV_SUFFIX = " Dev";
-const DEV_BUNDLE_SUFFIX = ".dev";
+const DEV_BUNDLE_SUFFIX = ".debug";
 
 /** Point the app target's Debug configuration at a separate dev app */
 function setDevVariant(configurations, { name, bundleIdentifier }) {
