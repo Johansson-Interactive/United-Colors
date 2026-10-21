@@ -68,6 +68,11 @@ const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
 const GLYPH_ROWS = 7;
 const GLYPH_COLS = 5;
 const DIGIT_CELLS = GLYPH_COLS + 1;
+/**
+ * The meter's height: the total with SCORE_PAD above and below it, room enough for its glow at
+ * the peak of its bump; the feed's ribbon and its points in the air stay within the total's rows
+ */
+export const SCORE_METER_HEIGHT = 2 * SCORE_PAD + GLYPH_ROWS * SCORE_PITCH;
 
 /** Each digit's dots as (col, row) pairs within its 5x7 cell */
 const DIGIT_DOTS: readonly (readonly number[])[] = "0123456789".split("").map((digit) => {

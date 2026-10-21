@@ -17,6 +17,7 @@ import {
 	advanceTally,
 	createTally,
 	newCatch,
+	SCORE_METER_HEIGHT,
 	SCORE_PAD,
 	SCORE_PITCH,
 	type Tally,
@@ -34,9 +35,6 @@ interface ScoreMeterProps {
 	/** The player's current colour; the total wears it so a switch is always visible */
 	color: string;
 }
-
-/** The meter's height: the total and a few lines of addends under it */
-const METER_HEIGHT = 230;
 
 /**
  * The score at the top of the stage, counting each catch in as it arrives (see scoreTally.ts).
@@ -130,7 +128,7 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	);
 
 	return (
-		<Canvas style={{ width, height: METER_HEIGHT }} pointerEvents="none">
+		<Canvas style={{ width, height: SCORE_METER_HEIGHT }} pointerEvents="none">
 			<Picture picture={picture} />
 		</Canvas>
 	);

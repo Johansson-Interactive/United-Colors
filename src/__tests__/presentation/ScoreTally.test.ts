@@ -1,4 +1,4 @@
-import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
+import { GLOW_SCALE, layoutDotMatrix } from "../../presentation/dotmatrix/layout";
 import { plainKit } from "../../presentation/dotSprites";
 import { BURST_COLORS, NOT_STARTED } from "../../presentation/effects/burstFrames";
 import { SCORE_BUMP_MS } from "../../presentation/effects/scoreBump";
@@ -15,6 +15,8 @@ import {
 	newCatch,
 	packTally,
 	packTallySprites,
+	SCORE_METER_HEIGHT,
+	SCORE_PAD,
 	SCORE_PITCH,
 	shownScore,
 	type Tally,
@@ -197,6 +199,20 @@ describe("packing the total", () => {
 		expect(bumped).toBeGreaterThan(rested);
 	});
 
+	it("keeps the total's glow inside the meter at the peak of its hard bump", () => {
+		// The total as the meter centres it, a catch's last point just landed, the next one queued
+		const geometry = { cx: 200, cy: SCORE_PAD + SCORE_PITCH * 3.5 };
+		let tally = advanceTally(tallyWith(0, [[1]], 1000), 5000);
+		tally = advanceTally(withCatch(tally, newCatch(1, 9, PINK)), tally.lastLand + 70);
+		const out = tallyFrame();
+		packTally(tally, tally.lastLand + 70, geometry, out);
+		const dots = [...totalOf(out), ...dotsOf(out)];
+		expect(dots.length).toBeGreaterThan(totalOf(out).length);
+		expect(Math.min(...dots.map((d) => d.y - d.radius * GLOW_SCALE))).toBeGreaterThanOrEqual(0);
+		expect(Math.max(...dots.map((d) => d.y + d.radius * GLOW_SCALE))).toBeLessThanOrEqual(
+			SCORE_METER_HEIGHT,
+		);
+	});
 });
 
 describe("the feed", () => {
