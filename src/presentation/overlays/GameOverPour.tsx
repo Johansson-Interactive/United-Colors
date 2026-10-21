@@ -33,13 +33,7 @@ interface Box {
  * under it, in a column centred on the drop. The drop's slot is sized for the settled drop and
  * its tally (see pourFit), from the start, so nothing moves as it grows.
  */
-export const GameOverPour: React.FC<GameOverPourProps> = ({
-	plan,
-	frame,
-	status,
-	row,
-	color,
-}) => {
+export const GameOverPour: React.FC<GameOverPourProps> = ({ plan, frame, status, row, color }) => {
 	const [box, setBox] = useState<Box | null>(null);
 	const handleLayout = (event: LayoutChangeEvent) => {
 		const { width, height } = event.nativeEvent.layout;

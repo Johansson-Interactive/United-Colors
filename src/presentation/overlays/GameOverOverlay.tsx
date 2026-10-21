@@ -61,13 +61,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 				<DotMatrixText text="GAME OVER" pitch={titlePitch} color={WHITE} />
 			</View>
 
-			<GameOverPour
-				plan={plan}
-				frame={frame}
-				status={status}
-				row={row}
-				color={color}
-			/>
+			<GameOverPour plan={plan} frame={frame} status={status} row={row} color={color} />
 
 			<View style={styles.actions}>
 				<DotButton
