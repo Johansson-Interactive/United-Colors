@@ -469,6 +469,15 @@ function fitUnder(radius: number, surface: number, cols: number, rows: number, p
 }
 
 /**
+ * The one rule for the tally's size: its dot spacing as a box `cols` by `rows` cells in a drop of
+ * `radius` over an amber surface `surface` px below its centre (Infinity: no amber, the whole drop
+ * its room), as large as fits, never more than `pitch` nor less than POUR_MIN_PITCH
+ */
+function tallyFit(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+	return Math.max(POUR_MIN_PITCH, fitUnder(radius, -surface, cols, rows, pitch).pitch);
+}
+
+/**
  * The settled drop of `score` and `radius`, `bonus` of it amber, its tally's dots `pitch` apart:
  * the amber's level, and each figure inside its own layer, as large as the layer holds up to
  * `pitch`, the bonus under the level and the tally over it. The level sits at the bonus's share
@@ -538,7 +547,8 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const radius = radiusOf(score);
 	const settledDrop: PourDrop = { radius, color: poured.color, tally: score };
 	const amber = bonus > 0 ? settledOf(bonus, score, radius, pitch) : null;
-	const tallyHeight = layoutDotMatrix(String(score)).rows * pitch;
+	const tallyLayout = layoutDotMatrix(String(score));
+	const tallyHeight = tallyLayout.rows * pitch;
 	const { bodies, spots } = bodiesOf(catches, times, drops);
 	const settleMs = endMs + POUR_SETTLE_MS;
 	return {
@@ -562,7 +572,12 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		restMs: amber ? settleMs + POUR_RISE_MS : settleMs,
 		level: amber?.level ?? 1,
 		pitch,
-		tallyPitch: amber?.tallyPitch ?? pitch,
+		// An empty run has no drop to fit its 0 into
+		tallyPitch:
+			amber?.tallyPitch ??
+			(score > 0
+				? tallyFit(radius, Number.POSITIVE_INFINITY, tallyLayout.cols, tallyLayout.rows, pitch)
+				: pitch),
 		lift: amber?.lift ?? 0,
 		tallyHeight,
 		bonusLabel: amber?.label ?? null,
@@ -632,6 +647,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms): PourView {
 	let lift = 0;
 	let shrink = 1;
 	let swell = 0;
+	if (!bonusBody && ms >= plan.settleMs) shrink = plan.tallyPitch / plan.pitch;
 	if (bonusBody && ms >= plan.settleMs) {
 		// The bonus pours in: the amber's surface and the tally above it rise together, easing
 		// in and out, while the drop swells, the tally ticks up to the score and shrinks into

@@ -761,3 +761,40 @@ describe("the bonus pour and its amber layer", () => {
 		expect(pourAt(roomy, roomy.settleMs + 1).amberLevel).not.toBeNull();
 	});
 });
+
+describe("the tally in the drop", () => {
+	/** `count` small dots caught on their own, a second apart: `count` scored, no combo bonus */
+	function loneRun(count: number, value = 1): RunRecord {
+		const catches = Array.from({ length: count }, (_, i) => caught(10 + 20 * i, { value }));
+		return { catches, ticks: 30 + 20 * count };
+	}
+
+	/** Every dot of the tally, with the half pitch around it, lies inside the drop and is inked */
+	function expectInDrop({ digits, tallyPitch: pitch, drop }: PourView) {
+		expect(digits).toHaveLength(layoutDotMatrix(String(drop.tally)).dots.length);
+		for (const { x, y, ink } of digits) {
+			expect(ink).toBe(true);
+			expect(Math.hypot(Math.abs(x) + pitch / 2, Math.abs(y) + pitch / 2)).toBeLessThanOrEqual(
+				drop.radius + 1e-6,
+			);
+		}
+	}
+
+	it("holds a settled run's tally inside the drop without a combo bonus, at a readable size", () => {
+		const p = plan(loneRun(50));
+		const view = pourAt(p, p.restMs);
+		expect(view.drop.tally).toBe(50);
+		expect(view.tallyPitch).toBeLessThan(PITCH);
+		expect(view.tallyPitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH);
+		expectInDrop(view);
+	});
+
+	it("keeps a large run's tally at its full in-play size where the drop already holds it", () => {
+		const p = plan(loneRun(200, 5));
+		const view = pourAt(p, p.restMs);
+		expect(view.drop.tally).toBe(1000);
+		expect(view.tallyPitch).toBe(PITCH);
+		expectInDrop(view);
+		expect(p.restMs).toBe(p.settleMs);
+	});
+});
