@@ -63,9 +63,10 @@ const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300, delay: 0
 const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400, delay: 0 };
 
 export function stageLook({ screen, phase, playerColor }: StagePlace): StageLook {
+	const frost = frostOf(phase);
 	return {
-		frost: frostOf(phase),
-		shutWindow: phase === "PAUSED",
+		frost,
+		shutWindow: frost.over === FROST_ON,
 		accent: { to: phase === "KIOSK" ? INK_LIFT : playerColor, over: INSTANT },
 		opacity: opacityOf(screen, phase),
 	};
