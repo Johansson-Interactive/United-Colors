@@ -13,7 +13,7 @@
 
 import type { Disc } from "../../application/sceneRecord";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
-import type { FrostWindow } from "../effects/frost";
+import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
@@ -345,4 +345,13 @@ export function advanceGetReady(
 	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt);
 	const next = { hold, roll, caption: !isHolding(state.hold, hold) };
 	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired) };
+}
+
+/**
+ * The frost window Get ready leaves behind when it closes, given its last state and the window
+ * it had open: unchanged once fired, so the frost lifts behind the open window unseen; shut
+ * otherwise (the pause dot, leaving the app), so the pause screen is frosted all over.
+ */
+export function closeGetReady(state: GetReadyFrameState, frostWindow: FrostWindow): FrostWindow {
+	return state.hold.fired ? frostWindow : NO_FROST_WINDOW;
 }

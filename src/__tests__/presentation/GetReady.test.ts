@@ -1,8 +1,10 @@
 import { cornerExtent, holdInside } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
+import { NO_FROST_WINDOW } from "../../presentation/effects/frost";
 import {
 	ARMING_MS,
 	advanceGetReady,
+	closeGetReady,
 	type GetReadyFrame,
 	type GetReadyFrameState,
 	type GetReadyState,
@@ -390,5 +392,42 @@ describe("get-ready frame step", () => {
 		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS * 2);
 		const at = frames.findIndex((f) => f.fired);
 		expect(frames.slice(at).every((f) => !f.caption)).toBe(true);
+	});
+});
+
+describe("get-ready close", () => {
+	const field = { width: 400, height: 800, cornerExtent: 0 };
+	const seat = { x: 150, y: 300, radius: 20 };
+	const LEVEL = { x: 0, y: 0 };
+	/** The window the frost is left with on the last frame Get ready drew */
+	const open = { x: seat.x, y: seat.y, radius: 500 };
+
+	/** Frames of 16 ms for `ms` at one tilt, as the overlay's frame callback steps them */
+	function play(from: GetReadyFrameState, tilt: { x: number; y: number }, ms: number) {
+		let state = from;
+		for (let t = 0; t < ms; t += 16) {
+			state = advanceGetReady(state, { seat, tilt, dt: 16, field, sensitivity: 1 }).state;
+		}
+		return state;
+	}
+
+	it("leaves the window as it is after firing, so the frost lifts behind it unseen", () => {
+		const fired = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS * 2);
+		expect(fired.hold.fired).toBe(true);
+		expect(closeGetReady(fired, open)).toBe(open);
+	});
+
+	it("shuts the window when closed mid-hold, so the pause screen is frosted all over", () => {
+		const held = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
+		expect(held.hold.fired).toBe(false);
+		expect(held.hold.progress).toBeGreaterThan(0);
+		expect(closeGetReady(held, open)).toEqual(NO_FROST_WINDOW);
+	});
+
+	it("shuts the window when closed during the arming delay", () => {
+		const armingState = play(OPEN_GET_READY, LEVEL, ARMING_MS / 2);
+		expect(armingState.hold.fired).toBe(false);
+		expect(armingState.hold.progress).toBe(0);
+		expect(closeGetReady(armingState, open)).toEqual(NO_FROST_WINDOW);
 	});
 });

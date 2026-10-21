@@ -23,7 +23,12 @@ import { SCORE_CENTRE_Y, SCORE_PITCH } from "../effects/scoreTally";
 import { useStageBox } from "../layout/StageFrame";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { glass, INK, shade } from "../theme/theme";
-import { advanceGetReady, type GetReadyFrame, OPEN_GET_READY } from "../tilt/getReady";
+import {
+	advanceGetReady,
+	closeGetReady,
+	type GetReadyFrame,
+	OPEN_GET_READY,
+} from "../tilt/getReady";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface GetReadyOverlayProps {
@@ -138,11 +143,10 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		if (now.fired) scheduleOnRN(onReady);
 	});
 
-	// Closed again when Get ready closes without firing (the pause dot, leaving the app), so the
-	// pause screen is frosted all over; fired, it is left open for the frost to lift behind it
+	// Leaves the window the stepper says on close: open once fired, shut otherwise
 	useEffect(
 		() => () => {
-			if (!state.get().hold.fired) frostWindow.set(NO_FROST_WINDOW);
+			frostWindow.set(closeGetReady(state.get(), frostWindow.get()));
 		},
 		[state, frostWindow],
 	);
