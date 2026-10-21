@@ -12,18 +12,27 @@ import {
 	spriteBatch,
 } from "../dotSprites";
 import { COMBO_AMBER, WHITE } from "../theme/theme";
+import type { EffectReducer } from "./effectLane";
 
 /**
  * Short-lived feedback drawn at a point in the playfield, in the game canvas: a score pop that
  * floats up, or a ring that expands from where something happened (a point catch, the final hit). They were views once; their curves
  * are those views' animations, and a pop's dots land where the view's DotMatrixText put them.
  *
- * The list of bursts lives on the UI thread. The JS thread lays each one out once (see
- * layOutBurst) and appends it with withBurst; the UI thread stamps it with the frame time on its
- * first frame, drops it when its lifetime is up (advanceBursts) and packs every frame's
+ * The list of bursts lives on the UI thread, in an effect lane (see effectLane.ts). The JS
+ * thread lays each one out once (see layOutBurst) and appends it with withBurst; the UI thread
+ * stamps it with the frame time on its first frame, drops it when its lifetime is up
+ * (advanceBursts), stops the clock once noBurstsLeft, and packs every frame's
  * sprites and rings for drawing (packBursts). Packing runs every frame a burst is alive, so it
  * indexes directly, calls nothing per dot and reuses its objects from frame to frame.
  */
+
+/** The bursts' effect lane: each laid out on the JS thread, then added, aged and dropped on the UI thread */
+export const BURSTS: EffectReducer<Burst[], Burst> = {
+	add: withBurst,
+	advance: advanceBursts,
+	idle: noBurstsLeft,
+};
 
 /** How long a burst lasts (ms) */
 export const BURST_LIFETIME_MS = 900;
@@ -125,36 +134,6 @@ export function withBurst(list: readonly Burst[], burst: Burst): Burst[] {
 	return next;
 }
 
-/** Hands out burst ids on the JS thread, and judges the UI thread's requests to stop the clock */
-export interface BurstIds {
-	/** The next burst's id: 0, then 1, and so on */
-	take(): number;
-	/**
-	 * Whether `seen`, the newest burst the UI thread had drawn when its list ran empty, is the
-	 * newest taken. A stop sent before a newer burst reached the UI thread is for an older one,
-	 * and stopping then would leave the newer burst undrawn past its first frame.
-	 */
-	isNewest(seen: number): boolean;
-}
-
-/**
- * Burst ids, kept outside the hook: the React Compiler turns `ref.current++` in a hook into a
- * pre-increment, which once made every stop for the burst before the newest look current
- */
-export function createBurstIds(): BurstIds {
-	let next = 0;
-	return {
-		take() {
-			const id = next;
-			next = id + 1;
-			return id;
-		},
-		isNewest(seen) {
-			return seen === next - 1;
-		},
-	};
-}
-
 /**
  * Advance the list to frame time `now`: a burst not yet drawn starts now (stamped in place),
  * and one whose lifetime is up is dropped. Returns `list` itself unless one was dropped.
@@ -173,6 +152,12 @@ export function advanceBursts(list: Burst[], now: number): Burst[] {
 		if (now - list[i].start < BURST_LIFETIME_MS) next.push(list[i]);
 	}
 	return next;
+}
+
+/** Whether the list has nothing left to draw, so its clock can stop */
+export function noBurstsLeft(list: readonly Burst[]): boolean {
+	"worklet";
+	return list.length === 0;
 }
 
 // The curves, by progress `t` (0..1, eased) through a burst. The easings are Reanimated's

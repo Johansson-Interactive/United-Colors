@@ -12,6 +12,7 @@ import {
 } from "../dotSprites";
 import { COMBO_AMBER } from "../theme/theme";
 import { BURST_COLORS, NOT_STARTED } from "./burstFrames";
+import type { EffectReducer } from "./effectLane";
 import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
 
 /**
@@ -243,6 +244,13 @@ export function tallyIdle(tally: Tally, now: number): boolean {
 		(tally.lastLand === NOT_STARTED || now - tally.lastLand >= SCORE_BUMP_MS)
 	);
 }
+
+/** The score meter's effect lane: catches queued on the JS thread, counted into the total on the UI thread */
+export const TALLY: EffectReducer<Tally, TallyCatch> = {
+	add: withCatch,
+	advance: advanceTally,
+	idle: tallyIdle,
+};
 
 /** Where the meter draws: the total's centre */
 export interface TallyGeometry {

@@ -20,11 +20,11 @@ import {
 	type Burst,
 	burstColor,
 	burstSprites,
-	createBurstIds,
 	FULL_RING_SIZE,
 	layOutBurst,
 	MAX_BURSTS,
 	NOT_STARTED,
+	noBurstsLeft,
 	POP_DOT_SCALE,
 	POP_PITCH,
 	packBursts,
@@ -313,37 +313,19 @@ describe("the burst list", () => {
 		advanceBursts(list, 0);
 		list = withBurst(list, ring(1));
 		list = withBurst(list, ring(2));
+		// Not kept: the call stamps the bursts in place, which is what the rest of the test relies on
 		advanceBursts(list, 400);
 		expect(advanceBursts(list, BURST_LIFETIME_MS - 1)).toBe(list);
 		const next = advanceBursts(list, BURST_LIFETIME_MS);
 		expect(next.map((b) => b.id)).toEqual([1, 2]);
 		expect(advanceBursts(next, 400 + BURST_LIFETIME_MS)).toEqual([]);
 	});
-});
 
-describe("burst ids", () => {
-	it("hands out ids from 0, one at a time", () => {
-		const ids = createBurstIds();
-		expect([ids.take(), ids.take(), ids.take()]).toEqual([0, 1, 2]);
-	});
-
-	it("takes a stop for the newest burst taken", () => {
-		const ids = createBurstIds();
-		ids.take();
-		const newest = ids.take();
-		expect(ids.isNewest(newest)).toBe(true);
-	});
-
-	it("refuses a stop sent before a newer burst reached the UI thread", () => {
-		const ids = createBurstIds();
-		const drawn = ids.take();
-		ids.take();
-		expect(ids.isNewest(drawn)).toBe(false);
-	});
-
-	it("refuses a stop before any burst was drawn once one is taken", () => {
-		const ids = createBurstIds();
-		ids.take();
-		expect(ids.isNewest(-1)).toBe(false);
+	it("has no bursts left only once the list is empty", () => {
+		const list = withBurst([], ring(0));
+		expect(noBurstsLeft(list)).toBe(false);
+		// Not kept: the call stamps the burst in place, so its lifetime starts here
+		advanceBursts(list, 400);
+		expect(noBurstsLeft(advanceBursts(list, 400 + BURST_LIFETIME_MS))).toBe(true);
 	});
 });
