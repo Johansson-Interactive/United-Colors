@@ -75,7 +75,7 @@ The combo bonus, drawn as amber liquid at the bottom of the settled drop with it
 _Avoid_: bonus bar, combo fill
 
 **Tally**:
-The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer. It is drawn at the largest size that fits inside its room (the whole drop, or the part above the amber layer once there is one), never larger than the score in play and never smaller than readable. While the drop is still too small to hold it readably, it stays at that smallest size and spills past the drop's edge; the settled drop is always large enough to hold it.
+The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer. It is drawn at the largest size that fits inside its room (the whole drop, or the part above the amber layer once there is one), never larger than the score in play and never smaller than readable. Throughout the pour it is sized as the final score's figure, so it grows with the drop and never jumps as a digit is added. While the drop is still too small to hold that figure readably, the tally stays at the smallest size and spills past the drop's edge, a little longer than its own, narrower figure would need; the settled drop is always large enough to hold it.
 _Avoid_: counter, subtotal
 
 ### Ranking
