@@ -75,7 +75,7 @@ The game over's replay of a run: its catches pour in as small dots, in their ord
 _Avoid_: recap, summary animation
 
 **Drop**:
-The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land and swells as the bonus pours in; it holds the tally and, once settled, the amber layer.
+The one body of the player's liquid the pour's catches merge into. Its area follows the tally, so it grows as they land and swells as the bonus pours in; it holds the tally and, once settled, the amber layer. Once settled, it is never smaller than what holds its figures at a readable size, so a short run's drop swells a little past its score as it settles.
 _Avoid_: blob, ball, cup
 
 **Bonus pour**:
@@ -87,7 +87,7 @@ The combo bonus, drawn as amber liquid at the bottom of the settled drop with it
 _Avoid_: bonus bar, combo fill
 
 **Tally**:
-The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer, shrinking to fit inside it as the bonus figure fits inside the amber. Only a drop too small to hold it readably leaves it at full size, standing on the amber and out of the drop's top.
+The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer. It is drawn at the largest size that fits inside its room (the whole drop, or the part above the amber layer once there is one), never larger than the score in play and never smaller than readable. Throughout the pour it is sized as the final score's figure, so it grows with the drop and never jumps as a digit is added. While the drop is still too small to hold that figure readably, the tally stays at the smallest size and spills past the drop's edge, a little longer than its own, narrower figure would need; the settled drop is always large enough to hold it.
 _Avoid_: counter, subtotal
 
 ### Screens

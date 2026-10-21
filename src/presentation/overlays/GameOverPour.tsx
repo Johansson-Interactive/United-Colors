@@ -11,8 +11,6 @@ import { CAPTION, WHITE } from "../theme/theme";
 
 interface GameOverPourProps {
 	plan: PourPlan;
-	/** The tally's dot spacing (px, before the pour is scaled to fit) */
-	pitch: number;
 	frame: SharedValue<PourFrame>;
 	status: PourStatus;
 	row: BestRow;
@@ -33,23 +31,15 @@ interface Box {
 /**
  * The middle of the game over: the clock, the pour's drop with the tally in it and the best row
  * under it, in a column centred on the drop. The drop's slot is sized for the settled drop and
- * the tally as it stands before the bonus pours it into the drop's top part, from the start, so
- * nothing moves as it grows.
+ * its tally (see pourFit), from the start, so nothing moves as it grows.
  */
-export const GameOverPour: React.FC<GameOverPourProps> = ({
-	plan,
-	pitch,
-	frame,
-	status,
-	row,
-	color,
-}) => {
+export const GameOverPour: React.FC<GameOverPourProps> = ({ plan, frame, status, row, color }) => {
 	const [box, setBox] = useState<Box | null>(null);
 	const handleLayout = (event: LayoutChangeEvent) => {
 		const { width, height } = event.nativeEvent.layout;
 		setBox({ width, height });
 	};
-	const fit = box ? pourFit(plan, pitch, box.height - 2 * (ROW_HEIGHT + ROW_GAP)) : null;
+	const fit = box ? pourFit(plan, box.height - 2 * (ROW_HEIGHT + ROW_GAP)) : null;
 
 	return (
 		<View style={styles.centre} onLayout={handleLayout} pointerEvents="none">
