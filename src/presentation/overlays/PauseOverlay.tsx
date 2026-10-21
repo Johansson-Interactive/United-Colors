@@ -14,10 +14,6 @@ interface PauseOverlayProps {
 	onQuit: (point: PressPoint) => void;
 	/** Open the settle bowl to set the level pose again */
 	onCalibrate: () => void;
-	soundEnabled: boolean;
-	musicEnabled: boolean;
-	onToggleSound: () => void;
-	onToggleMusic: () => void;
 	/** Tilt sensitivity, a multiple of the default speed; the speed dot shows it */
 	sensitivity: number;
 	/** Open the speed view to choose how fast the dot moves */
@@ -39,10 +35,6 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	color,
 	onQuit,
 	onCalibrate,
-	soundEnabled,
-	musicEnabled,
-	onToggleSound,
-	onToggleMusic,
 	sensitivity,
 	onSpeed,
 	children,
@@ -81,12 +73,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				levelColor={color}
 			/>
 
-			<SoundMenu
-				soundEnabled={soundEnabled}
-				musicEnabled={musicEnabled}
-				onToggleSound={onToggleSound}
-				onToggleMusic={onToggleMusic}
-			/>
+			<SoundMenu />
 		</Animated.View>
 	);
 };

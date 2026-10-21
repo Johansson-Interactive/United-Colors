@@ -25,13 +25,9 @@ import { playColourAt } from "./playColour";
 
 interface KioskOverlayProps {
 	highScore: number;
-	soundEnabled: boolean;
-	musicEnabled: boolean;
 	onStart: (point: PressPoint, color: string) => void;
 	/** Open the settle bowl to set the level pose, in the play dot's current colour */
 	onCalibrate: (color: string) => void;
-	onToggleSound: () => void;
-	onToggleMusic: () => void;
 	/** Tilt sensitivity, so the play dot rolls as fast as the player dot will; the speed dot shows it */
 	sensitivity: number;
 	/** Open the speed view, in the play dot's current colour */
@@ -61,12 +57,8 @@ function heldColor(cycle: number): string {
  */
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
-	soundEnabled,
-	musicEnabled,
 	onStart,
 	onCalibrate,
-	onToggleSound,
-	onToggleMusic,
 	sensitivity,
 	onSpeed,
 	versionTag,
@@ -142,12 +134,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 				onSpeed={() => onSpeed(colorNow())}
 			/>
 
-			<SoundMenu
-				soundEnabled={soundEnabled}
-				musicEnabled={musicEnabled}
-				onToggleSound={onToggleSound}
-				onToggleMusic={onToggleMusic}
-			/>
+			<SoundMenu />
 		</Animated.View>
 	);
 };
