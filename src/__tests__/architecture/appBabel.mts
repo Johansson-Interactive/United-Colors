@@ -8,7 +8,14 @@ const babel = require(
 	require.resolve("@babel/core", { paths: [require.resolve("expo/package.json")] }),
 ) as {
 	transformSync(source: string, options: Record<string, unknown>): { code: string };
+	parseSync(code: string, options: Record<string, unknown>): BabelNode;
 };
+
+/** A node of Babel's syntax tree, loosely typed */
+export interface BabelNode {
+	type: string;
+	[key: string]: unknown;
+}
 
 /** The app's source directory, as an absolute path ending in a slash */
 export const SRC_ROOT = fileURLToPath(new URL("src/", projectRoot));
@@ -28,4 +35,9 @@ export function transformAsMetro(source: string, filename: string, caller: Metro
 		babelrc: false,
 		caller: { name: "metro", bundler: "metro", ...caller },
 	}).code;
+}
+
+/** Babel's syntax tree of `code`, Babel output as transformAsMetro returns it */
+export function parseOutput(code: string): BabelNode {
+	return babel.parseSync(code, { configFile: false, babelrc: false, sourceType: "script" });
 }
