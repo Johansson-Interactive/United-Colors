@@ -25,6 +25,7 @@ import {
 	layOutBurst,
 	MAX_BURSTS,
 	NOT_STARTED,
+	noBurstsLeft,
 	POP_DOT_SCALE,
 	POP_PITCH,
 	packBursts,
@@ -318,6 +319,13 @@ describe("the burst list", () => {
 		const next = advanceBursts(list, BURST_LIFETIME_MS);
 		expect(next.map((b) => b.id)).toEqual([1, 2]);
 		expect(advanceBursts(next, 400 + BURST_LIFETIME_MS)).toEqual([]);
+	});
+
+	it("has no bursts left only once the list is empty", () => {
+		const list = withBurst([], ring(0));
+		expect(noBurstsLeft(list)).toBe(false);
+		advanceBursts(list, 400);
+		expect(noBurstsLeft(advanceBursts(list, 400 + BURST_LIFETIME_MS))).toBe(true);
 	});
 });
 

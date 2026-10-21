@@ -18,9 +18,10 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
  * floats up, or a ring that expands from where something happened (a point catch, the final hit). They were views once; their curves
  * are those views' animations, and a pop's dots land where the view's DotMatrixText put them.
  *
- * The list of bursts lives on the UI thread. The JS thread lays each one out once (see
- * layOutBurst) and appends it with withBurst; the UI thread stamps it with the frame time on its
- * first frame, drops it when its lifetime is up (advanceBursts) and packs every frame's
+ * The list of bursts lives on the UI thread, in an effect lane (see effectLane.ts). The JS
+ * thread lays each one out once (see layOutBurst) and appends it with withBurst; the UI thread
+ * stamps it with the frame time on its first frame, drops it when its lifetime is up
+ * (advanceBursts), stops the clock once noBurstsLeft, and packs every frame's
  * sprites and rings for drawing (packBursts). Packing runs every frame a burst is alive, so it
  * indexes directly, calls nothing per dot and reuses its objects from frame to frame.
  */
@@ -173,6 +174,12 @@ export function advanceBursts(list: Burst[], now: number): Burst[] {
 		if (now - list[i].start < BURST_LIFETIME_MS) next.push(list[i]);
 	}
 	return next;
+}
+
+/** Whether the list has nothing left to draw, so its clock can stop */
+export function noBurstsLeft(list: readonly Burst[]): boolean {
+	"worklet";
+	return list.length === 0;
 }
 
 // The curves, by progress `t` (0..1, eased) through a burst. The easings are Reanimated's

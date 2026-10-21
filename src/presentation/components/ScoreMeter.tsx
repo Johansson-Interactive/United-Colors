@@ -48,7 +48,7 @@ const METER_HEIGHT = 230;
  * time. The clock runs only while something moves.
  */
 export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
-	// Memoised by hand, not by the React Compiler, as useStageEffects is: it reads the frame
+	// Memoised by hand, not by the React Compiler, as useEffectLane is: it reads the frame
 	// callback's worklet factory as a call that may change the shared values
 	"use no memo";
 	const { width } = useStageBox();

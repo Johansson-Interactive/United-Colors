@@ -29,7 +29,7 @@ export function usePour(
 	audio: GameAudio,
 	best: number,
 ): { frame: SharedValue<PourFrame>; status: PourStatus } {
-	// Memoised by hand, as useStageEffects is: the React Compiler rebuilt the frame callback
+	// Memoised by hand, as useEffectLane is: the React Compiler rebuilt the frame callback
 	// every render, and useFrameCallback re-registers on each new one
 	"use no memo";
 	const [first] = useState(() => startPour(plan));
