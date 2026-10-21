@@ -5,10 +5,7 @@
  * hold thaws it (see getReady.ts). A moment after a run ends the field dims for the game over,
  * and otherwise it clears quickly. The edges are washed in ink on the title and in the
  * player's colour everywhere else. The stage fades out under the bowl and the speed view
- * opened from the title, so only their one dot moves, and back in as they close. In play it
- * shows at once: a run started from the bowl passes back through the title under its flood
- * (see screenFlow.ts), and showing at once as play starts overrides the title's fade-in, so
- * the stage is up as the flood lifts. Anywhere else it is already showing.
+ * opened from the title, so only their one dot moves, and back in as they close.
  *
  * The frost window is Get ready's to open and widen; the look only shuts it as the frost
  * comes on, so a pause always starts frosted all over.
@@ -83,8 +80,14 @@ function frostOf(phase: GamePhase): StageMove<number> {
 	}
 }
 
+/**
+ * Away from the title's kiosk the stage shows at once: over the pause the bowl and the speed
+ * view leave the frozen, frosted game showing, and anywhere else it is already up. A run
+ * started from the bowl is why it must be at once: the flow passes back through the title
+ * under the bowl's flood (see screenFlow.ts), which starts the title's fade-in, and the
+ * instant show as play starts overrides it, so the stage is up as the flood lifts.
+ */
 function opacityOf(screen: Screen, phase: GamePhase): StageMove<number> {
-	// Over the pause the bowl and the speed view leave the frozen, frosted game showing
 	if (phase !== "KIOSK") return { to: 1, over: INSTANT };
 	return screen.kind === "settle" || screen.kind === "speed"
 		? { to: 0, over: STAGE_FADE_OUT }
