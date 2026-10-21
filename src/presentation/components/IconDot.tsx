@@ -14,6 +14,7 @@ import { DotButton, GLOW_PAD, type PressPoint } from "./DotButton";
 
 export type Icon =
 	| "pause"
+	| "play"
 	| "sound-on"
 	| "sound-off"
 	| "level"
@@ -67,6 +68,26 @@ const Pause: React.FC<GlyphProps> = ({ c, r, color }) => (
 		/>
 	</>
 );
+
+/** A play triangle with rounded corners, nudged right so it sits optically centred in the dot */
+const Play: React.FC<GlyphProps> = ({ c, r, color }) => {
+	const triangle = useMemo(
+		() =>
+			Skia.PathBuilder.Make()
+				.moveTo(c - r * 0.16, c - r * 0.27)
+				.lineTo(c + r * 0.29, c)
+				.lineTo(c - r * 0.16, c + r * 0.27)
+				.close()
+				.detach(),
+		[c, r],
+	);
+	return (
+		<>
+			<Path path={triangle} color={color} />
+			<Path path={triangle} color={color} style="stroke" strokeWidth={r * 0.1} strokeJoin="round" />
+		</>
+	);
+};
 
 const SoundOn: React.FC<GlyphProps> = ({ c, r, color }) => {
 	const waves = useMemo(() => {
@@ -152,6 +173,7 @@ const SpeedFast: React.FC<GlyphProps> = (props) => <Comet {...props} tail={0.82}
 
 const GLYPHS: Record<Icon, React.FC<GlyphProps>> = {
 	pause: Pause,
+	play: Play,
 	"sound-on": SoundOn,
 	"sound-off": SoundOff,
 	level: Level,
