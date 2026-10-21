@@ -1,4 +1,4 @@
-import { Canvas, Circle, vec } from "@shopify/react-native-skia";
+import { Canvas, Circle, Group, vec } from "@shopify/react-native-skia";
 import type React from "react";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -80,10 +80,12 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		if (next.fired) scheduleOnRN(onReady);
 	});
 
+	// With no player in the scene (it should always have one here) nothing is drawn
 	const disc = useDerivedValue(() => playerDisc(scene.get()));
+	const shown = useDerivedValue(() => (disc.get() ? 1 : 0));
 	const dotCentre = useDerivedValue(() => {
 		const d = disc.get();
-		return vec(d?.x ?? 0, d?.y ?? 0);
+		return d ? vec(d.x, d.y) : vec(0, 0);
 	});
 	const dotRadius = useDerivedValue(() => disc.get()?.radius ?? 0);
 	const ring = useDerivedValue(() => ringRadius(state.get().progress, dotRadius.get()));
@@ -113,8 +115,10 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 			pointerEvents="none"
 		>
 			<Canvas style={StyleSheet.absoluteFill}>
-				<Circle c={dotCentre} r={ring} color={color} style="stroke" strokeWidth={STROKE} />
-				<Circle c={outline} r={dotRadius} color={color} style="stroke" strokeWidth={STROKE} />
+				<Group opacity={shown}>
+					<Circle c={dotCentre} r={ring} color={color} style="stroke" strokeWidth={STROKE} />
+					<Circle c={outline} r={dotRadius} color={color} style="stroke" strokeWidth={STROKE} />
+				</Group>
 			</Canvas>
 			<View style={styles.top}>
 				<Animated.View style={captionStyle}>
