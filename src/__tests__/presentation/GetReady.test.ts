@@ -124,7 +124,8 @@ describe("get-ready ring", () => {
 });
 
 describe("get-ready caption", () => {
-	const frame = (state: GetReadyState, x: number) => [state, stepGetReady(state, x, 0, 16)] as const;
+	const frame = (state: GetReadyState, x: number) =>
+		[state, stepGetReady(state, x, 0, 16)] as const;
 
 	it("stays up while the tap's jolt is still arming", () => {
 		expect(isHolding(...frame(INITIAL_GET_READY, 0))).toBe(false);
