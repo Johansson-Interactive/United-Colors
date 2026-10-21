@@ -2,6 +2,7 @@ import type { GamePhase } from "../../domain/types";
 import {
 	cornerDot,
 	type FlowState,
+	fieldFrosted,
 	INITIAL_FLOW,
 	type Screen,
 	screenOf,
@@ -455,5 +456,24 @@ describe("the corner dot", () => {
 		expect(cornerDot({ kind: "settle", color: PINK })).toBeNull();
 		expect(cornerDot({ kind: "speed", color: PINK })).toBeNull();
 		expect(cornerDot({ kind: "gameOver" })).toBeNull();
+	});
+});
+
+describe("the frosted field", () => {
+	it("frosts the frozen game under the pause, the speed view and the bowl opened from it", () => {
+		expect(fieldFrosted("PAUSED", { kind: "pause" })).toBe(true);
+		expect(fieldFrosted("PAUSED", { kind: "speed", color: PINK })).toBe(true);
+		expect(fieldFrosted("PAUSED", { kind: "settle", color: PINK })).toBe(true);
+	});
+
+	it("lifts for Get ready, so the player sees the field they are about to play in", () => {
+		expect(fieldFrosted("PAUSED", { kind: "getReady" })).toBe(false);
+	});
+
+	it("is clear in play and on the title, and the bowl over the title", () => {
+		expect(fieldFrosted("RUNNING", { kind: "hud" })).toBe(false);
+		expect(fieldFrosted("REJECTING", { kind: "hud" })).toBe(false);
+		expect(fieldFrosted("KIOSK", { kind: "title" })).toBe(false);
+		expect(fieldFrosted("KIOSK", { kind: "settle", color: PINK })).toBe(false);
 	});
 });

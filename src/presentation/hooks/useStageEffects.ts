@@ -26,9 +26,9 @@ import { INK_LIFT } from "../theme/theme";
 
 /**
  * Presentation-only reactions to what the game does: the edge wash takes the player's
- * colour, the scene frosts when still (but in Get ready, which shows the frozen field), the
- * final hit shakes the stage, and score changes burst where the player is. Reads the store;
- * never writes to it.
+ * colour, the scene frosts while `frosted` (see fieldFrosted) and dims on the game over, the
+ * refusal that ends a run shakes the stage, and score changes burst where the player is. Reads
+ * the store; never writes to it.
  *
  * The bursts never go through React: each is laid out here once and appended to a list on
  * the UI thread, which the game canvas draws at `burstClock`, the frame time (see
@@ -38,7 +38,7 @@ export function useStageEffects(
 	store: GameStore,
 	phase: GamePhase,
 	playerColor: string,
-	gettingReady: boolean,
+	frosted: boolean,
 ) {
 	// Memoised by hand, not by the React Compiler: it reads the frame callback's worklet factory
 	// as a call that may change the shared values, so it rebuilt the callback on every render
@@ -53,17 +53,16 @@ export function useStageEffects(
 	const burstSeen = useSharedValue(-1);
 	const [burstIds] = useState(createBurstIds);
 
-	// Frost the scene when it is still, but lift it for Get ready so the player sees the field
-	// they are about to play in; wash the edges in the player's colour when playing
+	// Frost the frozen game, dim the game over; wash the edges in the player's colour when playing
 	useEffect(() => {
-		if (phase === "PAUSED" && !gettingReady) {
+		if (frosted) {
 			frost.set(withTiming(1, { duration: 450 }));
 		} else if (phase === "GAME_OVER") {
 			frost.set(withDelay(350, withTiming(0.6, { duration: 700 })));
 		} else {
 			frost.set(withTiming(0, { duration: 300 }));
 		}
-	}, [phase, gettingReady, frost]);
+	}, [phase, frosted, frost]);
 
 	useEffect(() => {
 		accent.set(phase === "KIOSK" ? INK_LIFT : playerColor);

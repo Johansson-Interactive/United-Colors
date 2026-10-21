@@ -159,6 +159,15 @@ export function cornerDot(screen: Screen): "pause" | "play" | null {
 }
 
 /**
+ * Whether the frozen game is frosted over: under the pause and what opens over it, but not
+ * Get ready, which shows the field the player is about to play in. (The game over's dimmer
+ * frost is the stage's own.)
+ */
+export function fieldFrosted(phase: GamePhase, screen: Screen): boolean {
+	return phase === "PAUSED" && screen.kind !== "getReady";
+}
+
+/**
  * What can still step the flow in Get ready: the corner dot, leaving the app and the hold. No
  * flood can start from Get ready, so none can cover it.
  */

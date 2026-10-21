@@ -22,7 +22,7 @@ import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
-import { cornerDot, type FlowAction } from "./flow/screenFlow";
+import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -180,7 +180,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		store,
 		phase,
 		playerColor,
-		screen.kind === "getReady",
+		fieldFrosted(phase, screen),
 	);
 
 	useAutoStart(autoStart, dispatch);
