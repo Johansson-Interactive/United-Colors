@@ -259,10 +259,10 @@ export const OPEN_GET_READY: GetReadyFrameState = {
 };
 
 /**
- * With no player in the frozen scene (it should always have one here) Get ready still runs, on
- * a seat of no size in the corner, but nothing is drawn
+ * The seat with no player in the frozen scene (it should always have one here): Get ready still
+ * runs, on a seat of no size in the corner, but nothing is drawn and the window stays shut
  */
-const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
+export const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
 
 /** This frame's inputs: where the seat is, the tilt and the time since the last frame */
 export interface GetReadyInputs {
@@ -279,9 +279,11 @@ export interface GetReadyInputs {
 export interface GetReadyFrame {
 	/** Whether the seat, the rim and the dot are drawn at all: not without a player */
 	drawn: boolean;
+	/** The seat the frame was drawn on: NO_SEAT without a player */
+	seat: Disc;
 	/** The rolling dot's centre */
 	dot: Point;
-	/** The clear window in the frost */
+	/** The clear window in the frost: shut without a player */
 	window: FrostWindow;
 	/** How strongly the rim on the window's edge shows, 0..1 */
 	rim: number;
@@ -292,39 +294,50 @@ export interface GetReadyFrame {
 }
 
 /**
- * What a state draws at the seat. The window breathes by the roll the state holds, which is
- * this frame's stepped roll, the same one the dot and the rim are drawn from, so the window,
- * its rim and the dot agree on how far from home the dot is. (The overlay once breathed the
- * window by the roll before the step, a frame behind the rim; nothing called for that.)
+ * What a state draws at the seat. The window breathes by the state's roll, which is this
+ * frame's stepped roll, the same one the dot and the rim are drawn from, so the window, its rim
+ * and the dot agree on how far from home the dot is. Without a player nothing is drawn and the
+ * window stays shut, so nothing thaws open in the corner.
  */
 function drawFrame(
-	state: GetReadyFrameState,
+	state: GetReadyFrameState & { roll: Roll },
 	player: Disc | null,
 	field: FieldSize,
-	fired: boolean,
+	firedNow: boolean,
 ): GetReadyFrame {
 	"worklet";
-	const seat = player ?? NO_SEAT;
-	const { hold, caption } = state;
-	const roll = state.roll ?? rollAt(seat);
-	const home = seated(roll, seat);
+	const { hold, roll, caption } = state;
+	const dot = { x: roll.x, y: roll.y };
+	if (player === null) {
+		return {
+			drawn: false,
+			seat: NO_SEAT,
+			dot,
+			window: NO_FROST_WINDOW,
+			rim: 0,
+			caption,
+			fired: firedNow,
+		};
+	}
+	const home = seated(roll, player);
 	const pulse = seatPulse(hold.elapsedMs);
 	return {
-		drawn: player !== null,
-		dot: { x: roll.x, y: roll.y },
+		drawn: true,
+		seat: player,
+		dot,
 		window: {
-			x: seat.x,
-			y: seat.y,
+			x: player.x,
+			y: player.y,
 			radius: windowRadius(
 				hold.progress,
-				seat.radius,
-				windowReach(seat, field),
+				player.radius,
+				windowReach(player, field),
 				pulse * (1 - home),
 			),
 		},
 		rim: rimOpacity(hold.progress, home, pulse),
 		caption,
-		fired,
+		fired: firedNow,
 	};
 }
 
@@ -339,11 +352,17 @@ export function advanceGetReady(
 ): { state: GetReadyFrameState; frame: GetReadyFrame } {
 	"worklet";
 	const { tilt, dt, field, sensitivity } = inputs;
-	if (state.hold.fired) return { state, frame: drawFrame(state, inputs.seat, field, false) };
 	const seat = inputs.seat ?? NO_SEAT;
-	const roll = stepRoll(state.roll ?? rollAt(seat), rollTarget(seat, tilt, sensitivity, field), dt);
+	const roll = state.roll ?? rollAt(seat);
+	if (state.hold.fired) {
+		return { state, frame: drawFrame({ ...state, roll }, inputs.seat, field, false) };
+	}
 	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt);
-	const next = { hold, roll, caption: !isHolding(state.hold, hold) };
+	const next = {
+		hold,
+		roll: stepRoll(roll, rollTarget(seat, tilt, sensitivity, field), dt),
+		caption: !isHolding(state.hold, hold),
+	};
 	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired) };
 }
 

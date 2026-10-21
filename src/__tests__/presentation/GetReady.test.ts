@@ -386,6 +386,7 @@ describe("get-ready frame step", () => {
 			sensitivity: 1,
 		});
 		expect(frame.drawn).toBe(false);
+		expect(frame.window).toEqual(NO_FROST_WINDOW);
 	});
 
 	it("keeps the caption hidden once fired", () => {

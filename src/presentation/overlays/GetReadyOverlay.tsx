@@ -13,7 +13,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { playerDisc, type StretchedDisc } from "../../application/sceneRecord";
+import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
@@ -27,6 +27,7 @@ import {
 	advanceGetReady,
 	closeGetReady,
 	type GetReadyFrame,
+	NO_SEAT,
 	OPEN_GET_READY,
 } from "../tilt/getReady";
 import { useTilt } from "../tilt/TiltProvider";
@@ -66,11 +67,10 @@ const SHADE_MAX = 0.35;
 const SHADE_FULL_AT = 40;
 const SHADE_TRAIL = 8;
 
-/** With no player in the scene (it should always have one here) there is no seat to cover */
-const NO_SEAT: StretchedDisc = { x: 0, y: 0, radius: 0, stretchX: 0, stretchY: 0 };
 /** Before the first frame is stepped nothing is drawn; the overlay is still fading in */
 const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	drawn: false,
+	seat: NO_SEAT,
 	dot: { x: 0, y: 0 },
 	window: NO_FROST_WINDOW,
 	rim: 0,
@@ -121,7 +121,8 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 
 	// The scene is frozen, so the seat is where the player is drawn in it throughout
 	const player = useDerivedValue(() => playerDisc(scene.get()));
-	const seat = useDerivedValue(() => player.get() ?? NO_SEAT);
+	// What the stepper last drew on: the seat, or NO_SEAT with nothing drawn
+	const seat = useDerivedValue(() => frame.get().seat);
 
 	useFrameCallback((info) => {
 		const prev = state.get();
@@ -157,7 +158,8 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	// The frozen player is stretched along its jelly stretch, so its cover is too (see drawScene)
 	const coverRadius = useDerivedValue(() => seat.get().radius * COVER_SCALE + COVER_MARGIN);
 	const coverTransform = useDerivedValue(() => {
-		const { stretchX, stretchY } = seat.get();
+		const stretchX = player.get()?.stretchX ?? 0;
+		const stretchY = player.get()?.stretchY ?? 0;
 		const k = 1 + Math.hypot(stretchX, stretchY);
 		const angle = Math.atan2(stretchY, stretchX);
 		return [{ rotate: angle }, { scaleX: k }, { scaleY: 1 / k }, { rotate: -angle }];
