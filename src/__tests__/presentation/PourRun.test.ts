@@ -822,4 +822,20 @@ describe("the tally in the drop", () => {
 		}
 		expect(held).toBeGreaterThan(0);
 	});
+
+	it("changes the tally's size only as far as the drop grows, a digit added too (99 to 100)", () => {
+		const p = plan(loneRun(120));
+		let before = pourAt(p, 0);
+		let crossed = false;
+		for (let ms = 1; ms <= p.restMs; ms++) {
+			const view = pourAt(p, ms);
+			const grew = view.drop.radius / Math.max(before.drop.radius, 1e-9);
+			const sized = view.tallyPitch / before.tallyPitch;
+			expect(sized).toBeGreaterThanOrEqual(1 - 1e-6);
+			if (before.drop.radius > 0) expect(sized).toBeLessThanOrEqual(grew + 1e-6);
+			if (before.drop.tally === 99 && view.drop.tally === 100) crossed = true;
+			before = view;
+		}
+		expect(crossed).toBe(true);
+	});
 });
