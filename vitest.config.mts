@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -18,5 +18,7 @@ export default defineConfig({
 			"**/__tests__/**/*.test.tsx",
 			"**/__tests__/**/*.test.mts",
 		],
+		// Agent worktrees under .claude/ are whole repo copies, tests included
+		exclude: [...configDefaults.exclude, ".claude/**"],
 	},
 });
