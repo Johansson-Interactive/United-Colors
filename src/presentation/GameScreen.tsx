@@ -85,8 +85,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
 	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
 	const playerColor = useStore(store, playerColorOf);
-	const kioskInitializedRef = useRef(false);
-
 	const flood = useFlood();
 	const scene = useSessionScene(session);
 
@@ -120,16 +118,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The arena is the laid-out stage with the glass's corners, which may arrive after it
 	const stageSizeRef = useRef<ScreenSize | null>(null);
-	const handleLayout = useCallback(
-		(size: ScreenSize) => {
-			stageSizeRef.current = size;
-			session.setScreen({ ...size, corners: corners ?? undefined });
-			if (kioskInitializedRef.current) return;
-			kioskInitializedRef.current = true;
-			session.startKiosk();
-		},
-		[session, corners],
-	);
 	useEffect(() => {
 		const size = stageSizeRef.current;
 		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
@@ -164,6 +152,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		tiltPresent: () => tilt.available.get(),
 		playerColor: () => playerColorOf(store.getState()),
 	});
+
+	// Size and corners go straight to the session; the flow decides what the layout starts
+	const handleLayout = useCallback(
+		(size: ScreenSize) => {
+			stageSizeRef.current = size;
+			session.setScreen({ ...size, corners: corners ?? undefined });
+			dispatch({ type: "stageLaidOut" });
+		},
+		[session, corners, dispatch],
+	);
 
 	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
 	const { accent, frost, frostWindow, shake, bursts, burstClock } = useStageEffects(

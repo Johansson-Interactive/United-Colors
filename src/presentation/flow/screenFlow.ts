@@ -37,6 +37,8 @@ export interface FlowState {
 	over: Over | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
+	/** The kiosk has been started, by the stage's first layout; later layouts leave it be */
+	kioskStarted: boolean;
 }
 
 export const INITIAL_FLOW: FlowState = {
@@ -44,6 +46,7 @@ export const INITIAL_FLOW: FlowState = {
 	settle: null,
 	over: null,
 	flooding: false,
+	kioskStarted: false,
 };
 
 /** The one screen over the playfield; the HUD is the screen of a run in play */
@@ -102,7 +105,9 @@ export type FlowEvent =
 	/** The flood covers the screen; whatever was under it can go */
 	| { type: "covered" }
 	/** The game moved to another phase */
-	| { type: "phaseChanged"; phase: GamePhase };
+	| { type: "phaseChanged"; phase: GamePhase }
+	/** The stage was laid out; only the first one starts the kiosk */
+	| { type: "stageLaidOut" };
 
 /** What the game does: straight away, or once a flood covers the screen */
 export type FlowAction =
@@ -233,6 +238,12 @@ export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): F
 function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep {
 	// The phase is the game's to report, flood or not
 	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
+	// The kiosk is the title's, so the first layout starts it even while a flood runs
+	if (event.type === "stageLaidOut") {
+		return state.kioskStarted
+			? { state }
+			: { state: { ...state, kioskStarted: true }, act: { kind: "kiosk" } };
+	}
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
 	// Get ready shows only the hold; the pause's controls have faded out under it, and a hold
@@ -318,6 +329,9 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			// The hold is the countdown; play picks up the moment the thaw clears the field, no flood
 			return { ...closeOver(state), act: RESUME };
 		case "covered":
-			return { state: { ...INITIAL_FLOW, phase: state.phase } };
+			// Covering clears the screen back to the title, but the kiosk stays started
+			return {
+				state: { ...INITIAL_FLOW, phase: state.phase, kioskStarted: state.kioskStarted },
+			};
 	}
 }

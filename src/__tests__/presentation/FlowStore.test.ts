@@ -234,6 +234,16 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "hud" });
 	});
 
+	it("the stage's layouts start the kiosk once, across repeated layouts and floods", () => {
+		const { flow, calls, covers } = setup();
+		flow.getState().dispatch({ type: "stageLaidOut" });
+		flow.getState().dispatch({ type: "stageLaidOut" });
+		flow.getState().dispatch({ type: "retryPressed", at: AT });
+		covers();
+		flow.getState().dispatch({ type: "stageLaidOut" });
+		expect(calls).toEqual(["startKiosk", `flood ${PINK} 10,20`, `play ${PINK}`]);
+	});
+
 	it("stops following the game once unfollowed, and catches up when it follows again", () => {
 		const { follow, unfollow, publish, screen } = setup();
 		unfollow();
