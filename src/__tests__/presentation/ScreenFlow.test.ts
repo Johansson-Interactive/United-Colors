@@ -1,5 +1,6 @@
 import type { GamePhase } from "../../domain/types";
 import {
+	cornerDot,
 	type FlowState,
 	INITIAL_FLOW,
 	type Screen,
@@ -403,4 +404,19 @@ describe("which screen shows", () => {
 			});
 		}
 	}
+});
+
+describe("the corner dot", () => {
+	it("pauses in play, plays on the pause screen and pauses again in Get ready, in the one spot", () => {
+		expect(cornerDot({ kind: "hud" })).toBe("pause");
+		expect(cornerDot({ kind: "pause" })).toBe("play");
+		expect(cornerDot({ kind: "getReady" })).toBe("pause");
+	});
+
+	it("is not there on the title, the bowl, the speed view or the game over", () => {
+		expect(cornerDot({ kind: "title" })).toBeNull();
+		expect(cornerDot({ kind: "settle", color: PINK })).toBeNull();
+		expect(cornerDot({ kind: "speed", color: PINK })).toBeNull();
+		expect(cornerDot({ kind: "gameOver" })).toBeNull();
+	});
 });

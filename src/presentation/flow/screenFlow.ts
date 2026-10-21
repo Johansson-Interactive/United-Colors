@@ -138,6 +138,22 @@ export function screenOf(state: FlowState): Screen {
 	}
 }
 
+/**
+ * What the HUD's top-right dot shows on `screen`, or null where it is not there. It stays in
+ * the one spot from play to the pause and Get ready, so the thumb that paused can carry on.
+ */
+export function cornerDot(screen: Screen): "pause" | "play" | null {
+	switch (screen.kind) {
+		case "hud":
+		case "getReady":
+			return "pause";
+		case "pause":
+			return "play";
+		default:
+			return null;
+	}
+}
+
 /** What can still step the flow in Get ready: the pause dot (or leaving the app), the hold */
 const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
 	"pausePressed",
