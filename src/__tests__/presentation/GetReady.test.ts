@@ -3,6 +3,7 @@ import {
 	type GetReadyState,
 	HOLD_MS,
 	INITIAL_GET_READY,
+	isHolding,
 	outlineCentre,
 	RING_START_RADIUS,
 	ringRadius,
@@ -119,5 +120,25 @@ describe("get-ready ring", () => {
 
 	it("hugs a dot bigger than the starting ring throughout", () => {
 		expect(ringRadius(0.5, RING_START_RADIUS + 10)).toBe(RING_START_RADIUS + 10);
+	});
+});
+
+describe("get-ready caption", () => {
+	const frame = (state: GetReadyState, x: number) => [state, stepGetReady(state, x, 0, 16)] as const;
+
+	it("stays up while the tap's jolt is still arming", () => {
+		expect(isHolding(...frame(INITIAL_GET_READY, 0))).toBe(false);
+	});
+
+	it("fades while the player holds level", () => {
+		const armed = run(INITIAL_GET_READY, 0, 0, ARMING_MS + 100);
+		expect(isHolding(...frame(armed, 0))).toBe(true);
+	});
+
+	it("comes back when the hold breaks, and stays while off level", () => {
+		const held = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS / 2);
+		expect(isHolding(...frame(held, 0.3))).toBe(false);
+		const drained = run(held, 0.3, 0, 2000);
+		expect(isHolding(...frame(drained, 0.3))).toBe(false);
 	});
 });

@@ -85,6 +85,15 @@ export function ringRadius(progress: number, dotRadius: number): number {
 	return start + (dotRadius - start) * clamp(progress, 0, 1);
 }
 
+/**
+ * Whether the player is holding level over the frame from `prev` to `next`: the hold grew. The
+ * caption fades while this holds and comes back when the hold breaks (or hasn't armed yet).
+ */
+export function isHolding(prev: GetReadyState, next: GetReadyState): boolean {
+	"worklet";
+	return next.progress > prev.progress;
+}
+
 /** Advance one frame with the latest tilt (radians, relative to the level pose) */
 export function stepGetReady(
 	state: GetReadyState,
