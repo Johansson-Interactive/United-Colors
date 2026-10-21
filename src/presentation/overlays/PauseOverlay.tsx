@@ -57,7 +57,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({ color, onQuit, child
 				{children ? <View style={styles.extra}>{children}</View> : null}
 			</View>
 
-			<SettingsMenu opening={fromPause} levelColor={color} />
+			<SettingsMenu openingAt={fromPause} levelColor={color} />
 
 			<SoundMenu />
 		</Animated.View>

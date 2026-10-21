@@ -122,7 +122,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 				) : null}
 			</View>
 
-			<SettingsMenu opening={() => ({ from: "menu", color: colorNow() })} />
+			<SettingsMenu openingAt={() => ({ from: "menu", color: colorNow() })} />
 
 			<SoundMenu />
 		</Animated.View>

@@ -7,10 +7,10 @@ import { DotMenu } from "./DotMenu";
 
 interface SettingsMenuProps {
 	/**
-	 * Where the menu sits, asked at the tap, so on the title it carries the colour the play dot
-	 * shows then; the level bowl and the speed view open from there
+	 * Called at the tap: returns where the tap came from and, on the title, the colour the play
+	 * dot shows then, which the level bowl or the speed view opens in
 	 */
-	opening: () => MenuOpening;
+	openingAt: () => MenuOpening;
 	/** Glyph colour of the level dot, the colour its bowl will open in */
 	levelColor?: string;
 	/** Glyph colour of the settings and speed dots */
@@ -22,7 +22,7 @@ interface SettingsMenuProps {
  * the level dot, nearest it, and the speed dot above, each opening its own view
  */
 export const SettingsMenu: React.FC<SettingsMenuProps> = ({
-	opening,
+	openingAt,
 	levelColor,
 	color = WHITE,
 }) => {
@@ -39,14 +39,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 				{
 					key: "speed",
 					icon: `speed-${speed.key}`,
-					onPress: () => openSpeed(opening()),
+					onPress: () => openSpeed(openingAt()),
 					label: `Tilt speed, ${speed.label.toLowerCase()}`,
 				},
 				{
 					key: "level",
 					icon: "level",
 					color: levelColor,
-					onPress: () => openLevel(opening()),
+					onPress: () => openLevel(openingAt()),
 					label: "Set level pose",
 				},
 			]}
