@@ -45,10 +45,7 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 	const verdict = useStore(store, (s) => s.verdict);
 	const { width } = useWindowDimensions();
 	const titlePitch = Math.max(5, Math.min(7, Math.floor((width - 48) / TITLE_COLS)));
-	const [{ plan, pitch }] = useState(() => {
-		const input = pourInput(store.getState(), color);
-		return { plan: planPour(input), pitch: input.pitch };
-	});
+	const [plan] = useState(() => planPour(pourInput(store.getState(), color)));
 	const { frame, status } = usePour(plan, audio, bestToBeat(verdict));
 	const row = bestRow(status, verdict);
 
@@ -66,7 +63,6 @@ export const GameOverOverlay: React.FC<GameOverOverlayProps> = ({
 
 			<GameOverPour
 				plan={plan}
-				pitch={pitch}
 				frame={frame}
 				status={status}
 				row={row}

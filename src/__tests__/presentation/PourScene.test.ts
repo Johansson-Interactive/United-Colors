@@ -21,7 +21,12 @@ import {
 	startPour,
 	stepPour,
 } from "../../presentation/effects/pourScene";
-import { amberWaveReach, mergeUniformsByName, NO_AMBER } from "../../presentation/mergeShader";
+import {
+	amberWaveReach,
+	LIQUID_REACH,
+	mergeUniformsByName,
+	NO_AMBER,
+} from "../../presentation/mergeShader";
 import { COMBO_AMBER } from "../../presentation/theme/theme";
 
 describe("pourFit", () => {
@@ -39,22 +44,35 @@ describe("pourFit", () => {
 			pitch: PITCH,
 		});
 
-	it("keeps a small run at full size, its slot holding the score's digits", () => {
-		const fit = pourFit(scored(9, 1), PITCH, 600);
+	it("keeps a small run at full size, its slot holding the settled drop and the tally in it", () => {
+		const p = scored(9, 1);
+		const fit = pourFit(p, 600);
 		expect(fit.scale).toBe(1);
-		// A digit is seven dots tall: three pitches from its middle row to its outer ones, and a dot
-		expect(fit.half).toBeCloseTo(3 * PITCH + 0.38 * PITCH);
+		expect(fit.half).toBeGreaterThanOrEqual(p.settledDrop.radius);
+		// The tally sits inside the drop, so the drop's slosh is what the slot holds
+		expect(fit.half).toBeCloseTo(p.settledDrop.radius * LIQUID_REACH);
 	});
 
 	it("holds the settled drop", () => {
-		const fit = pourFit(scored(200, 5), PITCH, 600);
+		const fit = pourFit(scored(200, 5), 600);
 		expect(fit.scale).toBe(1);
 		expect(fit.half).toBeGreaterThanOrEqual(POUR_MAX_RADIUS);
 	});
 
-	it("makes room for a small drop's tally lifted clear of the amber, out of the drop's top", () => {
-		// A combo of three pays 9, 6 of it bonus: too small a drop to hold the tally, which
-		// stands on the amber
+	it("holds a tiny score's drop as it settles enlarged, and its tally", () => {
+		const tiny = scored(1, 1);
+		expect(tiny.settledDrop.radius).toBeGreaterThan(9);
+		const fit = pourFit(tiny, 1000);
+		expect(fit.scale).toBe(1);
+		expect(fit.half).toBeGreaterThanOrEqual(tiny.settledDrop.radius);
+		const settled = pourAt(tiny, tiny.restMs);
+		for (const d of settled.digits) {
+			expect(fit.half).toBeGreaterThanOrEqual(Math.abs(d.y) + settled.tallyPitch * 0.38);
+		}
+	});
+
+	it("holds a small combo's drop, swelled to hold both its figures", () => {
+		// A combo of three pays 9, 6 of it bonus: its drop swells to hold the tally and the bonus
 		const combo = planPour({
 			record: {
 				catches: Array.from(
@@ -72,19 +90,19 @@ describe("pourFit", () => {
 			color: "#E53935",
 			pitch: PITCH,
 		});
-		const highest = Math.min(...pourAt(combo, 10_000).digits.map((d) => d.y)) - 0.38 * PITCH;
-		expect(-highest).toBeGreaterThan(combo.settledDrop.radius);
-		const fit = pourFit(combo, PITCH, 1000);
+		const radius = combo.settledDrop.radius;
+		expect(radius).toBeGreaterThan(9 * Math.sqrt(9));
+		const fit = pourFit(combo, 1000);
 		expect(fit.scale).toBe(1);
-		expect(fit.half).toBeGreaterThanOrEqual(-highest);
-		const squeezed = pourFit(combo, PITCH, 100);
+		expect(fit.half).toBeGreaterThanOrEqual(radius);
+		const squeezed = pourFit(combo, 2 * radius * 0.5);
 		expect(squeezed.scale).toBeLessThan(1);
-		expect(squeezed.half).toBeGreaterThanOrEqual(-highest * squeezed.scale);
-		expect(squeezed.half).toBeLessThanOrEqual(50);
+		expect(squeezed.half).toBeGreaterThanOrEqual(radius * squeezed.scale);
+		expect(squeezed.half).toBeLessThanOrEqual(radius * 0.5);
 	});
 
 	it("shrinks a 1000 point drop to fit a short screen", () => {
-		const fit = pourFit(scored(200, 5), PITCH, 200);
+		const fit = pourFit(scored(200, 5), 200);
 		expect(fit.scale).toBeLessThan(1);
 		expect(fit.half).toBeLessThanOrEqual(100);
 		expect(fit.half).toBeGreaterThanOrEqual(POUR_MAX_RADIUS * fit.scale);

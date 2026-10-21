@@ -84,19 +84,17 @@ export interface PourFit {
 }
 
 /**
- * The pour's slot between the clock and the best row: high enough for the settled drop (as
- * far as its slosh reaches) and the tally's dots at `pitch`, both centred before the bonus
- * pours in and where it settles, scaled down to fit `available` px when that is not
+ * The pour's slot between the clock and the best row: high enough for the settled drop, as
+ * enlarged as it settles and as far as its slosh reaches, and its tally's dots. The tally is
+ * never larger than the drop holds it, nor spills past the settled drop while the drop fills,
+ * so only an empty run's tally, with no drop to hold it, reaches further. Scaled down to fit
+ * `available` px when that is not.
  */
-export function pourFit(plan: PourPlan, pitch: number, available: number): PourFit {
+export function pourFit(plan: PourPlan, available: number): PourFit {
 	let extent = plan.settledDrop.radius * LIQUID_REACH;
-	const shrink = plan.tallyPitch / plan.pitch;
-	for (const dot of plan.digits[plan.digits.length - 1]) {
-		extent = Math.max(
-			extent,
-			Math.abs(dot.y) + pitch * POUR_DIGIT_SCALE,
-			Math.abs(dot.y * shrink + plan.lift) + pitch * shrink * POUR_DIGIT_SCALE,
-		);
+	const { digits, tallyPitch } = pourAt(plan, plan.restMs);
+	for (const dot of digits) {
+		extent = Math.max(extent, Math.abs(dot.y) + tallyPitch * POUR_DIGIT_SCALE);
 	}
 	const scale = Math.min(1, available / (2 * extent));
 	return { scale, half: extent * scale };
