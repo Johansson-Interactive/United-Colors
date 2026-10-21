@@ -1,9 +1,8 @@
-import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
+import { GLOW_SCALE, layoutDotMatrix } from "../../presentation/dotmatrix/layout";
 import { plainKit } from "../../presentation/dotSprites";
 import { BURST_COLORS, NOT_STARTED } from "../../presentation/effects/burstFrames";
 import { SCORE_BUMP_MS } from "../../presentation/effects/scoreBump";
 import {
-	ADDEND_PITCH,
 	advanceTally,
 	createTally,
 	DOT_STRIDE,
@@ -16,12 +15,12 @@ import {
 	newCatch,
 	packTally,
 	packTallySprites,
+	SCORE_METER_CY,
+	SCORE_METER_HEIGHT,
 	SCORE_PITCH,
-	SHIFT_MS,
 	shownScore,
 	type Tally,
 	type TallyFrame,
-	type TallyStyle,
 	TICK_MAX_MS,
 	TICK_MIN_MS,
 	tallyFrame,
@@ -46,9 +45,9 @@ function tallyWith(score: number, catches: [value: number, color?: string][], no
 	return advanceTally(tally, now);
 }
 
-function pack(tally: Tally, now: number, style: TallyStyle = "feed"): TallyFrame {
+function pack(tally: Tally, now: number): TallyFrame {
 	const out = tallyFrame();
-	packTally(tally, now, style, GEOMETRY, out);
+	packTally(tally, now, GEOMETRY, out);
 	return out;
 }
 
@@ -128,11 +127,11 @@ describe("advancing the tally", () => {
 		expect(advanceTally(tally, 1001)).toBe(tally);
 	});
 
-	it("drops a catch once its last point has landed and the lines have closed", () => {
+	it("drops a catch once its last point has landed", () => {
 		const tally = tallyWith(10, [[5]], 1000);
 		const c = tally.catches[0];
 		const lastDepart = c.start + 4 * c.tick;
-		const over = lastDepart + Math.max(FLIGHT_MS, SHIFT_MS);
+		const over = lastDepart + FLIGHT_MS;
 		expect(advanceTally(tally, over - 1).catches).toHaveLength(1);
 		const dropped = advanceTally(tally, over);
 		expect(dropped.catches).toHaveLength(0);
@@ -199,6 +198,21 @@ describe("packing the total", () => {
 		const rested = totalOf(pack(tally, tally.lastLand + SCORE_BUMP_MS))[0].radius;
 		expect(bumped).toBeGreaterThan(rested);
 	});
+
+	it("keeps the total's glow inside the meter at the peak of its hard bump", () => {
+		// The total as the meter centres it, a catch's last point just landed, the next one queued
+		const geometry = { cx: 200, cy: SCORE_METER_CY };
+		let tally = advanceTally(tallyWith(0, [[1]], 1000), 5000);
+		tally = advanceTally(withCatch(tally, newCatch(1, 9, PINK)), tally.lastLand + 70);
+		const out = tallyFrame();
+		packTally(tally, tally.lastLand + 70, geometry, out);
+		const dots = [...totalOf(out), ...dotsOf(out)];
+		expect(dots.length).toBeGreaterThan(totalOf(out).length);
+		expect(Math.min(...dots.map((d) => d.y - d.radius * GLOW_SCALE))).toBeGreaterThanOrEqual(0);
+		expect(Math.max(...dots.map((d) => d.y + d.radius * GLOW_SCALE))).toBeLessThanOrEqual(
+			SCORE_METER_HEIGHT,
+		);
+	});
 });
 
 describe("the feed", () => {
@@ -263,76 +277,6 @@ describe("the feed", () => {
 		const dots = dotsOf(pack(tally, 1100));
 		expect(dots.map((d) => d.color)).toEqual([0, 0, 0, AMBER, AMBER, AMBER]);
 		expect(dots[3].x - dots[0].x).toBeCloseTo(FEED_PITCH);
-	});
-});
-
-describe("the transfer", () => {
-	const transfer = (tally: Tally, now: number) => dotsOf(pack(tally, now, "transfer"));
-
-	it("writes the catch's value under the total, right-aligned to it, in its colour", () => {
-		const tally = tallyWith(42, [[15, COMBO_AMBER]], 1000);
-		const dots = transfer(tally, 1000 + 100);
-		expect(dots).toHaveLength(layoutDotMatrix("15").dots.length);
-		expect(new Set(dots.map((d) => d.color))).toEqual(new Set([AMBER]));
-		const total = totalOf(pack(tally, 1100));
-		const totalBottom = Math.max(...total.map((d) => d.y));
-		const totalRight = Math.max(...total.map((d) => d.x));
-		expect(Math.min(...dots.map((d) => d.y))).toBeGreaterThan(totalBottom);
-		// The boxes share a right edge; the total's dots sit half a pitch in, the addend's too
-		expect(Math.max(...dots.map((d) => d.x))).toBeCloseTo(
-			totalRight + (SCORE_PITCH - ADDEND_PITCH) / 2,
-			0,
-		);
-		expect(dots[0].radius).toBeCloseTo(ADDEND_PITCH * 0.38);
-	});
-
-	it("pops the addend in from a smaller size", () => {
-		const tally = tallyWith(42, [[15]], 1000);
-		const popping = transfer(tally, 1000);
-		const settledIn = transfer(tally, 1000 + 130);
-		expect(popping[0].radius).toBeLessThan(settledIn[0].radius);
-	});
-
-	it("counts the addend down as its points leave, while the total counts up as they land", () => {
-		const tally = tallyWith(42, [[3]], 1000);
-		const { start, tick } = tally.catches[0];
-		const digits = (value: number) => layoutDotMatrix(String(value)).dots.length;
-		// Just after the first point leaves: the addend reads 2, plus the point in the air
-		const flying = transfer(tally, start + 1);
-		expect(flying).toHaveLength(digits(2) + 1);
-		expect(pack(tally, start + 1, "transfer").shown).toBe(42);
-		expect(pack(tally, start + FLIGHT_MS, "transfer").shown).toBe(43);
-		// After the last leaves and lands: nothing under the total, the total whole
-		const done = pack(tally, start + 2 * tick + FLIGHT_MS, "transfer");
-		expect(done.shown).toBe(45);
-		expect(dotsOf(done)).toHaveLength(0);
-	});
-
-	it("stacks a combo's catches as lines, and closes them up over a spent one", () => {
-		const tally = tallyWith(
-			0,
-			[
-				[2, PINK],
-				[6, COMBO_AMBER],
-			],
-			1000,
-		);
-		const [first, second] = tally.catches;
-		// A line's bottom: its points fly up out of it
-		const lineY = (now: number, color: number) =>
-			Math.max(
-				...transfer(tally, now)
-					.filter((d) => d.color === color)
-					.map((d) => d.y),
-			);
-		const pinkY = lineY(1100, 0);
-		const amberY = lineY(1100, AMBER);
-		expect(amberY).toBeGreaterThan(pinkY);
-		// Once the first's last point has left, the second rises into its place
-		const lastDepart = first.start + first.tick;
-		expect(second.start).toBe(lastDepart + first.tick);
-		expect(lineY(lastDepart + SHIFT_MS / 2, AMBER)).toBeLessThan(amberY);
-		expect(lineY(lastDepart + SHIFT_MS, AMBER)).toBeCloseTo(pinkY, 0);
 	});
 });
 

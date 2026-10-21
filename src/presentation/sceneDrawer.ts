@@ -61,7 +61,6 @@ import {
 	type TallyFrame,
 	type TallyGeometry,
 	type TallySprites,
-	type TallyStyle,
 	tallyFrame,
 	tallySprites,
 } from "./effects/scoreTally";
@@ -331,13 +330,12 @@ export function drawTally(
 	canvas: SkCanvas,
 	tally: Tally,
 	now: number,
-	style: TallyStyle,
 	geometry: TallyGeometry,
 	scoreColor: Float32Array,
 ) {
 	"worklet";
 	const { frame, sprites } = tallyBuffers();
-	packTally(tally, now, style, geometry, frame);
+	packTally(tally, now, geometry, frame);
 	packTallySprites(frame, BURST_FILLS, scoreColor, sprites);
 	drawSprites(canvas, sprites.glows, true);
 	drawSprites(canvas, sprites.dots, true);

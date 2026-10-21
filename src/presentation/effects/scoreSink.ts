@@ -1,5 +1,5 @@
 /**
- * Pure rules behind the paused score's sink and rise (see CONTEXT.md): where the score stands
+ * Pure rules behind the paused score's sink and rise (see GLOSSARY.md): where the score stands
  * on each screen, what it does as the screen changes, and the poses the shell animates
  * between. The score is drawn once, at its middle pitch, and scaled down to the HUD's at the
  * top, so at the top it sits exactly where the HUD's meter draws its total and the meter can

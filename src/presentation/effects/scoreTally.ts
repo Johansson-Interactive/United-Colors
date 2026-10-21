@@ -18,12 +18,9 @@ import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
 /**
  * Pure stepper behind the score meter: how the total takes a catch in. A catch no longer pops
  * where it landed; it goes to the top, where the total counts it in one point at a time, so
- * the catch is seen arriving and the total is seen growing. Two styles, chosen by the shell:
- *
- *   feed      The catch's points queue up as a ribbon of dots beside the total, in the
- *             catch's colour, and the total eats them front first, the ribbon crawling in.
- *   transfer  The catch's value is written under the total in the catch's colour, like a sum,
- *             and counts down to nothing as the total counts up: one dot crosses per point.
+ * the catch is seen arriving and the total is seen growing: the catch's points queue up as a
+ * ribbon of dots beside the total, in the catch's colour, and the total eats them front first,
+ * the ribbon crawling in.
  *
  * Each catch keeps its own schedule once stamped: it holds for a beat, then drains one point
  * every `tick` ms (quicker for a big catch, so none takes much longer than DRAIN_MS), after
@@ -38,26 +35,26 @@ import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
  * when it is done (advanceTally), and packs each frame's dots (packTally).
  */
 
-export type TallyStyle = "feed" | "transfer";
-
 /** The total's dot spacing (px) and its dot radius as a fraction of it, as the HUD had it */
 export const SCORE_PITCH = 7;
 const SCORE_DOT_SCALE = 0.38;
 /** The meter's offset below the stage's top (px), and the room it keeps above the total for its glow and its bump */
 export const SCORE_TOP = 10;
-export const SCORE_PAD = 10;
+const SCORE_PAD = 10;
+/** The total's centre line below the meter's top (px) */
+export const SCORE_METER_CY = SCORE_PAD + (SCORE_PITCH * 7) / 2;
+/**
+ * The meter's height: the total with SCORE_PAD above and below it, room enough for its glow at
+ * the peak of its bump; the feed's ribbon and its points in the air stay within the total's rows
+ */
+export const SCORE_METER_HEIGHT = 2 * SCORE_METER_CY;
 /** The total's centre line below the stage's top (px), where the paused score returns to */
-export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_PAD + (SCORE_PITCH * 7) / 2;
+export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_METER_CY;
 /** The feed's ribbon: its dot spacing, how many rows, its gap from the total, its dot radius */
 export const FEED_PITCH = 5;
 export const FEED_ROWS = 3;
 const FEED_GAP = 12;
 const FEED_DOT_SCALE = 0.42;
-/** An addend's dot spacing, its gap below the total and between lines, its dot radius */
-export const ADDEND_PITCH = 5;
-const ADDEND_GAP = 8;
-const ADDEND_LINE_GAP = 6;
-const ADDEND_DOT_SCALE = 0.38;
 /** How long a catch is seen before it drains (ms) */
 export const HOLD_MS = 140;
 /** About how long a catch takes to drain, and the bounds on the time between its points (ms) */
@@ -66,11 +63,9 @@ export const TICK_MIN_MS = 24;
 export const TICK_MAX_MS = 60;
 /** How long a point is in the air (ms) */
 export const FLIGHT_MS = 120;
-/** How long a dot or an addend takes to pop in (ms), and the feed's stagger between dots */
+/** How long a dot takes to pop in (ms), and the feed's stagger between dots */
 const POP_IN_MS = 110;
 const FEED_APPEAR_MS = 8;
-/** How long the lines under the total take to close up over a spent addend (ms) */
-export const SHIFT_MS = 160;
 /** A point's bump, as a fraction of a catch's last */
 const POINT_BUMP = 0.35;
 /** Catches queued at once; one more counts the oldest at once */
@@ -163,10 +158,10 @@ function lastDepart(c: TallyCatch): number {
 	return c.start + (c.value - 1) * c.tick;
 }
 
-/** When catch `c` is over: its last point has landed and the lines under the total have closed */
+/** When catch `c` is over: its last point has landed */
 function endOf(c: TallyCatch): number {
 	"worklet";
-	return Math.max(lastDepart(c) + FLIGHT_MS, lastDepart(c) + SHIFT_MS);
+	return lastDepart(c) + FLIGHT_MS;
 }
 
 /** How many of `c`'s points have left by `now` */
@@ -269,7 +264,7 @@ export interface TallyFrame {
 	combo: boolean;
 	/** The total's dots: x, y, radius per dot */
 	total: number[];
-	/** Every other dot: x, y, radius, colour index (BURST_COLORS), alpha per dot */
+	/** The feed's dots: x, y, radius, colour index (BURST_COLORS), alpha per dot */
 	dots: number[];
 }
 
@@ -301,8 +296,7 @@ function digitCols(value: number): number {
 
 /**
  * Lay the digits of `value` into `out` at `pitch`, the text's box with its left at `left` and
- * its vertical centre at `cy`, scaled by `scale` about (`ox`, `oy`), each dot of radius
- * `radius` with `color` and `alpha` (or, for the total, no colour and alpha fields)
+ * its vertical centre at `cy`, scaled by `scale` about (`ox`, `oy`), each dot of radius `radius`
  */
 function layDigits(
 	out: number[],
@@ -314,9 +308,6 @@ function layDigits(
 	scale: number,
 	ox: number,
 	oy: number,
-	color: number,
-	alpha: number,
-	total: boolean,
 ): void {
 	"worklet";
 	const text = String(value);
@@ -328,7 +319,6 @@ function layDigits(
 			const x = cellLeft + (dots[k] + 0.5) * pitch;
 			const y = top + (dots[k + 1] + 0.5) * pitch;
 			out.push(ox + (x - ox) * scale, oy + (y - oy) * scale, radius * scale);
-			if (!total) out.push(color, alpha);
 		}
 	}
 }
@@ -406,67 +396,12 @@ function packFeed(
 }
 
 /**
- * The transfer: each pending catch's value left to count, written under the total and
- * right-aligned to it, one line per catch, the lines closing up over a spent one; a point
- * leaves from the middle of its line
- */
-function packTransfer(
-	list: readonly TallyCatch[],
-	now: number,
-	totalRight: number,
-	totalBottom: number,
-	landX: number,
-	landY: number,
-	out: number[],
-): void {
-	"worklet";
-	const radius = ADDEND_PITCH * ADDEND_DOT_SCALE;
-	const lineHeight = GLYPH_ROWS * ADDEND_PITCH + ADDEND_LINE_GAP;
-	const firstCy = totalBottom + ADDEND_GAP + (GLYPH_ROWS / 2) * ADDEND_PITCH;
-	// Lines below a spent catch rise into its place
-	let shift = 0;
-	if (list.length > 0 && list[0].at !== NOT_STARTED) {
-		shift = easeOut((now - lastDepart(list[0])) / SHIFT_MS);
-	}
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		if (c.at === NOT_STARTED) continue;
-		const d = departed(c, now);
-		const l = landed(c, now);
-		const remaining = c.value - d;
-		const lineCy = firstCy + (i - shift) * lineHeight;
-		const width = digitCols(Math.max(1, remaining)) * ADDEND_PITCH;
-		const lineCx = totalRight - width / 2;
-		for (let k = l; k < d; k++) {
-			layFlight(out, lineCx, lineCy, landX, landY, now - (c.start + k * c.tick), radius, c.color);
-		}
-		if (remaining === 0) continue;
-		const popIn = 0.7 + 0.3 * easeOut((now - c.at) / POP_IN_MS);
-		layDigits(
-			out,
-			remaining,
-			ADDEND_PITCH,
-			totalRight - width,
-			lineCy,
-			radius,
-			popIn,
-			lineCx,
-			lineCy,
-			c.color,
-			1,
-			false,
-		);
-	}
-}
-
-/**
- * Pack what the meter draws at frame time `now` into `out`, in `style`, with the total centred
- * at the geometry's (cx, cy)
+ * Pack what the meter draws at frame time `now` into `out`, with the total centred at the
+ * geometry's (cx, cy)
  */
 export function packTally(
 	tally: Tally,
 	now: number,
-	style: TallyStyle,
 	geometry: TallyGeometry,
 	out: TallyFrame,
 ): void {
@@ -510,27 +445,12 @@ export function packTally(
 		scale,
 		cx,
 		cy,
-		0,
-		1,
-		true,
 	);
 	// Where a point lands: the last digit's centre
 	const landX = totalRight - (GLYPH_COLS / 2) * SCORE_PITCH;
 	const landY = cy;
 
-	if (style === "feed") {
-		packFeed(list, now, totalRight, cy, landX, landY, out.dots);
-	} else {
-		packTransfer(
-			list,
-			now,
-			totalRight,
-			cy + (GLYPH_ROWS / 2) * SCORE_PITCH,
-			landX,
-			landY,
-			out.dots,
-		);
-	}
+	packFeed(list, now, totalRight, cy, landX, landY, out.dots);
 }
 
 /** The meter's dots as sprites, for two tinted drawAtlas calls (see dotSprites.ts) */

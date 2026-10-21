@@ -8,10 +8,9 @@ import { onGameEvents } from "../../application/gameEvents";
 import {
 	createTally,
 	newCatch,
-	SCORE_PAD,
-	SCORE_PITCH,
+	SCORE_METER_CY,
+	SCORE_METER_HEIGHT,
 	TALLY,
-	type TallyStyle,
 } from "../effects/scoreTally";
 import { useEffectLane } from "../hooks/useEffectLane";
 import { useStageBox } from "../layout/StageFrame";
@@ -26,11 +25,6 @@ interface ScoreMeterProps {
 	color: string;
 }
 
-/** Which way the total takes its catches in (see scoreTally.ts) */
-const STYLE: TallyStyle = "feed";
-/** The meter's height: the total and a few lines of addends under it */
-const METER_HEIGHT = 230;
-
 /**
  * The score at the top of the stage, counting each catch in as it arrives (see scoreTally.ts).
  * Nothing here goes through React: each catch is added to the tally's effect lane (see
@@ -40,7 +34,7 @@ const METER_HEIGHT = 230;
  */
 export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	const { width } = useStageBox();
-	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_PAD + SCORE_PITCH * 3.5 }), [width]);
+	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_METER_CY }), [width]);
 	const scoreColor = useMemo(() => Skia.Color(color), [color]);
 
 	const {
@@ -77,12 +71,12 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	const [recorder] = useState(() => Skia.PictureRecorder());
 	const picture = useDerivedValue(() =>
 		recordPicture(recorder, (canvas) =>
-			drawTally(canvas, tally.get(), clock.get(), STYLE, geometry, scoreColor),
+			drawTally(canvas, tally.get(), clock.get(), geometry, scoreColor),
 		),
 	);
 
 	return (
-		<Canvas style={{ width, height: METER_HEIGHT }} pointerEvents="none">
+		<Canvas style={{ width, height: SCORE_METER_HEIGHT }} pointerEvents="none">
 			<Picture picture={picture} />
 		</Canvas>
 	);
