@@ -60,31 +60,53 @@ describe("the stage look", () => {
 		}
 	});
 
-	it("fades the stage back in over 400 ms as the bowl or the speed view closes to the title", () => {
-		const look = stageLook({ screen: { kind: "title" }, phase: "KIOSK", playerColor: PINK });
-		expect(look.opacity).toEqual({ to: 1, over: { kind: "timed", duration: 400 } });
+	it("fades the stage back in over 400 ms as the bowl or the speed view opened from the title closes", () => {
+		for (const [open, close] of [
+			[
+				{ type: "startPressed", color: PINK, hasZero: false, at: { x: 0, y: 0 } },
+				{ type: "settleBacked" },
+			],
+			[{ type: "levelPressed", from: "menu", color: PINK }, { type: "settleBacked" }],
+			[{ type: "speedPressed", from: "menu", color: PINK }, { type: "speedBacked" }],
+		] satisfies [FlowEvent, FlowEvent][]) {
+			expect(walk([open, close])).toEqual([
+				{ screen: open.type === "speedPressed" ? "speed" : "settle", opacity: FADED_OUT },
+				{ screen: "title", opacity: FADING_IN },
+			]);
+		}
 	});
 
-	it("shows the stage at once as a run started from the bowl comes out from under its flood", () => {
-		// The flood covers the bowl, the flow drops back to the title, and only then does the run
-		// start; the run's show has to land after the title's fade-in, so the stage is up at once
-		const events: FlowEvent[] = [
-			{ type: "startPressed", color: PINK, hasZero: false, at: { x: 0, y: 0 } },
-			{ type: "settled", zero: { x: 0, y: 0 }, facingDown: false, at: { x: 0, y: 0 } },
-			{ type: "covered" },
-			{ type: "phaseChanged", phase: "RUNNING" },
-		];
-		let flow = INITIAL_FLOW;
-		const looks = events.map((event) => {
-			const { state, screen } = stepFlow(flow, event);
-			flow = state;
-			return {
-				screen: screen.kind,
-				...stageLook({ screen, phase: state.phase, playerColor: PINK }),
-			};
-		});
-		expect(looks.map((l) => l.screen)).toEqual(["settle", "settle", "title", "hud"]);
-		expect(looks[0].opacity.to).toBe(0);
-		expect(looks[3].opacity).toEqual({ to: 1, over: { kind: "instant" } });
+	it("follows the title's fade-in with an instant show as a run started from the bowl reaches the hud", () => {
+		// The flood covers the bowl and the flow drops back to the title before the run starts,
+		// so the hud's look comes after the title's fade-in and shows the stage at once
+		expect(
+			walk([
+				{ type: "startPressed", color: PINK, hasZero: false, at: { x: 0, y: 0 } },
+				{ type: "settled", zero: { x: 0, y: 0 }, facingDown: false, at: { x: 0, y: 0 } },
+				{ type: "covered" },
+				{ type: "phaseChanged", phase: "RUNNING" },
+			]),
+		).toEqual([
+			{ screen: "settle", opacity: FADED_OUT },
+			{ screen: "settle", opacity: FADED_OUT },
+			{ screen: "title", opacity: FADING_IN },
+			{ screen: "hud", opacity: { to: 1, over: { kind: "instant" } } },
+		]);
 	});
 });
+
+const FADED_OUT = { to: 0, over: { kind: "timed", duration: 300 } };
+const FADING_IN = { to: 1, over: { kind: "timed", duration: 400 } };
+
+/** Steps the real flow from the title through `events`, with the stage opacity after each */
+function walk(events: FlowEvent[]) {
+	let flow = INITIAL_FLOW;
+	return events.map((event) => {
+		const { state, screen } = stepFlow(flow, event);
+		flow = state;
+		return {
+			screen: screen.kind,
+			opacity: stageLook({ screen, phase: state.phase, playerColor: PINK }).opacity,
+		};
+	});
+}
