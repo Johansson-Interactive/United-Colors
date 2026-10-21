@@ -27,13 +27,6 @@ import type { EffectReducer } from "./effectLane";
  * indexes directly, calls nothing per dot and reuses its objects from frame to frame.
  */
 
-/** The bursts' effect lane: each laid out on the JS thread, then added, aged and dropped on the UI thread */
-export const BURSTS: EffectReducer<Burst[], Burst> = {
-	add: withBurst,
-	advance: advanceBursts,
-	idle: noBurstsLeft,
-};
-
 /** How long a burst lasts (ms) */
 export const BURST_LIFETIME_MS = 900;
 /** Bursts alive at once; a new one past this drops the oldest */
@@ -159,6 +152,17 @@ export function noBurstsLeft(list: readonly Burst[]): boolean {
 	"worklet";
 	return list.length === 0;
 }
+
+/**
+ * The bursts' effect lane: each laid out on the JS thread, then added, aged and dropped on the
+ * UI thread. Below its reducers on purpose: the worklets plugin turns a worklet function
+ * declaration into a var, which isn't hoisted, so above them this held undefineds in a build.
+ */
+export const BURSTS: EffectReducer<Burst[], Burst> = {
+	add: withBurst,
+	advance: advanceBursts,
+	idle: noBurstsLeft,
+};
 
 // The curves, by progress `t` (0..1, eased) through a burst. The easings are Reanimated's
 // Easing.out(cubic) and Easing.out(quad) over linear time, written out.
