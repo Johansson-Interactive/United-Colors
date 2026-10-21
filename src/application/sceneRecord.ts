@@ -249,6 +249,25 @@ export function findPlayer(scene: Float32Array): number {
 	return findKind(scene, "player");
 }
 
+/** Where a dot is drawn on screen, and how big */
+export interface Disc {
+	x: number;
+	y: number;
+	radius: number;
+}
+
+/**
+ * Where the player is drawn in `scene`, and how big, for what the interface draws around it
+ * (Get ready's ring and outline); null when the scene has no player (kiosk)
+ */
+export function playerDisc(scene: Float32Array): Disc | null {
+	"worklet";
+	const index = findPlayer(scene);
+	if (index < 0) return null;
+	const o = index * STRIDE;
+	return { x: scene[o + X], y: scene[o + Y], radius: scene[o + RADIUS] };
+}
+
 /**
  * Index of the refused dot that dents the player, or -1 for none. At most one does: should
  * the scene hold more than one rejected dot, only the first dents the liquid.
