@@ -9,7 +9,7 @@
 		"ios": {
 			"supportsTablet": false,
 			"bundleIdentifier": "com.johanssoninteractive.tiltling",
-			"appleTeamId": "LVDUVZJ2U7",
+			"appleTeamId": "BYXL4ZHQZ9",
 			"infoPlist": {
 				"ITSAppUsesNonExemptEncryption": false,
 				"NSLocalNetworkUsageDescription": "Allow $(PRODUCT_NAME) to connect to the development server on your local network.",
