@@ -22,7 +22,7 @@ import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
+import { cornerDot, type FlowAction } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -33,6 +33,7 @@ import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
+import { useStageLook } from "./hooks/useStageLook";
 import { StageFrame } from "./layout/StageFrame";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
@@ -175,13 +176,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
 	});
 
-	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, frostWindow, shake, bursts, burstClock } = useStageEffects(
-		store,
-		phase,
-		playerColor,
-		fieldFrosted(phase),
-	);
+	// The frost and the edge wash follow the screen, shake and bursts react to the store; the
+	// flood is the transition
+	const { frost, frostWindow, accent } = useStageLook({ screen, phase, playerColor });
+	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
