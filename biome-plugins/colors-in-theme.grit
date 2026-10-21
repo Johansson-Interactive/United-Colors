@@ -1,0 +1,10 @@
+language js
+
+`$color` where {
+	$color <: or {
+		JsStringLiteralExpression(),
+		JsxString()
+	},
+	$color <: r"[\"'](?:#[0-9A-Fa-f]{3,8}|rgba?\(.*)[\"']",
+	register_diagnostic(span=$color, message="Colour literal outside the theme. Define it in src/presentation/theme/theme.ts and import it, so the palette stays in one place.")
+}

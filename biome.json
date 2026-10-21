@@ -5,6 +5,17 @@
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
+	"plugins": [
+		{
+			"path": "./biome-plugins/colors-in-theme.grit",
+			"includes": [
+				"**/src/**",
+				"!**/src/presentation/theme/theme.ts",
+				"!**/src/domain/constants.ts",
+				"!**/src/__tests__/**"
+			]
+		}
+	],
 	"assist": {
 		"actions": {
 			"source": {

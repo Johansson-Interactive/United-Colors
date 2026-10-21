@@ -4,7 +4,13 @@ import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { WHITE } from "../theme/theme";
+import { BOWL_RIM, glass, WHITE } from "../theme/theme";
+
+/** The level's face, the target ring while the phone is off level, and the bubble's halo */
+const FACE = glass(0.03);
+const TARGET_IDLE = glass(0.25);
+const BUBBLE_HALO = glass(0.08);
+
 import { INITIAL_LEVEL_GATE, isLevel, type LevelGatePhase, stepLevelGate } from "../tilt/levelGate";
 import { useTilt } from "../tilt/TiltProvider";
 
@@ -80,7 +86,7 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 		return vec(centre + x, centre + y);
 	});
 	const bubbleColor = useDerivedValue(() => (level.get() ? color : WHITE));
-	const targetColor = useDerivedValue(() => (level.get() ? color : "rgba(255,255,255,0.25)"));
+	const targetColor = useDerivedValue(() => (level.get() ? color : TARGET_IDLE));
 	const arc = useDerivedValue(() => {
 		const builder = Skia.PathBuilder.Make();
 		const sweep = 360 * progress.get();
@@ -95,15 +101,8 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 	return (
 		<View style={{ width: size, height: size }}>
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-				<Circle cx={centre} cy={centre} r={rim} color="rgba(255,255,255,0.03)" />
-				<Circle
-					cx={centre}
-					cy={centre}
-					r={rim}
-					color="rgba(255,255,255,0.14)"
-					style="stroke"
-					strokeWidth={2}
-				/>
+				<Circle cx={centre} cy={centre} r={rim} color={FACE} />
+				<Circle cx={centre} cy={centre} r={rim} color={BOWL_RIM} style="stroke" strokeWidth={2} />
 				<Path path={arc} color={color} style="stroke" strokeWidth={4} strokeCap="round" />
 				<Circle
 					cx={centre}
@@ -113,7 +112,7 @@ export const LevelGate: React.FC<LevelGateProps> = ({
 					style="stroke"
 					strokeWidth={1.5}
 				/>
-				<Circle c={bubblePos} r={bubble * 1.9} color="rgba(255,255,255,0.08)" />
+				<Circle c={bubblePos} r={bubble * 1.9} color={BUBBLE_HALO} />
 				<Circle c={bubblePos} r={bubble} color={bubbleColor} />
 			</Canvas>
 			<Pressable

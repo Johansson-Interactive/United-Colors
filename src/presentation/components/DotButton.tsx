@@ -25,7 +25,12 @@ import Animated, {
 import { JELLY_AT_REST, jellyShape, stepJelly } from "../../application/jelly";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
 import { DROP_SKSL } from "../liquidShader";
-import { WHITE } from "../theme/theme";
+import { glass, WHITE } from "../theme/theme";
+
+/** The glare across a solid dot, and the faint fill of a ghost one */
+const GLARE = [glass(0.5), glass(0)];
+const GHOST_FILL = glass(0.04);
+
 import { useTilt } from "../tilt/TiltProvider";
 import { DotMatrixText } from "./DotMatrixText";
 import { useBowlOffset } from "./TiltBowl";
@@ -197,18 +202,14 @@ export const DotButton: React.FC<DotButtonProps> = ({
 							<>
 								<Circle cx={centre} cy={centre} r={radius} color={fill} />
 								<Circle cx={centre} cy={centre} r={radius}>
-									<RadialGradient
-										c={glareCentre}
-										r={radius * 0.8}
-										colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
-									/>
+									<RadialGradient c={glareCentre} r={radius * 0.8} colors={GLARE} />
 								</Circle>
 							</>
 						)}
 					</>
 				) : (
 					<>
-						<Circle cx={centre} cy={centre} r={radius} color="rgba(255,255,255,0.04)" />
+						<Circle cx={centre} cy={centre} r={radius} color={GHOST_FILL} />
 						<Circle
 							cx={centre}
 							cy={centre}

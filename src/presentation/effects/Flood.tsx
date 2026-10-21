@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useStageBox } from "../layout/StageFrame";
+import { WHITE } from "../theme/theme";
 import { createFloodSequence, tallySmoothFrames } from "./floodSequence";
 
 const BASE_DIAMETER = 100;
@@ -42,7 +43,7 @@ export interface FloodController {
 export function useFlood(): FloodController {
 	const progress = useSharedValue(0);
 	const opacity = useSharedValue(0);
-	const color = useSharedValue("#FFFFFF");
+	const color = useSharedValue(WHITE);
 	const originX = useSharedValue(0);
 	const originY = useSharedValue(0);
 	// True from the scene commit until the lift starts; the frame gate below watches for it

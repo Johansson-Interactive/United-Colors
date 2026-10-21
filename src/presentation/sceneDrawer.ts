@@ -73,6 +73,7 @@ import {
 	NO_AMBER,
 	packMergeUniforms,
 } from "./mergeShader";
+import { glass } from "./theme/theme";
 import {
 	packWallDropUniforms,
 	WALL_DROP_SKSL,
@@ -101,7 +102,7 @@ GLARE_PAINT.setShader(
 	Skia.Shader.MakeRadialGradient(
 		vec(0, 0),
 		GLARE_RADIUS,
-		[Skia.Color("rgba(255,255,255,0.55)"), Skia.Color("rgba(255,255,255,0)")],
+		[Skia.Color(glass(0.55)), Skia.Color(glass(0))],
 		null,
 		TileMode.Clamp,
 	),

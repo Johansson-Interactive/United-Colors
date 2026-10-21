@@ -10,6 +10,7 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
+import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM } from "../theme/theme";
 import { type SettleState, settleEase } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 
@@ -99,19 +100,19 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 						<RadialGradient
 							c={vec(centre, centre)}
 							r={rim}
-							colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0.09)"]}
-							positions={[0.3, 0.8, 1]}
+							colors={BOWL_GLAZE}
+							positions={BOWL_GLAZE_STOPS}
 						/>
 					</Circle>
 					<Circle
 						cx={centre}
 						cy={centre}
 						r={rim}
-						color="rgba(255,255,255,0.14)"
+						color={BOWL_RIM}
 						style="stroke"
 						strokeWidth={1.5}
 					/>
-					<Circle cx={centre} cy={centre} r={rim * 0.03} color="rgba(255,255,255,0.35)" />
+					<Circle cx={centre} cy={centre} r={rim * 0.03} color={BOWL_MARK} />
 					<Circle
 						cx={centre}
 						cy={centre}

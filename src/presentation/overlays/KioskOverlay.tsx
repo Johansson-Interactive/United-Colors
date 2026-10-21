@@ -19,7 +19,7 @@ import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
 import { TITLE, TITLE_FOOTER_HEIGHT, titlePitch } from "../layout/bowlStage";
-import { BOWL_SIZE, DIM, TRIO } from "../theme/theme";
+import { BOWL_SIZE, DIM, TRIO, whiteAt } from "../theme/theme";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 import { playColourAt } from "./playColour";
 
@@ -127,7 +127,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 
 			<View style={styles.footer} pointerEvents="none">
 				<View style={styles.best}>
-					<DotMatrixText text={`BEST ${highScore}`} pitch={4} color="rgba(244,246,251,0.6)" />
+					<DotMatrixText text={`BEST ${highScore}`} pitch={4} color={whiteAt(0.6)} />
 				</View>
 				{versionTag ? (
 					<View style={styles.version}>

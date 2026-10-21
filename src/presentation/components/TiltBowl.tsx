@@ -7,7 +7,11 @@ import Animated, {
 	useAnimatedStyle,
 	useDerivedValue,
 } from "react-native-reanimated";
+import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM, shade } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
+
+/** The dot's shadow on the bowl, dark under it and fading out */
+const SHADOW = [shade(0.55), shade(0)];
 
 interface TiltBowlProps {
 	/** Diameter of the bowl rim */
@@ -74,27 +78,16 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, sensitivity =
 					<RadialGradient
 						c={vec(rim, rim)}
 						r={rim}
-						colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0.09)"]}
-						positions={[0.3, 0.8, 1]}
+						colors={BOWL_GLAZE}
+						positions={BOWL_GLAZE_STOPS}
 					/>
 				</Circle>
-				<Circle
-					cx={rim}
-					cy={rim}
-					r={rim - 1}
-					color="rgba(255,255,255,0.14)"
-					style="stroke"
-					strokeWidth={1.5}
-				/>
+				<Circle cx={rim} cy={rim} r={rim - 1} color={BOWL_RIM} style="stroke" strokeWidth={1.5} />
 				<Group opacity={0.55}>
-					<Circle cx={rim} cy={rim} r={rim * 0.03} color="rgba(255,255,255,0.35)" />
+					<Circle cx={rim} cy={rim} r={rim * 0.03} color={BOWL_MARK} />
 				</Group>
 				<Circle c={shadowCentre} r={shadowRadius}>
-					<RadialGradient
-						c={shadowCentre}
-						r={shadowRadius}
-						colors={["rgba(0,0,0,0.55)", "rgba(0,0,0,0)"]}
-					/>
+					<RadialGradient c={shadowCentre} r={shadowRadius} colors={SHADOW} />
 				</Circle>
 			</Canvas>
 			<Animated.View style={[styles.dot, dotStyle]}>

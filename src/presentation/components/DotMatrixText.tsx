@@ -31,6 +31,7 @@ import {
 	paletteIndex,
 } from "../dotmatrix/layout";
 import { recordPicture } from "../recordPicture";
+import { WHITE } from "../theme/theme";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface DotMatrixTextProps {
@@ -99,7 +100,7 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	text,
 	pitch,
 	dotScale = 0.38,
-	color = "#F4F6FB",
+	color = WHITE,
 	colors,
 	colorBy = "dot",
 	glow = false,
