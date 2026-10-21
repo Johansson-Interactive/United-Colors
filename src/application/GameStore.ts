@@ -30,6 +30,7 @@ const DEFAULT_FRAME: RenderFrame = {
 	score: 0,
 	dots: [],
 	events: [],
+	runTicks: 0,
 };
 
 export function createGameStore() {

@@ -99,7 +99,7 @@ function drawnAndCaught(dot: Dot, alpha: number) {
 		vy: dot.vy * dot.velocity,
 		...(dot instanceof SmallDot ? dot.contact() : {}),
 	};
-	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots: [view], events: [] };
+	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots: [view], events: [], runTicks: 0 };
 	const scene = createSceneBuilder()(frame, alpha, { x: 5000, y: 5000 });
 	const drawn = readDot(scene, 0, sceneDot());
 	return { drawn, caught: dot.circleAt(alpha, { x: 0, y: 0, radius: 0 }) };

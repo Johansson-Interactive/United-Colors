@@ -149,6 +149,8 @@ export interface RenderFrame {
 	dots: DotView[];
 	/** What happened since the frame before */
 	events: GameEvent[];
+	/** Ticks the simulation has run since the run started (its run time so far, see RunRecord) */
+	runTicks: number;
 	/** The run just ended; set on game-over frames only */
 	run?: RunRecord;
 }

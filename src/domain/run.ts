@@ -25,3 +25,10 @@ export function comboBonus(record: RunRecord): number {
 export function runSeconds(ticks: number): number {
 	return ticks / GAME_HERTZ;
 }
+
+/** Run time as the glossary shows it: `M:SS`, rounded down */
+export function runClock(ticks: number): string {
+	const whole = Math.floor(runSeconds(ticks));
+	const ss = whole % 60;
+	return `${Math.floor(whole / 60)}:${ss < 10 ? "0" : ""}${ss}`;
+}

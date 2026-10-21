@@ -1108,6 +1108,19 @@ describe("GameEngine", () => {
 			expect(engine.getFrame().run?.ticks).toBe(16);
 		});
 
+		it("every frame carries the run time so far, and a paused frame holds it", () => {
+			const { engine } = stagedEngine(OWN);
+			expect(engine.getFrame().runTicks).toBe(0);
+			ticks(engine, 10);
+			expect(engine.getFrame().runTicks).toBe(10);
+			engine.pause();
+			ticks(engine, 50);
+			expect(engine.getFrame()).toMatchObject({ phase: "PAUSED", runTicks: 10 });
+			engine.resume();
+			ticks(engine, 5);
+			expect(engine.getFrame().runTicks).toBe(15);
+		});
+
 		it("is only on game-over frames", () => {
 			const { engine, small } = stagedEngine(OWN);
 			small.push(smallDotAt(CENTRE, OWN, { id: "a" }));

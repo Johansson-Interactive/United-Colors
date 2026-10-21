@@ -19,7 +19,7 @@ function fakeStorage(highScore: number) {
 }
 
 function endWithScore(store: GameStore, score: number) {
-	store.getState().updateFrame({ phase: "GAME_OVER", score, dots: [], events: [] });
+	store.getState().updateFrame({ phase: "GAME_OVER", score, dots: [], events: [], runTicks: 0 });
 }
 
 describe("handleGameOver", () => {
