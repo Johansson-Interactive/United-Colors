@@ -4,7 +4,11 @@
  * over it, Get ready included, where the seat is the one clear window in the frost until the
  * hold thaws it (see getReady.ts). A moment after a run ends the field dims for the game over,
  * and otherwise it clears quickly. The edges are washed in ink on the title and in the
- * player's colour everywhere else.
+ * player's colour everywhere else. The stage fades out under the bowl and the speed view
+ * opened from the title, so only their one dot moves, and back in as they close. In play it
+ * shows at once: a run started from the bowl passes back through the title under its flood
+ * (see screenFlow.ts), and showing at once as play starts overrides the title's fade-in, so
+ * the stage is up as the flood lifts. Anywhere else it is already showing.
  *
  * The frost window is Get ready's to open and widen; the look only shuts it as the frost
  * comes on, so a pause always starts frosted all over. The shell applies a look to the stage
@@ -45,6 +49,8 @@ export interface StageLook {
 	shutWindow: boolean;
 	/** The edge wash's colour */
 	accent: StageMove<string>;
+	/** 0 = the stage is hidden; 1 = it shows */
+	opacity: StageMove<number>;
 }
 
 /** The field frosts over as the pause opens */
@@ -55,12 +61,17 @@ const GAME_OVER_DIM: StageTransition = { kind: "timed", duration: 700, delay: 35
 /** The field clears quickly as play starts or resumes */
 const CLEAR: StageTransition = { kind: "timed", duration: 300, delay: 0 };
 const INSTANT: StageTransition = { kind: "instant" };
+/** The stage fades out as the bowl or the speed view opens over the title */
+const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300, delay: 0 };
+/** And back in, a little slower, as it closes to the title */
+const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400, delay: 0 };
 
-export function stageLook({ phase, playerColor }: StagePlace): StageLook {
+export function stageLook({ screen, phase, playerColor }: StagePlace): StageLook {
 	return {
 		frost: frostOf(phase),
 		shutWindow: phase === "PAUSED",
 		accent: { to: phase === "KIOSK" ? INK_LIFT : playerColor, over: INSTANT },
+		opacity: opacityOf(screen, phase),
 	};
 }
 
@@ -73,4 +84,12 @@ function frostOf(phase: GamePhase): StageMove<number> {
 		default:
 			return { to: 0, over: CLEAR };
 	}
+}
+
+function opacityOf(screen: Screen, phase: GamePhase): StageMove<number> {
+	// Over the pause the bowl and the speed view leave the frozen, frosted game showing
+	if (phase !== "KIOSK") return { to: 1, over: INSTANT };
+	return screen.kind === "settle" || screen.kind === "speed"
+		? { to: 0, over: STAGE_FADE_OUT }
+		: { to: 1, over: STAGE_FADE_IN };
 }
