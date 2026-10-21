@@ -98,6 +98,35 @@ export function paletteIndex(dot: MatrixDot, size: number, by: ColorBy): number 
 	return (by === "letter" ? dot.charIndex : trioIndex(dot)) % size;
 }
 
+/**
+ * The order the dots pop in when text is revealed: left to right, column by column and down
+ * each column, so a word fills in from its first letter. Each dot's rank, by its index.
+ */
+export function revealOrder(layout: MatrixLayout): number[] {
+	const byPlace = layout.dots
+		.map((dot) => dot)
+		.sort((a, b) => a.col - b.col || a.row - b.row || a.index - b.index);
+	const ranks = new Array<number>(layout.dots.length);
+	byPlace.forEach((dot, rank) => {
+		ranks[dot.index] = rank;
+	});
+	return ranks;
+}
+
+/** The share of a reveal each dot's pop takes; the pops start spread over the rest, in rank order */
+export const REVEAL_POP_SHARE = 0.35;
+
+/**
+ * How far the dot of rank `rank` among `count` has popped in at `progress` (0..1) of a reveal:
+ * 0 before its turn, 1 once it is full, eased out between, so the text fills in as a wave
+ */
+export function dotReveal(rank: number, count: number, progress: number): number {
+	"worklet";
+	const start = count <= 1 ? 0 : (rank / (count - 1)) * (1 - REVEAL_POP_SHARE);
+	const t = Math.min(1, Math.max(0, (progress - start) / REVEAL_POP_SHARE));
+	return 1 - (1 - t) * (1 - t);
+}
+
 /** Largest pitch, up to `maxPitch`, at which the layout's width fits within `maxWidth` */
 export function pitchToFit(layout: MatrixLayout, maxWidth: number, maxPitch: number): number {
 	if (layout.cols === 0) return maxPitch;
