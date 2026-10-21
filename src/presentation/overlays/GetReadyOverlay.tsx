@@ -13,7 +13,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import { playerDisc, type StretchedDisc } from "../../application/sceneRecord";
+import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
@@ -24,18 +24,11 @@ import { useStageBox } from "../layout/StageFrame";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { glass, INK, shade } from "../theme/theme";
 import {
-	INITIAL_GET_READY,
-	isHolding,
-	type Roll,
-	rimOpacity,
-	rollAt,
-	rollTarget,
-	seated,
-	seatPulse,
-	stepGetReady,
-	stepRoll,
-	windowRadius,
-	windowReach,
+	advanceGetReady,
+	closeGetReady,
+	type GetReadyFrame,
+	NO_SEAT,
+	OPEN_GET_READY,
 } from "../tilt/getReady";
 import { useTilt } from "../tilt/TiltProvider";
 
@@ -74,8 +67,16 @@ const SHADE_MAX = 0.35;
 const SHADE_FULL_AT = 40;
 const SHADE_TRAIL = 8;
 
-/** With no player in the scene (it should always have one here) nothing is drawn */
-const NO_SEAT: StretchedDisc = { x: 0, y: 0, radius: 0, stretchX: 0, stretchY: 0 };
+/** Before the first frame is stepped nothing is drawn; the overlay is still fading in */
+const BEFORE_FIRST_FRAME: GetReadyFrame = {
+	drawn: false,
+	seat: NO_SEAT,
+	dot: { x: 0, y: 0 },
+	window: NO_FROST_WINDOW,
+	rim: 0,
+	caption: true,
+	fired: false,
+};
 /** The cover over the frozen player reaches past its ripples (see LIQUID_WOBBLE) and its edge */
 const COVER_SCALE = 1 + LIQUID_WOBBLE;
 const COVER_MARGIN = 0.5;
@@ -90,8 +91,9 @@ const COVER_MARGIN = 0.5;
  * breaks. Taps go through to nothing. The paused score waits dimmed at the top (see
  * PausedScore), so the caption sits under it.
  *
- * The rules live in the get-ready stepper, run here on the UI thread where the tilt is. The
- * window itself is cut by the game canvas, which this drives through `frostWindow`.
+ * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt is, this
+ * takes one step of it and copies what it says to draw. The window itself is cut by the game
+ * canvas, which this drives through `frostWindow`.
  */
 export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	scene,
@@ -111,83 +113,73 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		}),
 		[width, height, corners],
 	);
-	const state = useSharedValue(INITIAL_GET_READY);
-	const holding = useSharedValue(false);
-	// The caption's opacity: up until the hold grows, back as soon as it breaks
+	const state = useSharedValue(OPEN_GET_READY);
+	// What the stepper last said to draw
+	const frame = useSharedValue(BEFORE_FIRST_FRAME);
+	// The caption's opacity, faded on the frame's caption edges
 	const caption = useSharedValue(1);
 
 	// The scene is frozen, so the seat is where the player is drawn in it throughout
-	const seat = useDerivedValue(() => playerDisc(scene.get()) ?? NO_SEAT);
-	const roll = useSharedValue<Roll | null>(null);
+	const player = useDerivedValue(() => playerDisc(scene.get()));
+	// What the stepper last drew on: the seat, or NO_SEAT with nothing drawn
+	const seat = useDerivedValue(() => frame.get().seat);
 
 	useFrameCallback((info) => {
-		const dt = info.timeSincePreviousFrame ?? 16;
-		const at = seat.get();
-		const tiltNow = { x: tilt.x.get(), y: tilt.y.get() };
-		const rolling = roll.get() ?? rollAt(at);
-		roll.set(stepRoll(rolling, rollTarget(at, tiltNow, sensitivity, field), dt));
-
 		const prev = state.get();
-		const next = stepGetReady(prev, tiltNow.x, tiltNow.y, dt);
-		// Once fired the stepper answers with the same state, so what follows runs once
+		const { state: next, frame: now } = advanceGetReady(prev, {
+			seat: player.get(),
+			tilt: { x: tilt.x.get(), y: tilt.y.get() },
+			dt: info.timeSincePreviousFrame ?? 16,
+			field,
+			sensitivity,
+		});
+		// Once fired the stepper answers with the same state, and there is nothing new to copy
 		if (next === prev) return;
 		state.set(next);
-		const breath = seatPulse(next.elapsedMs) * (1 - seated(rolling, at));
-		frostWindow.set({
-			x: at.x,
-			y: at.y,
-			radius: windowRadius(next.progress, at.radius, windowReach(at, field), breath),
-		});
-		const nowHolding = isHolding(prev, next);
-		if (nowHolding !== holding.get()) {
-			holding.set(nowHolding);
-			caption.set(withTiming(nowHolding ? 0 : 1, { duration: CAPTION_FADE_MS }));
+		if (now.caption !== frame.get().caption) {
+			caption.set(withTiming(now.caption ? 1 : 0, { duration: CAPTION_FADE_MS }));
 		}
-		if (next.fired) scheduleOnRN(onReady);
+		frame.set(now);
+		frostWindow.set(now.window);
+		if (now.fired) scheduleOnRN(onReady);
 	});
 
-	// Closed again when Get ready closes without firing (the pause dot, leaving the app), so the
-	// pause screen is frosted all over; fired, it is left open for the frost to lift behind it
+	// Leaves the window the stepper says on close: open once fired, shut otherwise
 	useEffect(
 		() => () => {
-			if (!state.get().fired) frostWindow.set(NO_FROST_WINDOW);
+			frostWindow.set(closeGetReady(state.get(), frostWindow.get()));
 		},
 		[state, frostWindow],
 	);
 
-	const shown = useDerivedValue(() => (seat.get().radius > 0 ? 1 : 0));
+	const shown = useDerivedValue(() => (frame.get().drawn ? 1 : 0));
 	const seatCentre = useDerivedValue(() => vec(seat.get().x, seat.get().y));
 	const seatRadius = useDerivedValue(() => seat.get().radius);
 	// The frozen player is stretched along its jelly stretch, so its cover is too (see drawScene)
 	const coverRadius = useDerivedValue(() => seat.get().radius * COVER_SCALE + COVER_MARGIN);
 	const coverTransform = useDerivedValue(() => {
-		const { stretchX, stretchY } = seat.get();
+		const stretchX = player.get()?.stretchX ?? 0;
+		const stretchY = player.get()?.stretchY ?? 0;
 		const k = 1 + Math.hypot(stretchX, stretchY);
 		const angle = Math.atan2(stretchY, stretchX);
 		return [{ rotate: angle }, { scaleX: k }, { scaleY: 1 / k }, { rotate: -angle }];
 	});
-	const rimRadius = useDerivedValue(() => frostWindow.get().radius);
-	const rim = useDerivedValue(() => {
-		const r = roll.get();
-		const s = state.get();
-		const home = r ? seated(r, seat.get()) : 1;
-		return rimOpacity(s.progress, home, seatPulse(s.elapsedMs));
-	});
+	const rimRadius = useDerivedValue(() => frame.get().window.radius);
+	const rim = useDerivedValue(() => frame.get().rim);
 	const rimGlow = useDerivedValue(() => rim.get() * 0.4);
 
 	const dotCentre = useDerivedValue(() => {
-		const r = roll.get() ?? seat.get();
-		return vec(r.x, r.y);
+		const { dot } = frame.get();
+		return vec(dot.x, dot.y);
 	});
 	const shadeCentre = useDerivedValue(() => {
-		const r = roll.get() ?? seat.get();
-		return vec(r.x + tilt.x.get() * SHADE_TRAIL, r.y + tilt.y.get() * SHADE_TRAIL + 2);
+		const { dot } = frame.get();
+		return vec(dot.x + tilt.x.get() * SHADE_TRAIL, dot.y + tilt.y.get() * SHADE_TRAIL + 2);
 	});
 	const shadeOpacity = useDerivedValue(() => {
-		const r = roll.get();
+		const { dot } = frame.get();
 		const s = seat.get();
-		if (!r) return 0;
-		return SHADE_MAX * Math.min(1, Math.hypot(r.x - s.x, r.y - s.y) / SHADE_FULL_AT);
+		return SHADE_MAX * Math.min(1, Math.hypot(dot.x - s.x, dot.y - s.y) / SHADE_FULL_AT);
 	});
 	const glareCentre = useDerivedValue(() => {
 		const c = dotCentre.get();

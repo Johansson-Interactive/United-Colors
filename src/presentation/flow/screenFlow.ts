@@ -92,9 +92,9 @@ export type FlowAction =
 	| { kind: "pause" }
 	| { kind: "resume" }
 	| { kind: "kiosk" }
-	/** Stop the kiosk and hide it, so only the bowl over it moves */
+	/** Stop the kiosk, so only the bowl over it moves (the stage look hides it) */
 	| { kind: "haltKiosk" }
-	/** Show the kiosk again and run it on from where it stopped */
+	/** Run the kiosk on from where it stopped */
 	| { kind: "runKiosk" };
 
 export interface FlowStep {
@@ -162,15 +162,6 @@ export function cornerDot(screen: Screen): "pause" | "play" | null {
 		default:
 			return null;
 	}
-}
-
-/**
- * Whether the frozen game is frosted over: under the pause and everything that opens over it,
- * Get ready included, where the seat is the one clear window in the frost until the hold thaws
- * it (see getReady.ts). (The game over's dimmer frost is the stage's own.)
- */
-export function fieldFrosted(phase: GamePhase): boolean {
-	return phase === "PAUSED";
 }
 
 /**

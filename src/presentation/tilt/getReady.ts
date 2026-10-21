@@ -8,10 +8,12 @@
  * play dot can't start play.
  *
  * The hold (stepGetReady) is the rule; the roll, the window and the rim are what shows it.
+ * advanceGetReady puts them together into one step a frame, which is all the overlay runs.
  */
 
 import type { Disc } from "../../application/sceneRecord";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
+import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
@@ -233,4 +235,142 @@ export function rimOpacity(progress: number, seated: number, pulse: number): num
 	const away = (0.35 + 0.5 * pulse) * (1 - seated);
 	const home = 0.75 * seated;
 	return (away + home) * (1 - smoothstep((progress - RIM_GONE_FROM) / (1 - RIM_GONE_FROM)));
+}
+
+// ---- The frame: one step of all of the above, as the overlay runs it each frame ----
+
+/** Everything Get ready carries from one frame to the next */
+export interface GetReadyFrameState {
+	hold: GetReadyState;
+	/** The rolling dot; null until the first frame sets it on the seat */
+	roll: Roll | null;
+	/**
+	 * Whether the caption is up: down while the hold grows, back as soon as it breaks. Kept
+	 * rather than read off the last two holds, so it stays down once fired.
+	 */
+	caption: boolean;
+}
+
+/** Get ready as it opens */
+export const OPEN_GET_READY: GetReadyFrameState = {
+	hold: INITIAL_GET_READY,
+	roll: null,
+	caption: true,
+};
+
+/**
+ * The seat with no player in the frozen scene (it should always have one here): Get ready still
+ * runs, on a seat of no size in the corner, but nothing is drawn and the window stays shut
+ */
+export const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
+
+/** This frame's inputs: where the seat is, the tilt and the time since the last frame */
+export interface GetReadyInputs {
+	/** The dot at rest: where the player dot froze, at its radius; null with no player */
+	seat: Disc | null;
+	/** Radians, relative to the level pose */
+	tilt: Point;
+	dt: number;
+	field: FieldSize;
+	sensitivity: number;
+}
+
+/** What Get ready draws and reports this frame */
+export interface GetReadyFrame {
+	/** Whether the seat, the rim and the dot are drawn at all: not without a player */
+	drawn: boolean;
+	/** The seat the frame was drawn on: NO_SEAT without a player */
+	seat: Disc;
+	/** The rolling dot's centre */
+	dot: Point;
+	/** The clear window in the frost: shut without a player */
+	window: FrostWindow;
+	/** How strongly the rim on the window's edge shows, 0..1 */
+	rim: number;
+	/** Whether the caption is up (the overlay fades it on the edges) */
+	caption: boolean;
+	/** True on the one frame Get ready fired on: play resumes */
+	fired: boolean;
+}
+
+/**
+ * What a state draws at the seat. The window breathes by the state's roll, which is this
+ * frame's stepped roll, the same one the dot and the rim are drawn from, so the window, its rim
+ * and the dot agree on how far from home the dot is. Without a player nothing is drawn and the
+ * window stays shut, so nothing thaws open in the corner.
+ */
+function drawFrame(
+	state: GetReadyFrameState & { roll: Roll },
+	player: Disc | null,
+	field: FieldSize,
+	firedNow: boolean,
+): GetReadyFrame {
+	"worklet";
+	const { hold, roll, caption } = state;
+	const dot = { x: roll.x, y: roll.y };
+	if (player === null) {
+		return {
+			drawn: false,
+			seat: NO_SEAT,
+			dot,
+			window: NO_FROST_WINDOW,
+			rim: 0,
+			caption,
+			fired: firedNow,
+		};
+	}
+	const home = seated(roll, player);
+	const pulse = seatPulse(hold.elapsedMs);
+	return {
+		drawn: true,
+		seat: player,
+		dot,
+		window: {
+			x: player.x,
+			y: player.y,
+			radius: windowRadius(
+				hold.progress,
+				player.radius,
+				windowReach(player, field),
+				pulse * (1 - home),
+			),
+		},
+		rim: rimOpacity(hold.progress, home, pulse),
+		caption,
+		fired: firedNow,
+	};
+}
+
+/**
+ * Advance Get ready one frame: the roll first, then the hold. Once fired it is inert: the
+ * state comes back unchanged and the frame leaves the window open where it was, so the frost
+ * can lift behind it unseen, and it never fires again.
+ */
+export function advanceGetReady(
+	state: GetReadyFrameState,
+	inputs: GetReadyInputs,
+): { state: GetReadyFrameState; frame: GetReadyFrame } {
+	"worklet";
+	const { tilt, dt, field, sensitivity } = inputs;
+	const seat = inputs.seat ?? NO_SEAT;
+	const roll = state.roll ?? rollAt(seat);
+	if (state.hold.fired) {
+		return { state, frame: drawFrame({ ...state, roll }, inputs.seat, field, false) };
+	}
+	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt);
+	const next = {
+		hold,
+		roll: stepRoll(roll, rollTarget(seat, tilt, sensitivity, field), dt),
+		caption: !isHolding(state.hold, hold),
+	};
+	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired) };
+}
+
+/**
+ * The frost window Get ready leaves behind when it closes, given its last state and the window
+ * it had open: unchanged once fired, so the frost lifts behind the open window unseen; shut
+ * otherwise (the pause dot, leaving the app), so the pause screen is frosted all over.
+ */
+export function closeGetReady(state: GetReadyFrameState, frostWindow: FrostWindow): FrostWindow {
+	return state.hold.fired ? frostWindow : NO_FROST_WINDOW;
 }

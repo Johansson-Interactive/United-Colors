@@ -1,7 +1,6 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import { useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
@@ -22,7 +21,7 @@ import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
+import { cornerDot, type FlowAction } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -33,6 +32,7 @@ import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
+import { useStageLook } from "./hooks/useStageLook";
 import { StageFrame } from "./layout/StageFrame";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
@@ -134,16 +134,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
 	}, [session, corners]);
 
-	// The stage fades out while the kiosk is halted under the settle bowl or the speed view
-	const stageOpacity = useSharedValue(1);
-
 	// What a step does to the game, straight away or once its flood covers the screen
 	const perform = useCallback(
 		(action: FlowAction) => {
 			switch (action.kind) {
 				case "play":
-					// A game started from the bowl shows at once as its flood lifts
-					stageOpacity.set(1);
 					session.start(action.color);
 					detectGyro();
 					return;
@@ -158,15 +153,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					return;
 				case "haltKiosk":
 					session.halt();
-					stageOpacity.set(withTiming(0, { duration: 300 }));
 					return;
 				case "runKiosk":
-					stageOpacity.set(withTiming(1, { duration: 400 }));
 					session.run();
 					return;
 			}
 		},
-		[session, detectGyro, stageOpacity],
+		[session, detectGyro],
 	);
 
 	const { screen, dispatch } = useScreenFlow(store, {
@@ -175,13 +168,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
 	});
 
-	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, frostWindow, shake, bursts, burstClock } = useStageEffects(
-		store,
-		phase,
-		playerColor,
-		fieldFrosted(phase),
-	);
+	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
+	// the store; the flood is the transition
+	const { frost, frostWindow, accent, stageOpacity } = useStageLook({ screen, phase, playerColor });
+	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
