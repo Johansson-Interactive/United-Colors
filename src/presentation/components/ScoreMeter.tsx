@@ -20,7 +20,6 @@ import {
 	SCORE_PAD,
 	SCORE_PITCH,
 	type Tally,
-	type TallyStyle,
 	tallyIdle,
 	withCatch,
 } from "../effects/scoreTally";
@@ -36,8 +35,6 @@ interface ScoreMeterProps {
 	color: string;
 }
 
-/** Which way the total takes its catches in (see scoreTally.ts) */
-const STYLE: TallyStyle = "feed";
 /** The meter's height: the total and a few lines of addends under it */
 const METER_HEIGHT = 230;
 
@@ -128,7 +125,7 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	const [recorder] = useState(() => Skia.PictureRecorder());
 	const picture = useDerivedValue(() =>
 		recordPicture(recorder, (canvas) =>
-			drawTally(canvas, tally.get(), clock.get(), STYLE, geometry, scoreColor),
+			drawTally(canvas, tally.get(), clock.get(), geometry, scoreColor),
 		),
 	);
 
