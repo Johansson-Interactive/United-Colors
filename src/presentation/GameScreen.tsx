@@ -4,7 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
-import type { GameStore } from "../application/GameStore";
+import type { GameStore, GameStoreState } from "../application/GameStore";
 import type {
 	GameAudio,
 	GameHaptics,
@@ -21,7 +21,7 @@ import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot, type FlowAction } from "./flow/screenFlow";
+import { cornerDot } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -43,6 +43,10 @@ import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
+
+/** The player dot's colour, white while there is none */
+const playerColorOf = (s: GameStoreState) =>
+	s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE;
 
 interface GameScreenProps {
 	session: GameSession;
@@ -80,12 +84,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const highScore = useStore(store, (s) => s.highScore);
 	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
 	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
-	const playerColor = useStore(
-		store,
-		(s) => s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE,
-	);
-	const kioskInitializedRef = useRef(false);
-
+	const playerColor = useStore(store, playerColorOf);
 	const flood = useFlood();
 	const scene = useSessionScene(session);
 
@@ -119,54 +118,41 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The arena is the laid-out stage with the glass's corners, which may arrive after it
 	const stageSizeRef = useRef<ScreenSize | null>(null);
-	const handleLayout = useCallback(
-		(size: ScreenSize) => {
-			stageSizeRef.current = size;
-			session.setScreen({ ...size, corners: corners ?? undefined });
-			if (kioskInitializedRef.current) return;
-			kioskInitializedRef.current = true;
-			session.startKiosk();
-		},
-		[session, corners],
-	);
 	useEffect(() => {
 		const size = stageSizeRef.current;
 		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
 	}, [session, corners]);
 
-	// What a step does to the game, straight away or once its flood covers the screen
-	const perform = useCallback(
-		(action: FlowAction) => {
-			switch (action.kind) {
-				case "play":
-					session.start(action.color);
-					detectGyro();
-					return;
-				case "pause":
-					session.pause();
-					return;
-				case "resume":
-					session.resume();
-					return;
-				case "kiosk":
-					session.startKiosk();
-					return;
-				case "haltKiosk":
-					session.halt();
-					return;
-				case "runKiosk":
-					session.run();
-					return;
-			}
-		},
-		[session, detectGyro],
-	);
-
+	// The flow's controls on the game, with the gyro check that goes with play, and the facts it
+	// steps on. The stage fade that goes with them is the stage look's
 	const { screen, dispatch } = useScreenFlow(store, {
-		perform,
+		play: (color) => {
+			session.start(color);
+			detectGyro();
+		},
+		pause: () => session.pause(),
+		resume: () => session.resume(),
+		startKiosk: () => session.startKiosk(),
+		haltKiosk: () => session.halt(),
+		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
+		facts: () => ({
+			levelPoseSet: store.getState().settings.tiltZero !== null,
+			tiltPresent: tilt.available.get(),
+			playerColor: playerColorOf(store.getState()),
+		}),
 	});
+
+	// Size and corners go straight to the session; the flow decides what the layout starts
+	const handleLayout = useCallback(
+		(size: ScreenSize) => {
+			stageSizeRef.current = size;
+			session.setScreen({ ...size, corners: corners ?? undefined });
+			dispatch({ type: "stageLaidOut" });
+		},
+		[session, corners, dispatch],
+	);
 
 	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
 	// the store; the flood is the transition
@@ -178,28 +164,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The corner dot does what it shows; the flow decides what that is on this screen
 	const corner = cornerDot(screen);
-	const handleCorner = useCallback(
-		() => dispatch({ type: "cornerPressed", tiltAvailable: tilt.available.get() }),
-		[dispatch, tilt],
-	);
+	const handleCorner = useCallback(() => dispatch({ type: "cornerPressed" }), [dispatch]);
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
 	useEffect(() => bindAppLeave(watchAppActive, () => handleAppLeave()), [watchAppActive]);
 
 	const handleStartPress = useCallback(
-		(at: PressPoint, color: string) =>
-			dispatch({
-				type: "startPressed",
-				color,
-				hasZero: store.getState().settings.tiltZero !== null,
-				at,
-			}),
-		[dispatch, store],
+		(at: PressPoint, color: string) => dispatch({ type: "startPressed", color, at }),
+		[dispatch],
 	);
 	const handleCalibratePress = useCallback(
-		() => dispatch({ type: "levelPressed", from: "pause", color: playerColor }),
-		[dispatch, playerColor],
+		() => dispatch({ type: "levelPressed", from: "pause" }),
+		[dispatch],
 	);
 	const handleMenuCalibratePress = useCallback(
 		(color: string) => dispatch({ type: "levelPressed", from: "menu", color }),
@@ -218,8 +195,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		dispatch({ type: "readyHeld" });
 	}, [handleSnap, dispatch]);
 	const handleSpeedPress = useCallback(
-		() => dispatch({ type: "speedPressed", from: "pause", color: playerColor }),
-		[dispatch, playerColor],
+		() => dispatch({ type: "speedPressed", from: "pause" }),
+		[dispatch],
 	);
 	const handleMenuSpeedPress = useCallback(
 		(color: string) => dispatch({ type: "speedPressed", from: "menu", color }),
@@ -227,8 +204,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 	const handleSpeedBack = useCallback(() => dispatch({ type: "speedBacked" }), [dispatch]);
 	const handleRetryPress = useCallback(
-		(at: PressPoint) => dispatch({ type: "retryPressed", color: playerColor, at }),
-		[dispatch, playerColor],
+		(at: PressPoint) => dispatch({ type: "retryPressed", at }),
+		[dispatch],
 	);
 	const handleLeavePress = useCallback(
 		(at: PressPoint) => dispatch({ type: "leavePressed", at }),

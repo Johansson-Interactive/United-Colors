@@ -1,5 +1,10 @@
 import { stageLook } from "../../presentation/effects/stageLook";
-import { type FlowEvent, INITIAL_FLOW, stepFlow } from "../../presentation/flow/screenFlow";
+import {
+	type FlowEvent,
+	type GameFacts,
+	INITIAL_FLOW,
+	stepFlow,
+} from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const PINK = "#E91E63";
@@ -62,10 +67,7 @@ describe("the stage look", () => {
 
 	it("fades the stage back in over 400 ms as the bowl or the speed view opened from the title closes", () => {
 		for (const [open, close] of [
-			[
-				{ type: "startPressed", color: PINK, hasZero: false, at: { x: 0, y: 0 } },
-				{ type: "settleBacked" },
-			],
+			[{ type: "startPressed", color: PINK, at: { x: 0, y: 0 } }, { type: "settleBacked" }],
 			[{ type: "levelPressed", from: "menu", color: PINK }, { type: "settleBacked" }],
 			[{ type: "speedPressed", from: "menu", color: PINK }, { type: "speedBacked" }],
 		] satisfies [FlowEvent, FlowEvent][]) {
@@ -81,7 +83,7 @@ describe("the stage look", () => {
 		// so the hud's look comes after the title's fade-in and shows the stage at once
 		expect(
 			walk([
-				{ type: "startPressed", color: PINK, hasZero: false, at: { x: 0, y: 0 } },
+				{ type: "startPressed", color: PINK, at: { x: 0, y: 0 } },
 				{ type: "settled", zero: { x: 0, y: 0 }, facingDown: false, at: { x: 0, y: 0 } },
 				{ type: "covered" },
 				{ type: "phaseChanged", phase: "RUNNING" },
@@ -98,11 +100,14 @@ describe("the stage look", () => {
 const FADED_OUT = { to: 0, over: { kind: "timed", duration: 300 } };
 const FADING_IN = { to: 1, over: { kind: "timed", duration: 400 } };
 
+/** A first game: no level pose yet, so PLAY on the title opens the bowl */
+const GAME: GameFacts = { levelPoseSet: false, tiltPresent: true, playerColor: PINK };
+
 /** Steps the real flow from the title through `events`, with the stage opacity after each */
 function walk(events: FlowEvent[]) {
 	let flow = INITIAL_FLOW;
 	return events.map((event) => {
-		const { state, screen } = stepFlow(flow, event);
+		const { state, screen } = stepFlow(flow, event, GAME);
 		flow = state;
 		return {
 			screen: screen.kind,
