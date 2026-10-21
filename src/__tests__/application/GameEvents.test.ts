@@ -7,6 +7,7 @@ const frameWith = (events: GameEvent[], score = 0): RenderFrame => ({
 	score,
 	dots: [],
 	events,
+	runTicks: 0,
 });
 
 describe("onGameEvents", () => {

@@ -99,6 +99,7 @@ describe("pourInput", () => {
 		score,
 		dots: [],
 		events: [],
+		runTicks: run.ticks,
 		run,
 	});
 
@@ -112,7 +113,7 @@ describe("pourInput", () => {
 	});
 
 	it("pours an empty run when the frame carries none", () => {
-		const bare = { phase: "GAME_OVER" as const, score: 0, dots: [], events: [] };
+		const bare = { phase: "GAME_OVER" as const, score: 0, dots: [], events: [], runTicks: 0 };
 		const input = pourInput({ frame: bare }, RED);
 		expect(input.record).toEqual({ catches: [], ticks: 0 });
 	});

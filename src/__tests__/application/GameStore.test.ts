@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from "../../domain/constants";
 describe("GameStore", () => {
 	it("starts in the kiosk with no score, no dots, no best and default settings", () => {
 		const state = createGameStore().getState();
-		expect(state.frame).toEqual({ phase: "KIOSK", score: 0, dots: [], events: [] });
+		expect(state.frame).toEqual({ phase: "KIOSK", score: 0, dots: [], events: [], runTicks: 0 });
 		expect(state.highScore).toBe(0);
 		expect(state.settings).toEqual(DEFAULT_SETTINGS);
 	});
@@ -40,7 +40,7 @@ describe("GameStore", () => {
 
 	it("updateFrame and setHighScore replace their slices", () => {
 		const store = createGameStore();
-		const frame = { phase: "RUNNING" as const, score: 3, dots: [], events: [] };
+		const frame = { phase: "RUNNING" as const, score: 3, dots: [], events: [], runTicks: 0 };
 		store.getState().updateFrame(frame);
 		store.getState().setHighScore(8);
 		expect(store.getState().frame).toBe(frame);

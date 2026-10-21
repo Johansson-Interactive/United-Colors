@@ -304,6 +304,7 @@ export class GameEngine {
 			score: this.score,
 			dots,
 			events,
+			runTicks: this.timeStep,
 			...(phase === "GAME_OVER" ? { run: { catches: this.runCatches, ticks: this.timeStep } } : {}),
 		};
 	}

@@ -26,7 +26,7 @@ function caught(value: number, step = 1, sameTick = false): Catch {
 }
 
 function report(store: GameStore, events: GameEvent[]) {
-	store.getState().updateFrame({ phase: "RUNNING", score: 0, dots: [], events });
+	store.getState().updateFrame({ phase: "RUNNING", score: 0, dots: [], events, runTicks: 0 });
 }
 
 describe("bindSoundEffects", () => {

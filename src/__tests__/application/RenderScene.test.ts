@@ -60,7 +60,7 @@ function dot(partial: Partial<DotView>): DotView {
 }
 
 function frame(dots: DotView[], phase: GamePhase = "RUNNING"): RenderFrame {
-	return { phase, score: 0, dots, events: [] };
+	return { phase, score: 0, dots, events: [], runTicks: 0 };
 }
 
 const PLAYER_POS = { x: 50, y: 60 };

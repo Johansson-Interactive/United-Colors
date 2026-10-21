@@ -5,6 +5,7 @@ import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
+import { SINK_MS } from "../effects/scoreSink";
 import { WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
@@ -25,10 +26,14 @@ interface PauseOverlayProps {
 	children?: React.ReactNode;
 }
 
+/** PAUSED waits until the sinking score has cleared its band at the top (ms) */
+const CAPTION_DELAY_MS = SINK_MS * 0.6;
+
 /**
  * Paused: the scene frosts over, a calm place to look around, change settings or quit. The
- * HUD's corner dot, a play dot here, carries on through Get ready. The corners hold the
- * settings (level pose and tilt speed) and the sound.
+ * score sinks into the middle with the run time under it (see PausedScore). The HUD's corner
+ * dot, a play dot here, carries on through Get ready. The corners hold the settings (level
+ * pose and tilt speed) and the sound.
  */
 export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	color,
@@ -48,9 +53,13 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 			entering={FadeIn.duration(300)}
 			exiting={FadeOut.duration(200)}
 		>
-			<View style={styles.top} pointerEvents="none">
+			<Animated.View
+				style={styles.top}
+				pointerEvents="none"
+				entering={FadeIn.delay(CAPTION_DELAY_MS).duration(300)}
+			>
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />
-			</View>
+			</Animated.View>
 
 			<View style={styles.footer}>
 				<DotButton

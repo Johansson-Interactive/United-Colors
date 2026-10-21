@@ -92,7 +92,12 @@ _Avoid_: menu, home, start screen
 The attract-mode game that plays itself behind the title screen. It halts and fades while a view opens over the title.
 
 **Pause**:
-The screen over a paused run: a spirit level that resumes play once the phone is held level again. In code it is `PauseOverlay`.
+The screen over a paused run, the frozen field frosted under it: the score, in the player's colour, and the run time stand in its middle; the play dot opens Get ready, QUIT ends the run, and the corner menus hold the settings and the sound. Nothing in the field moves. In code it is `PauseOverlay`.
+_Avoid_: pause menu
+
+**Sink and rise**:
+How the score moves between play and the pause: as the pause opens it sinks from the top into the middle and swells, and the run time follows it in; as Get ready opens it rises back to the top, where it waits dimmed until play resumes, while the run time fades where it stands. Silent, and never seen with any other screen: elsewhere the score and time fade with the pause.
+_Avoid_: pour (that is the game over's), slide, transition
 
 **Corner menu**:
 A dot in a bottom corner that opens into smaller dots, one per item (`DotMenu`). The title screen and the pause share two: the settings corner bottom left (`SettingsMenu`: level pose and tilt speed) and the sound corner bottom right (`SoundMenu`: music and effects).

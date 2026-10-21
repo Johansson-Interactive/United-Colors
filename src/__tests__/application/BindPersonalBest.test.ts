@@ -36,7 +36,7 @@ function slowStorage(stored: number) {
 }
 
 function setPhase(store: GameStore, phase: GamePhase, score: number) {
-	store.getState().updateFrame({ phase, score, dots: [], events: [] });
+	store.getState().updateFrame({ phase, score, dots: [], events: [], runTicks: 0 });
 }
 
 function setup(stored: number) {

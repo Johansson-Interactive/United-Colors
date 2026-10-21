@@ -1,4 +1,4 @@
-import { comboPay, ownValue, runSeconds } from "../../domain/run";
+import { comboPay, ownValue, runClock, runSeconds } from "../../domain/run";
 
 describe("run time", () => {
 	it("is the run's ticks at 30 a second, unrounded", () => {
@@ -6,6 +6,16 @@ describe("run time", () => {
 		expect(runSeconds(30)).toBe(1);
 		expect(runSeconds(45)).toBe(1.5);
 		expect(runSeconds(30 * 125 + 29)).toBeCloseTo(125.9667, 4);
+	});
+});
+
+describe("runClock", () => {
+	it("shows the run time as M:SS, rounded down", () => {
+		expect(runClock(0)).toBe("0:00");
+		expect(runClock(29)).toBe("0:00");
+		expect(runClock(30 * 9)).toBe("0:09");
+		expect(runClock(30 * 84 + 15)).toBe("1:24");
+		expect(runClock(30 * 600)).toBe("10:00");
 	});
 });
 

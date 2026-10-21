@@ -15,7 +15,7 @@ import {
 
 /** The scene built from `dots`, as the drawer gets it */
 function sceneOf(dots: DotView[]): Float32Array {
-	const frame: RenderFrame = { phase: "KIOSK", score: 0, dots, events: [] };
+	const frame: RenderFrame = { phase: "KIOSK", score: 0, dots, events: [], runTicks: 0 };
 	return createSceneBuilder()(frame, 0, { x: 50, y: 60 });
 }
 

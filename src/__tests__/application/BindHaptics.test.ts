@@ -3,7 +3,7 @@ import { bindHaptics } from "../../application/useCases/BindHaptics";
 import type { GameEvent } from "../../domain/types";
 
 function report(store: GameStore, events: GameEvent[]) {
-	store.getState().updateFrame({ phase: "REJECTING", score: 0, dots: [], events });
+	store.getState().updateFrame({ phase: "REJECTING", score: 0, dots: [], events, runTicks: 0 });
 }
 
 describe("bindHaptics", () => {

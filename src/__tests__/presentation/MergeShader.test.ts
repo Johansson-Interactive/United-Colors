@@ -44,7 +44,7 @@ function dot(partial: Partial<DotView>): DotView {
 }
 
 function scene(dots: DotView[], player = { x: 50, y: 60 }): Float32Array {
-	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots, events: [] };
+	const frame: RenderFrame = { phase: "RUNNING", score: 0, dots, events: [], runTicks: 0 };
 	return createSceneBuilder()(frame, 0, player);
 }
 
@@ -187,6 +187,7 @@ describe("merge uniforms by name", () => {
 				score: 0,
 				dots: [dot({ kind: "player", color: "#E91E63" })],
 				events: [],
+				runTicks: 0,
 			} as RenderFrame,
 			0,
 			{ x: 100, y: 100 },
