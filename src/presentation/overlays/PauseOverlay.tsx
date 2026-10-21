@@ -10,8 +10,6 @@ import type { MenuOpening } from "../flow/screenFlow";
 import { WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
-	/** Player dot colour at the moment of pausing; the level pose button wears it */
-	color: string;
 	onQuit: (point: PressPoint) => void;
 	/** Extra content below the controls (e.g. dev tools) */
 	children?: React.ReactNode;
@@ -25,16 +23,18 @@ const CAPTION_DELAY_MS = SINK_MS * 0.6;
 
 /**
  * Paused: the scene frosts over, a calm place to look around, change settings or quit. The
- * score sinks into the middle with the run time under it (see PausedScore). The HUD's corner
- * dot, a play dot here, carries on through Get ready. The corners hold the settings (level
- * pose and tilt speed) and the sound.
+ * score sinks into the middle with the run time under it (see PausedScore). The frost itself
+ * is the way back: a finger held on it, clear of the buttons, opens Get ready (see FieldTouch),
+ * so nothing here takes a touch but the buttons. The corners hold the settings (level pose and
+ * tilt speed) and the sound.
  */
-export const PauseOverlay: React.FC<PauseOverlayProps> = ({ color, onQuit, children }) => {
+export const PauseOverlay: React.FC<PauseOverlayProps> = ({ onQuit, children }) => {
 	return (
 		<Animated.View
 			style={styles.container}
 			entering={FadeIn.duration(300)}
 			exiting={FadeOut.duration(200)}
+			pointerEvents="box-none"
 		>
 			<Animated.View
 				style={styles.top}
@@ -44,7 +44,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({ color, onQuit, child
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />
 			</Animated.View>
 
-			<View style={styles.footer}>
+			<View style={styles.footer} pointerEvents="box-none">
 				<DotButton
 					size={80}
 					color={WHITE}
@@ -57,7 +57,7 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({ color, onQuit, child
 				{children ? <View style={styles.extra}>{children}</View> : null}
 			</View>
 
-			<SettingsMenu openingAt={fromPause} levelColor={color} />
+			<SettingsMenu openingAt={fromPause} />
 
 			<SoundMenu />
 		</Animated.View>

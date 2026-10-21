@@ -11,8 +11,6 @@ interface SettingsMenuProps {
 	 * dot shows then, which the level bowl or the speed view opens in
 	 */
 	openingAt: () => MenuOpening;
-	/** Glyph colour of the level dot, the colour its bowl will open in */
-	levelColor?: string;
 	/** Glyph colour of the settings and speed dots */
 	color?: string;
 }
@@ -21,11 +19,7 @@ interface SettingsMenuProps {
  * The settings corner (bottom left), mirroring the sound corner: the settings dot opens into
  * the level dot, nearest it, and the speed dot above, each opening its own view
  */
-export const SettingsMenu: React.FC<SettingsMenuProps> = ({
-	openingAt,
-	levelColor,
-	color = WHITE,
-}) => {
+export const SettingsMenu: React.FC<SettingsMenuProps> = ({ openingAt, color = WHITE }) => {
 	const { sensitivity, openLevel, openSpeed } = useCornerMenus();
 	const speed = sensitivityChoice(sensitivity);
 	return (
@@ -45,7 +39,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 				{
 					key: "level",
 					icon: "level",
-					color: levelColor,
 					onPress: () => openLevel(openingAt()),
 					label: "Set level pose",
 				},

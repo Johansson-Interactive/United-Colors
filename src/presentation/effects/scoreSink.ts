@@ -18,7 +18,8 @@ export type ScoreSpot = "top" | "middle";
 
 /**
  * Where the paused score stands on `screen`: the middle on the pause, the top in Get ready
- * (waiting for play), and nowhere else: in play the HUD's own meter shows it
+ * (waiting for play), and nowhere else: in play, and while the bloom frosts it, the HUD's own
+ * meter shows it
  */
 export function scoreSpot(screen: ScoreScreen): ScoreSpot | null {
 	switch (screen) {
@@ -33,16 +34,20 @@ export function scoreSpot(screen: ScoreScreen): ScoreSpot | null {
 
 /**
  * What the paused score does as the screen changes: sinks from the top into the middle as
- * the pause opens from play or Get ready; rises back to the top as Get ready opens; fades in
- * or out with the pause's chrome for every other way on or off the pause; hands off to the
- * HUD's meter, at once, when Get ready resumes play; or nothing, where it is not shown
+ * the pause opens from play (the bloom's frosting, or play itself) or Get ready; rises back to
+ * the top as Get ready opens; fades in or out with the pause's chrome for every other way on
+ * or off the pause; hands off to the HUD's meter, at once, when Get ready resumes play; or
+ * nothing, where it is not shown
  */
 export type ScoreMotion = "sink" | "rise" | "fadeIn" | "fadeOut" | "handOff" | "none";
+
+/** The screens the score is at the top of as the pause opens, so it sinks in from there */
+const FROM_TOP: ReadonlySet<ScoreScreen> = new Set(["hud", "frosting", "getReady"]);
 
 export function scoreMotion(from: ScoreScreen | null, to: ScoreScreen): ScoreMotion {
 	const was = from === null ? null : scoreSpot(from);
 	const now = scoreSpot(to);
-	if (now === "middle") return from === "hud" || from === "getReady" ? "sink" : "fadeIn";
+	if (now === "middle") return from !== null && FROM_TOP.has(from) ? "sink" : "fadeIn";
 	if (now === "top") return was === "middle" ? "rise" : "fadeIn";
 	if (was === "top") return "handOff";
 	if (was === "middle") return "fadeOut";

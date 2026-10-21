@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import Animated, {
 	cancelAnimation,
 	Easing,
+	type SharedValue,
 	useAnimatedStyle,
 	useSharedValue,
 	withDelay,
@@ -30,7 +31,7 @@ interface PausedScoreProps {
 	/** The score and the run time so far are read here while the run is paused */
 	store: GameStore;
 	/** The player's colour; the score wears it, never combo amber, as nothing counts while paused */
-	color: string;
+	color: SharedValue<string>;
 	/** The screen showing; its changes play the sink, the rise and the fades (see scoreSink.ts) */
 	screen: ScoreScreen;
 }

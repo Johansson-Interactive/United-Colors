@@ -1,10 +1,11 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { StyleSheet, View } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
-import type { GameStore, GameStoreState } from "../application/GameStore";
+import type { GameStore } from "../application/GameStore";
 import type {
 	GameAudio,
 	GameHaptics,
@@ -19,21 +20,26 @@ import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
+import { FieldTouch } from "./components/FieldTouch";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
+import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot, type MenuOpening } from "./flow/screenFlow";
+import type { Point } from "./effects/frost";
+import type { MenuOpening } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useGameBindings } from "./hooks/useGameBindings";
+import { playerColorOf, usePlayerColor, useRestingPlayerColor } from "./hooks/usePlayerColor";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { useStageLook } from "./hooks/useStageLook";
 import { StageFrame } from "./layout/StageFrame";
+import { FrostBloomOverlay } from "./overlays/FrostBloomOverlay";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
@@ -43,10 +49,7 @@ import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
-
-/** The player dot's colour, white while there is none */
-const playerColorOf = (s: GameStoreState) =>
-	s.frame.dots.find((d) => d.kind === "player")?.color ?? WHITE;
+import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
 
 interface GameScreenProps {
 	session: GameSession;
@@ -82,7 +85,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Phase only: the HUD and the game over read their own score, dots never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
 	const highScore = useStore(store, (s) => s.highScore);
-	const playerColor = useStore(store, playerColorOf);
+	// The colour as play switches it, on the UI thread; React sees it only once the run stops
+	const playerColor = usePlayerColor(store);
+	const restingColor = useRestingPlayerColor(store) ?? WHITE;
 	const flood = useFlood();
 	const scene = useSessionScene(session);
 
@@ -154,15 +159,26 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
 	// the store; the flood is the transition
-	const { frost, frostWindow, accent, stageOpacity } = useStageLook({ screen, phase, playerColor });
+	const { frost, frostEdge, accent, stageOpacity } = useStageLook({ screen, phase }, playerColor);
 	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
 
-	// The corner dot does what it shows; the flow decides what that is on this screen
-	const corner = cornerDot(screen);
-	const handleCorner = useCallback(() => dispatch({ type: "cornerPressed" }), [dispatch]);
+	// The field is the way into and out of the pause: a finger landing on it is the flow's to
+	// place, and whether it is still down is the bloom's and Get ready's to follow each frame
+	const touch = useSharedValue(FIELD_UNTOUCHED);
+	const handleFieldTouch = useCallback(
+		(at: Point) => dispatch({ type: "fieldTouched", at }),
+		[dispatch],
+	);
+	const handleBloomCovered = useCallback(() => dispatch({ type: "bloomCovered" }), [dispatch]);
+	const handleBloomCleared = useCallback(() => dispatch({ type: "bloomCleared" }), [dispatch]);
+	const handleReadyShut = useCallback(() => dispatch({ type: "readyShut" }), [dispatch]);
+	// Dev only: with touch steering the dot, the field cannot pause it, so a corner dot does
+	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
+	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
+	const inPlay = screen.kind === "hud" || screen.kind === "frosting";
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
@@ -213,7 +229,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<GameCanvas
 					scene={scene}
 					frost={frost}
-					frostWindow={frostWindow}
+					frostEdge={frostEdge}
 					accent={accent}
 					stageOpacity={stageOpacity}
 					shake={shake}
@@ -223,14 +239,31 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
 				/>
 
+				<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={fieldTouchEnabled} />
+
+				{screen.kind === "frosting" && (
+					<FrostBloomOverlay
+						scene={scene}
+						color={restingColor}
+						origin={screen.at}
+						touch={touch}
+						corners={corners}
+						frostEdge={frostEdge}
+						onCovered={handleBloomCovered}
+						onCleared={handleBloomCleared}
+					/>
+				)}
+
 				{screen.kind === "getReady" && (
 					<GetReadyOverlay
 						scene={scene}
-						color={playerColor}
+						color={restingColor}
 						sensitivity={sensitivity}
 						corners={corners}
-						frostWindow={frostWindow}
+						touch={touch}
+						frostEdge={frostEdge}
 						onReady={handleReady}
+						onShut={handleReadyShut}
 					/>
 				)}
 
@@ -253,9 +286,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								/>
 							)}
 
-							{screen.kind === "pause" && (
-								<PauseOverlay color={playerColor} onQuit={handleLeavePress} />
-							)}
+							{screen.kind === "pause" && <PauseOverlay onQuit={handleLeavePress} />}
 						</CornerMenusProvider>
 
 						{screen.kind === "speed" && (
@@ -279,7 +310,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						{screen.kind === "gameOver" && (
 							<GameOverOverlay
 								store={store}
-								color={playerColor}
+								color={restingColor}
 								audio={audio}
 								onRetry={handleRetryPress}
 								onBack={handleLeavePress}
@@ -289,14 +320,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						{/* The paused score and run time, sinking in from the HUD's spot and rising back */}
 						<PausedScore store={store} color={playerColor} screen={screen.kind} />
 
-						{/* Over the pause's own controls, so its corner dot stays pressable */}
-						{corner && (
+						<PauseHint store={store} screen={screen.kind} fieldPauses={!devTouch} />
+
+						{inPlay && (
 							<HUD
 								store={store}
 								color={playerColor}
-								showScore={screen.kind === "hud"}
-								corner={corner}
-								onCorner={handleCorner}
+								onPause={devTouch ? handlePause : undefined}
 								corners={corners}
 							/>
 						)}

@@ -20,21 +20,31 @@ import {
 import { SCORE_CENTRE_Y, SCORE_PITCH } from "../../presentation/effects/scoreTally";
 
 const STAGE = { width: 390, height: 800 };
-const SCREENS: ScoreScreen[] = ["title", "hud", "pause", "speed", "getReady", "settle", "gameOver"];
+const SCREENS: ScoreScreen[] = [
+	"title",
+	"hud",
+	"frosting",
+	"pause",
+	"speed",
+	"getReady",
+	"settle",
+	"gameOver",
+];
 
 describe("where the paused score stands", () => {
 	it("is the middle on the pause, the top in Get ready, and nowhere else", () => {
 		expect(scoreSpot("pause")).toBe("middle");
 		expect(scoreSpot("getReady")).toBe("top");
-		for (const screen of ["title", "hud", "speed", "settle", "gameOver"] as const) {
+		for (const screen of ["title", "hud", "frosting", "speed", "settle", "gameOver"] as const) {
 			expect(scoreSpot(screen), screen).toBeNull();
 		}
 	});
 });
 
 describe("what the paused score does as the screen changes", () => {
-	it("sinks as the pause opens from play, and again when Get ready closes back to it", () => {
+	it("sinks as the pause opens from play, through the bloom or not, and again when Get ready closes back to it", () => {
 		expect(scoreMotion("hud", "pause")).toBe("sink");
+		expect(scoreMotion("frosting", "pause")).toBe("sink");
 		expect(scoreMotion("getReady", "pause")).toBe("sink");
 	});
 

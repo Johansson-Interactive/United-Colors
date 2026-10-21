@@ -59,6 +59,7 @@ export function stepPress(current: number, target: number, dtMs: number): number
  * into a wall, so that the part left on the screen side keeps the circle's area
  */
 export function pressedRadius(radius: number, press: number): number {
+	"worklet";
 	if (press <= 0 || radius <= 0) return radius;
 	const centre = radius - press;
 	let drawn = radius;

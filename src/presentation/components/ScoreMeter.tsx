@@ -1,8 +1,7 @@
 import { Canvas, Picture, Skia } from "@shopify/react-native-skia";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDerivedValue } from "react-native-reanimated";
-import { useStore } from "zustand";
+import { type SharedValue, useDerivedValue } from "react-native-reanimated";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
 import {
@@ -21,8 +20,11 @@ import { payColor, WHITE } from "../theme/theme";
 interface ScoreMeterProps {
 	/** The score and its catches are read here, so a catch re-renders nothing */
 	store: GameStore;
-	/** The player's current colour; the total wears it so a switch is always visible */
-	color: string;
+	/**
+	 * The player's current colour, followed on the UI thread; the total wears it so a switch is
+	 * always visible
+	 */
+	color: SharedValue<string>;
 }
 
 /**
@@ -35,7 +37,8 @@ interface ScoreMeterProps {
 export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	const { width } = useStageBox();
 	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_METER_CY }), [width]);
-	const scoreColor = useMemo(() => Skia.Color(color), [color]);
+	// Parsed only when the colour changes, not with the tally every frame
+	const scoreColor = useDerivedValue(() => Skia.Color(color.get()));
 
 	const {
 		state: tally,
@@ -60,18 +63,22 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 		[store, add],
 	);
 
-	const score = useStore(store, (s) => s.frame.score);
-	useEffect(() => {
-		if (score >= expectedRef.current) return;
-		expectedRef.current = score;
-		tally.set(createTally(score));
-	}, [score, tally]);
+	// Followed outside React, so a catch renders nothing here
+	useEffect(
+		() =>
+			store.subscribe(({ frame: { score } }) => {
+				if (score >= expectedRef.current) return;
+				expectedRef.current = score;
+				tally.set(createTally(score));
+			}),
+		[store, tally],
+	);
 
 	// Re-recorded only while something moves: the clock stands still otherwise
 	const [recorder] = useState(() => Skia.PictureRecorder());
 	const picture = useDerivedValue(() =>
 		recordPicture(recorder, (canvas) =>
-			drawTally(canvas, tally.get(), clock.get(), geometry, scoreColor),
+			drawTally(canvas, tally.get(), clock.get(), geometry, scoreColor.get()),
 		),
 	);
 

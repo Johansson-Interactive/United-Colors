@@ -77,26 +77,48 @@ describe("flow store", () => {
 		expect(flow.getState().screen).toEqual({ kind: "pause" });
 	});
 
-	it("a pause tap pauses the game at once", () => {
+	it("a finger on the field pauses the game at once and keeps the HUD up, frosting", () => {
+		const { flow, calls, publish, screen } = setup();
+		publish("RUNNING");
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
+		expect(calls).toEqual(["pause"]);
+		publish("PAUSED");
+		expect(screen()).toEqual({ kind: "frosting", at: AT });
+		flow.getState().dispatch({ type: "bloomCovered" });
+		expect(screen()).toEqual({ kind: "pause" });
+	});
+
+	it("a finger lifted before the frost covers resumes the game, and the HUD is back as it reports play", () => {
+		const { flow, calls, publish, screen } = setup();
+		publish("RUNNING");
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
+		publish("PAUSED");
+		flow.getState().dispatch({ type: "bloomCleared" });
+		expect(calls).toEqual(["pause", "resume"]);
+		publish("RUNNING");
+		expect(screen()).toEqual({ kind: "hud" });
+	});
+
+	it("the dev pause dot pauses the game at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("RUNNING");
-		flow.getState().dispatch({ type: "cornerPressed" });
+		flow.getState().dispatch({ type: "pausePressed" });
 		expect(calls).toEqual(["pause"]);
 	});
 
-	it("the play dot on the pause opens Get ready when there is tilt", () => {
+	it("a finger on the frost of the pause opens Get ready when there is tilt", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "cornerPressed" });
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
 		expect(screen()).toEqual({ kind: "getReady" });
 		expect(calls).toEqual([]);
 	});
 
-	it("the play dot on the pause resumes at once on a device without tilt", () => {
+	it("a finger on the frost resumes at once on a device without tilt", () => {
 		const { flow, calls, answers, publish, screen } = setup();
 		answers.tiltPresent = false;
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "cornerPressed" });
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
 		expect(calls).toEqual(["resume"]);
 		expect(screen()).toEqual({ kind: "pause" });
 	});
@@ -104,9 +126,18 @@ describe("flow store", () => {
 	it("Get ready's hold resumes at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "cornerPressed" });
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
 		flow.getState().dispatch({ type: "readyHeld" });
 		expect(calls).toEqual(["resume"]);
+	});
+
+	it("Get ready's window shutting brings the pause screen back, touching nothing", () => {
+		const { flow, calls, publish, screen } = setup();
+		publish("PAUSED");
+		flow.getState().dispatch({ type: "fieldTouched", at: AT });
+		flow.getState().dispatch({ type: "readyShut" });
+		expect(calls).toEqual([]);
+		expect(screen()).toEqual({ kind: "pause" });
 	});
 
 	it("the pause's level button opens the bowl in the player's colour", () => {

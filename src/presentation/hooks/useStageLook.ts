@@ -1,6 +1,12 @@
 import { useEffect } from "react";
-import { useSharedValue, withDelay, withTiming } from "react-native-reanimated";
-import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
+import {
+	type SharedValue,
+	useDerivedValue,
+	useSharedValue,
+	withDelay,
+	withTiming,
+} from "react-native-reanimated";
+import { FROSTED_ALL, type FrostEdge } from "../effects/frost";
 import { type StageMove, type StagePlace, stageLook } from "../effects/stageLook";
 import { INK_LIFT } from "../theme/theme";
 
@@ -8,20 +14,22 @@ import { INK_LIFT } from "../theme/theme";
  * Applies the field's look behind the screen (see stageLook.ts) to the shared values the game
  * canvas draws from. Each value starts its move only when the move itself changes, so a look
  * that stays the same restarts nothing: going between the pause and Get ready leaves alone
- * the frost window Get ready has opened. This is the only writer of the stage opacity; the
- * frost window is shared with Get ready, which opens and widens it.
+ * the frost edge Get ready has opened. This is the only writer of the stage opacity; the
+ * frost edge is shared with the bloom and Get ready, which move it. A wash in the player's
+ * colour follows `playerColor` on the UI thread, so a colour switch in play renders nothing.
  */
-export function useStageLook(place: StagePlace) {
+export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
-	const frostWindow = useSharedValue<FrostWindow>(NO_FROST_WINDOW);
-	// Before the frost's move, so the window shuts as the frost comes on
+	const frostEdge = useSharedValue<FrostEdge>(FROSTED_ALL);
+	// Before the frost's move, so the edge is frosted all over as the pause's frost comes on
 	useEffect(() => {
-		if (look.shutWindow) frostWindow.set(NO_FROST_WINDOW);
-	}, [look.shutWindow, frostWindow]);
+		if (look.shutWindow) frostEdge.set(FROSTED_ALL);
+	}, [look.shutWindow, frostEdge]);
 	const frost = useStageValue(0, look.frost);
-	const accent = useStageValue<string>(INK_LIFT, look.accent);
+	const washInPlayer = look.accent === "player";
+	const accent = useDerivedValue(() => (washInPlayer ? playerColor.get() : INK_LIFT));
 	const stageOpacity = useStageValue(1, look.opacity);
-	return { frost, frostWindow, accent, stageOpacity };
+	return { frost, frostEdge, accent, stageOpacity };
 }
 
 /**

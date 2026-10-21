@@ -1,17 +1,24 @@
 /**
  * Pure state machine behind the screens: the title, the settle bowl, the pause, the speed
- * view, Get ready and the game over, and the floods between them. A flood is a dot growing from under the finger until it
- * covers the screen; the scene changes underneath, then it lifts. A first game starts by
- * setting the level pose; the settled dot then floods into play. Setting it again from the title
- * or the pause only saves it and returns there. While a flood is on its way
+ * view, Get ready and the game over, and the floods between them. A flood is a dot growing from
+ * under the finger until it covers the screen; the scene changes underneath, then it lifts. A
+ * first game starts by setting the level pose; the settled dot then floods into play. Setting it
+ * again from the title or the pause only saves it and returns there. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
  * comes in as an event too, and every step answers with the one screen to show. While the bowl
- * or the speed view is open over the title the kiosk halts. A paused run continues through Get ready: the game
- * stays paused until the player has held level, then resumes with no flood.
+ * or the speed view is open over the title the kiosk halts.
+ *
+ * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
+ * field in play freezes the game at once and blooms frost from under it; the pause screen
+ * opens once the frost covers the field, and a finger lifted before then lets play go on. On
+ * the pause screen a finger on the frost opens Get ready and holds it open: the game stays
+ * paused until the player has held level, then resumes with no flood; a finger lifted before
+ * then shuts the window and the pause screen comes back.
  */
 
 import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
+import type { Point } from "../effects/frost";
 import { INK_LIFT } from "../theme/theme";
 
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
@@ -31,8 +38,8 @@ interface SettleRequest {
 
 /**
  * A screen in place of the title's or the pause's own: the speed view, opened from either, its
- * dot in the colour play takes; or, over the pause, Get ready, where the player holds level
- * until play resumes
+ * dot in the colour play takes; or, over the pause, Get ready, held open by the finger that
+ * touched the frost, where the player holds level until play resumes
  */
 type Over = { kind: "speed"; from: MenuOpening["from"]; color: string } | { kind: "getReady" };
 
@@ -43,6 +50,11 @@ export interface FlowState {
 	over: Over | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
+	/**
+	 * A finger on the field is frosting the frozen run from where it landed; the pause screen
+	 * opens once the frost covers the field (see frostBloom.ts)
+	 */
+	bloom: Point | null;
 	/** The kiosk has been started, by the stage's first layout; later layouts leave it be */
 	kioskStarted: boolean;
 }
@@ -52,13 +64,18 @@ export const INITIAL_FLOW: FlowState = {
 	settle: null,
 	over: null,
 	flooding: false,
+	bloom: null,
 	kioskStarted: false,
 };
 
-/** The one screen over the playfield; the HUD is the screen of a run in play */
+/**
+ * The one screen over the playfield; the HUD is the screen of a run in play, and stays while
+ * the bloom frosts the frozen run from under the finger at `at`
+ */
 export type Screen =
 	| { kind: "title" }
 	| { kind: "hud" }
+	| { kind: "frosting"; at: Point }
 	| { kind: "pause" }
 	| { kind: "speed"; color: string }
 	| { kind: "getReady" }
@@ -72,7 +89,7 @@ export type Screen =
 export interface GameFacts {
 	/** A level pose is set, so PLAY needs no bowl first */
 	levelPoseSet: boolean;
-	/** There is tilt to hold level with, so the pause's play dot goes through Get ready */
+	/** There is tilt to hold level with, so a touch on the frost goes through Get ready */
 	tiltPresent: boolean;
 	/** The player's colour, which play from the pause or the game over keeps */
 	playerColor: string;
@@ -103,12 +120,23 @@ export type FlowEvent =
 	| { type: "retryPressed"; at: PressPoint }
 	/** QUIT on the pause or BACK on the game over */
 	| { type: "leavePressed"; at: PressPoint }
-	/** The corner dot, which does what it shows (see cornerDot) */
-	| { type: "cornerPressed" }
+	/**
+	 * A finger landed on the field at `at` (stage px), clear of any button: in play it freezes
+	 * the run and blooms frost from there; on the pause screen it opens Get ready, held
+	 */
+	| { type: "fieldTouched"; at: Point }
+	/** The bloom's frost covers the field: the pause screen opens */
+	| { type: "bloomCovered" }
+	/** The finger lifted before the frost covered the field, and the frost has drained: play goes on */
+	| { type: "bloomCleared" }
+	/** Dev only: the corner pause dot, kept where touch steers the dot instead of the gyro */
+	| { type: "pausePressed" }
 	/** The player left the app (home, app switcher, an incoming call) */
 	| { type: "appLeft" }
-	/** Get ready's hold completed: the ring closed on the player */
+	/** Get ready's hold completed: the thaw cleared the field */
 	| { type: "readyHeld" }
+	/** The finger lifted before the field was clear, and Get ready's window has shut */
+	| { type: "readyShut" }
 	/** The flood covers the screen; whatever was under it can go */
 	| { type: "covered" }
 	/** The game moved to another phase */
@@ -155,10 +183,13 @@ const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
 /**
  * The screen for a phase and the flow over it. The bowl and the speed view open over the
  * screen they were opened from, and Get ready over the pause; anywhere else they cannot be
- * open, and the phase's own screen shows. A flood leaves the screen under it as it is until it covers.
+ * open, and the phase's own screen shows. A flood leaves the screen under it as it is until it
+ * covers. The bloom keeps the HUD up over the run it is freezing, so the pause screen opens
+ * only once the frost has covered the field.
  */
 export function screenOf(state: FlowState): Screen {
-	const { phase, settle, over } = state;
+	const { phase, settle, over, bloom } = state;
+	if (bloom && (phase === "RUNNING" || phase === "PAUSED")) return { kind: "frosting", at: bloom };
 	switch (phase) {
 		case "KIOSK":
 			if (settle && settle.from !== "pause") return { kind: "settle", color: settle.color };
@@ -180,29 +211,31 @@ export function screenOf(state: FlowState): Screen {
 }
 
 /**
- * What the HUD's top-right dot shows on `screen`, or null where it is not there. It stays in
- * the one spot from play to the pause and Get ready, so the thumb that paused can carry on.
- */
-export function cornerDot(screen: Screen): "pause" | "play" | null {
-	switch (screen.kind) {
-		case "hud":
-		case "getReady":
-			return "pause";
-		case "pause":
-			return "play";
-		default:
-			return null;
-	}
-}
-
-/**
- * What can still step the flow in Get ready: the corner dot, leaving the app and the hold. No
- * flood can start from Get ready, so none can cover it.
+ * What can still step the flow in Get ready: leaving the app, the hold and the window shutting.
+ * Its finger is already down, so no tap can land, and no flood can start from it.
  */
 const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
-	"cornerPressed",
 	"appLeft",
 	"readyHeld",
+	"readyShut",
+]);
+
+/**
+ * What can still step the flow while the bloom frosts the field: leaving the app and the
+ * bloom's own ends. The HUD has no buttons, and the finger is already down.
+ */
+const BLOOM_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
+	"appLeft",
+	"bloomCovered",
+	"bloomCleared",
+]);
+
+/** The events only Get ready or the bloom can answer; landing anywhere else they are too late */
+const HOLD_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
+	"readyHeld",
+	"readyShut",
+	"bloomCovered",
+	"bloomCleared",
 ]);
 
 /** A step before its screen is worked out */
@@ -222,6 +255,12 @@ const startFlood = (
 /** Back to the title or the pause screen from whatever is over it */
 const closeOver = (state: FlowState): BareStep => ({ state: { ...state, over: null } });
 
+/** The bloom is over, one way or the other */
+const endBloom = (state: FlowState): FlowState => ({ ...state, bloom: null });
+
+/** Whether `phase` has a run the bloom can be frosting: in play, or frozen by it */
+const bloomable = (phase: GamePhase) => phase === "RUNNING" || phase === "PAUSED";
+
 /** The colour the bowl or the speed view opens in: the play dot's on the title, the player's on the pause */
 const openingColor = (
 	event: Extract<FlowEvent, { type: "levelPressed" | "speedPressed" }>,
@@ -235,8 +274,12 @@ export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): F
 }
 
 function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep {
-	// The phase is the game's to report, flood or not
-	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
+	// The phase is the game's to report, flood or not; a run that ends under the bloom (its
+	// refusal was already playing out as the finger landed) takes the bloom with it
+	if (event.type === "phaseChanged") {
+		const bloom = bloomable(event.phase) ? state.bloom : null;
+		return { state: { ...state, phase: event.phase, bloom } };
+	}
 	// The kiosk is the title's, so the first layout starts it even while a flood runs
 	if (event.type === "stageLaidOut") {
 		return state.kioskStarted
@@ -245,12 +288,13 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	}
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
-	// Get ready shows only the hold; the pause's controls have faded out under it, and a hold
-	// that lands once Get ready has closed is too late to count
+	// Get ready and the bloom each answer only their own events; the pause's controls have
+	// faded out under Get ready, and a hold that lands once either has closed is too late
 	const gettingReady = state.over?.kind === "getReady";
-	if (gettingReady ? !GET_READY_EVENTS.has(event.type) : event.type === "readyHeld") {
-		return { state };
-	}
+	const blooming = state.bloom !== null;
+	if (gettingReady && !GET_READY_EVENTS.has(event.type)) return { state };
+	if (blooming && !BLOOM_EVENTS.has(event.type)) return { state };
+	if (!gettingReady && !blooming && HOLD_EVENTS.has(event.type)) return { state };
 	switch (event.type) {
 		case "startPressed":
 			return game.levelPoseSet
@@ -306,27 +350,39 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			});
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "startKiosk" } });
-		case "cornerPressed":
-			switch (cornerDot(screenOf(state))) {
-				case "pause":
-					// Get ready is over a game that is already paused; its pause dot only closes it
-					return gettingReady ? closeOver(state) : { state, act: PAUSE };
-				case "play":
-					// Without tilt there is no level to hold, so nothing stands between the pause and play
-					return game.tiltPresent
-						? { state: { ...state, over: { kind: "getReady" } } }
-						: { state, act: RESUME };
-				default:
-					return { state };
+		case "fieldTouched": {
+			const screen = screenOf(state);
+			// The run freezes the moment the finger lands; the frost then grows from under it
+			if (screen.kind === "hud" && state.phase === "RUNNING") {
+				return { state: { ...state, bloom: event.at }, act: PAUSE };
 			}
+			if (screen.kind !== "pause") return { state };
+			// Without tilt there is no level to hold, so nothing stands between the pause and play
+			return game.tiltPresent
+				? { state: { ...state, over: { kind: "getReady" } } }
+				: { state, act: RESUME };
+		}
+		case "bloomCovered":
+			return { state: endBloom(state) };
+		case "bloomCleared":
+			// The frozen frame is where play goes on from; the pose has not had time to change
+			return { state: endBloom(state), act: RESUME };
+		case "pausePressed":
+			return screenOf(state).kind === "hud" && state.phase === "RUNNING"
+				? { state, act: PAUSE }
+				: { state };
 		case "appLeft":
-			// Back from away on the pause screen: a run in play pauses, and Get ready closes so a
-			// hold cannot complete while the player is away
+			// Back from away on the pause screen: a run in play pauses, the bloom's frozen run keeps
+			// the pause it already has, and Get ready closes so a hold cannot complete while the
+			// player is away
 			if (gettingReady) return closeOver(state);
+			if (blooming) return { state: endBloom(state) };
 			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
 			// The hold is the countdown; play picks up the moment the thaw clears the field, no flood
 			return { ...closeOver(state), act: RESUME };
+		case "readyShut":
+			return closeOver(state);
 		case "covered":
 			// Covering clears the screen back to the title, but the kiosk stays started
 			return {

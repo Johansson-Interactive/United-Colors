@@ -1,6 +1,5 @@
 import type { GamePhase } from "../../domain/types";
 import {
-	cornerDot,
 	type FlowState,
 	type GameFacts,
 	INITIAL_FLOW,
@@ -23,7 +22,10 @@ const open = (from: "start" | "pause" | "menu", color = PINK): FlowState => ({
 	settle: { from, color },
 });
 
+const RUNNING: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
 const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
+/** A finger on the field has frozen the run and is frosting it from AT */
+const FROSTING: FlowState = { ...PAUSED, bloom: AT };
 const GET_READY: FlowState = { ...PAUSED, over: { kind: "getReady" } };
 
 /** A step that only leaves the flow in `state`, showing its screen */
@@ -274,46 +276,107 @@ describe("screen flow", () => {
 		expect(stepFlow(opened, { type: "covered" }, GAME).state).toEqual(PAUSED);
 	});
 
-	it("the corner dot in play pauses the game, opening no screen", () => {
-		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
-		expect(stepFlow(running, { type: "cornerPressed" }, GAME)).toEqual({
-			state: running,
-			screen: { kind: "hud" },
+	it("a finger on the field in play freezes the run at once and blooms the frost from under it", () => {
+		expect(stepFlow(RUNNING, { type: "fieldTouched", at: AT }, GAME)).toEqual({
+			state: { ...RUNNING, bloom: AT },
+			screen: { kind: "frosting", at: AT },
 			act: { kind: "pause" },
 		});
 	});
 
-	it("the corner dot on the pause opens Get ready over the frozen game", () => {
-		expect(stepFlow(PAUSED, { type: "cornerPressed" }, GAME)).toEqual({
-			state: GET_READY,
-			screen: { kind: "getReady" },
+	it("the bloom keeps the HUD up while the game reports the pause it asked for", () => {
+		const frosting = stepFlow(RUNNING, { type: "fieldTouched", at: AT }, GAME).state;
+		const paused = stepFlow(frosting, { type: "phaseChanged", phase: "PAUSED" }, GAME);
+		expect(paused.state).toEqual(FROSTING);
+		expect(paused.screen).toEqual({ kind: "frosting", at: AT });
+	});
+
+	it("the frost covering the field opens the pause screen, with nothing more to do to the game", () => {
+		expect(stepFlow(FROSTING, { type: "bloomCovered" }, GAME)).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
 		});
 	});
 
-	it("with no tilt to hold level with, the corner dot on the pause resumes the game straight away", () => {
-		expect(stepFlow(PAUSED, { type: "cornerPressed" }, { ...GAME, tiltPresent: false })).toEqual({
+	it("a finger lifted before the frost covers the field lets play go on from the frozen frame", () => {
+		expect(stepFlow(FROSTING, { type: "bloomCleared" }, GAME)).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 			act: { kind: "resume" },
 		});
 	});
 
-	it("the corner dot in Get ready closes it back to the pause screen", () => {
-		expect(stepFlow(GET_READY, { type: "cornerPressed" }, GAME)).toEqual({
+	it("under the bloom there are no buttons to press, and a second finger starts nothing", () => {
+		for (const event of [
+			{ type: "fieldTouched", at: AT },
+			{ type: "leavePressed", at: AT },
+			{ type: "levelPressed", from: "pause" },
+			{ type: "speedPressed", from: "pause" },
+			{ type: "pausePressed" },
+			{ type: "readyHeld" },
+			{ type: "readyShut" },
+		] as const) {
+			expect(stepFlow(FROSTING, event, GAME)).toEqual(rests(FROSTING));
+		}
+	});
+
+	it("a run that ends under the bloom takes the bloom with it", () => {
+		const frosting = stepFlow(RUNNING, { type: "fieldTouched", at: AT }, GAME).state;
+		const over = stepFlow(frosting, { type: "phaseChanged", phase: "GAME_OVER" }, GAME);
+		expect(over.state).toEqual({ ...INITIAL_FLOW, phase: "GAME_OVER" });
+		expect(over.screen).toEqual({ kind: "gameOver" });
+	});
+
+	it("a finger on the frost of the pause screen opens Get ready, held", () => {
+		expect(stepFlow(PAUSED, { type: "fieldTouched", at: AT }, GAME)).toEqual({
+			state: GET_READY,
+			screen: { kind: "getReady" },
+		});
+	});
+
+	it("with no tilt to hold level with, a finger on the frost resumes the game straight away", () => {
+		expect(
+			stepFlow(PAUSED, { type: "fieldTouched", at: AT }, { ...GAME, tiltPresent: false }),
+		).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
+			act: { kind: "resume" },
+		});
+	});
+
+	it("the window shutting after the finger lifts closes Get ready back to the pause screen", () => {
+		expect(stepFlow(GET_READY, { type: "readyShut" }, GAME)).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 		});
 	});
 
-	it("the corner dot does nothing where it is not shown", () => {
-		const hidden: FlowState[] = [
+	it("a finger on the field does nothing where there is no run to freeze and no frost to open", () => {
+		const elsewhere: FlowState[] = [
 			INITIAL_FLOW,
+			{ ...INITIAL_FLOW, phase: "REJECTING" },
 			{ ...INITIAL_FLOW, phase: "GAME_OVER" },
 			{ ...open("pause"), phase: "PAUSED" },
 			{ ...PAUSED, over: { kind: "speed", from: "pause", color: PINK } },
 		];
-		for (const state of hidden) {
-			expect(stepFlow(state, { type: "cornerPressed" }, GAME)).toEqual(rests(state));
+		for (const state of elsewhere) {
+			expect(stepFlow(state, { type: "fieldTouched", at: AT }, GAME)).toEqual(rests(state));
+		}
+	});
+
+	it("the dev pause dot pauses a run in play, and does nothing anywhere else", () => {
+		expect(stepFlow(RUNNING, { type: "pausePressed" }, GAME)).toEqual({
+			state: RUNNING,
+			screen: { kind: "hud" },
+			act: { kind: "pause" },
+		});
+		for (const state of [
+			INITIAL_FLOW,
+			PAUSED,
+			GET_READY,
+			{ ...INITIAL_FLOW, phase: "GAME_OVER" },
+		] as const) {
+			expect(stepFlow(state, { type: "pausePressed" }, GAME)).toEqual(rests(state));
 		}
 	});
 
@@ -328,6 +391,13 @@ describe("screen flow", () => {
 
 	it("leaving the app in Get ready closes it, so the player comes back to the pause screen", () => {
 		expect(stepFlow(GET_READY, { type: "appLeft" }, GAME)).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
+		});
+	});
+
+	it("leaving the app under the bloom keeps the pause the run already has, and lands on its screen", () => {
+		expect(stepFlow(FROSTING, { type: "appLeft" }, GAME)).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 		});
@@ -359,14 +429,26 @@ describe("screen flow", () => {
 		}
 	});
 
-	it("a ready hold landing after Get ready closed does not resume the game", () => {
-		expect(stepFlow(PAUSED, { type: "readyHeld" }, GAME)).toEqual(rests(PAUSED));
+	it("a hold's word landing after Get ready or the bloom has closed is too late to count", () => {
+		for (const event of [
+			{ type: "readyHeld" },
+			{ type: "readyShut" },
+			{ type: "bloomCovered" },
+			{ type: "bloomCleared" },
+		] as const) {
+			expect(stepFlow(PAUSED, event, GAME)).toEqual(rests(PAUSED));
+			expect(stepFlow(RUNNING, event, GAME)).toEqual(rests(RUNNING));
+		}
 	});
 
-	it("after QUIT starts the flood, the play dot does nothing; the flood still lands on the title", () => {
+	it("after QUIT starts the flood, a finger on the frost does nothing; the flood still lands on the title", () => {
 		const quit = stepFlow(PAUSED, { type: "leavePressed", at: AT }, GAME);
 		expect(quit.state.flooding).toBe(true);
-		const resume = stepFlow(quit.state, { type: "cornerPressed" }, { ...GAME, tiltPresent: false });
+		const resume = stepFlow(
+			quit.state,
+			{ type: "fieldTouched", at: AT },
+			{ ...GAME, tiltPresent: false },
+		);
 		expect(resume).toEqual(rests(quit.state));
 		const covered = stepFlow(resume.state, { type: "covered" }, GAME);
 		expect(covered.state).toEqual(PAUSED);
@@ -387,7 +469,7 @@ describe("screen flow", () => {
 	it("screen-changing taps are ignored while a flood runs, until it covers the screen", () => {
 		const flooding = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }, GAME).state;
 		for (const event of [
-			{ type: "cornerPressed" },
+			{ type: "fieldTouched", at: AT },
 			{ type: "appLeft" },
 			{ type: "speedPressed", from: "menu", color: PINK },
 			{ type: "levelPressed", from: "pause" },
@@ -514,6 +596,7 @@ describe("which screen shows", () => {
 						settle: from ? { from, color: PINK } : null,
 						over,
 						flooding,
+						bloom: null,
 						kioskStarted: false,
 					};
 					const expected = EXPECTED[phase][from ?? "none"][i];
@@ -531,17 +614,18 @@ describe("which screen shows", () => {
 	}
 });
 
-describe("the corner dot", () => {
-	it("pauses in play, plays on the pause screen and pauses again in Get ready, in the one spot", () => {
-		expect(cornerDot({ kind: "hud" })).toBe("pause");
-		expect(cornerDot({ kind: "pause" })).toBe("play");
-		expect(cornerDot({ kind: "getReady" })).toBe("pause");
+describe("the bloom's screen", () => {
+	it("keeps the HUD up, frosting, over a run in play or frozen by it", () => {
+		for (const phase of ["RUNNING", "PAUSED"] as const) {
+			expect(screenOf({ ...INITIAL_FLOW, phase, bloom: AT })).toEqual({ kind: "frosting", at: AT });
+		}
 	});
 
-	it("is not there on the title, the bowl, the speed view or the game over", () => {
-		expect(cornerDot({ kind: "title" })).toBeNull();
-		expect(cornerDot({ kind: "settle", color: PINK })).toBeNull();
-		expect(cornerDot({ kind: "speed", color: PINK })).toBeNull();
-		expect(cornerDot({ kind: "gameOver" })).toBeNull();
+	it("gives way to the phase's own screen anywhere else", () => {
+		expect(screenOf({ ...INITIAL_FLOW, bloom: AT })).toEqual({ kind: "title" });
+		expect(screenOf({ ...INITIAL_FLOW, phase: "REJECTING", bloom: AT })).toEqual({ kind: "hud" });
+		expect(screenOf({ ...INITIAL_FLOW, phase: "GAME_OVER", bloom: AT })).toEqual({
+			kind: "gameOver",
+		});
 	});
 });

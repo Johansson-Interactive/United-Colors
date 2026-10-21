@@ -1,6 +1,7 @@
 import type React from "react";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
+import type { SharedValue } from "react-native-reanimated";
 import type { GameStore } from "../../application/GameStore";
 import type { Corners } from "../../domain/types";
 import { SCORE_TOP } from "../effects/scoreTally";
@@ -13,12 +14,12 @@ interface HUDProps {
 	/** The score meter reads its catches here, so a catch re-renders nothing */
 	store: GameStore;
 	/** The player's current colour; the score wears it so a switch is always visible */
-	color: string;
-	/** The score shows in play only; the pause and Get ready keep just the corner dot */
-	showScore: boolean;
-	/** What the corner dot does: pause in play and Get ready, play on the pause screen */
-	corner: "pause" | "play";
-	onCorner: () => void;
+	color: SharedValue<string>;
+	/**
+	 * Dev only: a pause dot in the top-right corner, for the control mode where touch steers
+	 * the dot and so cannot pause it (see useDevControlMode). Play pauses on any touch otherwise.
+	 */
+	onPause?: () => void;
 	/** How the frame rounds its corners; the corner dot keeps clear of the curve (null: square) */
 	corners: Corners | null;
 }
@@ -26,9 +27,11 @@ interface HUDProps {
 const CORNER_SIZE = 44;
 const CORNER_OFFSET = { top: 12, right: 16 };
 
-const LABELS = { pause: "Pause", play: "Play" } as const;
-
-export const HUD: React.FC<HUDProps> = ({ store, color, showScore, corner, onCorner, corners }) => {
+/**
+ * The screen of a run in play: the score at the top, and nothing else over the field. The
+ * field itself is the way to the pause (see FieldTouch), so there is no button to reach for.
+ */
+export const HUD: React.FC<HUDProps> = ({ store, color, onPause, corners }) => {
 	const { width, height } = useStageBox();
 	const cornerAt = useMemo(
 		() =>
@@ -38,19 +41,14 @@ export const HUD: React.FC<HUDProps> = ({ store, color, showScore, corner, onCor
 
 	return (
 		<View style={styles.container} pointerEvents="box-none">
-			{showScore ? (
-				<View style={styles.score} pointerEvents="none">
-					<ScoreMeter store={store} color={color} />
+			<View style={styles.score} pointerEvents="none">
+				<ScoreMeter store={store} color={color} />
+			</View>
+			{onPause ? (
+				<View style={[styles.corner, cornerAt]}>
+					<IconDot size={CORNER_SIZE} icon="pause" onPress={onPause} accessibilityLabel="Pause" />
 				</View>
 			) : null}
-			<View style={[styles.corner, cornerAt]}>
-				<IconDot
-					size={CORNER_SIZE}
-					icon={corner}
-					onPress={onCorner}
-					accessibilityLabel={LABELS[corner]}
-				/>
-			</View>
 		</View>
 	);
 };

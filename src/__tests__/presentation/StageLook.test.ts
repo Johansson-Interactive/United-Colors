@@ -5,36 +5,36 @@ import {
 	INITIAL_FLOW,
 	stepFlow,
 } from "../../presentation/flow/screenFlow";
-import { INK_LIFT } from "../../presentation/theme/theme";
 
 const PINK = "#E91E63";
+const AT = { x: 10, y: 20 };
 
 describe("the stage look", () => {
 	it("shows the stage on the title, its edges washed in ink over a clear field", () => {
-		const look = stageLook({ screen: { kind: "title" }, phase: "KIOSK", playerColor: PINK });
-		expect(look.accent.to).toBe(INK_LIFT);
+		const look = stageLook({ screen: { kind: "title" }, phase: "KIOSK" });
+		expect(look.accent).toBe("ink");
 		expect(look.frost.to).toBe(0);
 		expect(look.opacity.to).toBe(1);
 	});
 
 	it("frosts the field over the pause in 450 ms, all over, with no window left from an earlier Get ready", () => {
-		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED", playerColor: PINK });
+		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
 		expect(look.frost).toEqual({ to: 1, over: { kind: "timed", duration: 450 } });
 		expect(look.shutWindow).toBe(true);
 	});
 
 	it("dims the field to 0.6 a moment after the run ends, so the game over reads over a quieted field", () => {
-		const look = stageLook({ screen: { kind: "gameOver" }, phase: "GAME_OVER", playerColor: PINK });
+		const look = stageLook({ screen: { kind: "gameOver" }, phase: "GAME_OVER" });
 		expect(look.frost).toEqual({ to: 0.6, over: { kind: "timed", duration: 700, delay: 350 } });
 	});
 
 	it("keeps the stage showing, frosted, under the bowl and the speed view opened from the pause", () => {
-		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED", playerColor: PINK });
+		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
 		for (const screen of [
 			{ kind: "settle", color: PINK },
 			{ kind: "speed", color: PINK },
 		] as const) {
-			const look = stageLook({ screen, phase: "PAUSED", playerColor: PINK });
+			const look = stageLook({ screen, phase: "PAUSED" });
 			expect(look.frost.to).toBe(1);
 			expect(look.opacity.to).toBe(1);
 			expect(look).toEqual(pause);
@@ -42,16 +42,30 @@ describe("the stage look", () => {
 	});
 
 	it("keeps Get ready frosted as the pause is, so opening it leaves its window to Get ready", () => {
-		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED", playerColor: PINK });
-		const look = stageLook({ screen: { kind: "getReady" }, phase: "PAUSED", playerColor: PINK });
+		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
+		const look = stageLook({ screen: { kind: "getReady" }, phase: "PAUSED" });
 		expect(look.frost.to).toBe(1);
 		expect(look).toEqual(pause);
 	});
 
+	it("frosts in full at once under the bloom, whose edge does the growing, and leaves the edge to it", () => {
+		for (const phase of ["RUNNING", "PAUSED"] as const) {
+			const look = stageLook({ screen: { kind: "frosting", at: AT }, phase });
+			expect(look.frost).toEqual({ to: 1, over: { kind: "instant" } });
+			expect(look.shutWindow).toBe(false);
+			expect(look.accent).toBe("player");
+		}
+	});
+
+	it("resets the edge to frosted all over as the bloom gives way to the pause screen", () => {
+		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
+		expect(look.shutWindow).toBe(true);
+	});
+
 	it("clears the field in 300 ms as play starts or resumes, with the edges in the player's colour", () => {
-		const look = stageLook({ screen: { kind: "hud" }, phase: "RUNNING", playerColor: PINK });
+		const look = stageLook({ screen: { kind: "hud" }, phase: "RUNNING" });
 		expect(look.frost).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
-		expect(look.accent).toEqual({ to: PINK, over: { kind: "instant" } });
+		expect(look.accent).toBe("player");
 		expect(look.shutWindow).toBe(false);
 	});
 
@@ -60,7 +74,7 @@ describe("the stage look", () => {
 			{ kind: "settle", color: PINK },
 			{ kind: "speed", color: PINK },
 		] as const) {
-			const look = stageLook({ screen, phase: "KIOSK", playerColor: PINK });
+			const look = stageLook({ screen, phase: "KIOSK" });
 			expect(look.opacity).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
 		}
 	});
@@ -111,7 +125,7 @@ function walk(events: FlowEvent[]) {
 		flow = state;
 		return {
 			screen: screen.kind,
-			opacity: stageLook({ screen, phase: state.phase, playerColor: PINK }).opacity,
+			opacity: stageLook({ screen, phase: state.phase }).opacity,
 		};
 	});
 }

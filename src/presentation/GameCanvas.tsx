@@ -31,7 +31,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScreenSize } from "../domain/types";
 import type { Burst } from "./effects/burstFrames";
-import { FROST_MAX_DIM, type FrostWindow } from "./effects/frost";
+import { FROST_MAX_DIM, type FrostEdge, type FrostShape, frostShape } from "./effects/frost";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
 import { ROOM_SKSL, type RoomUniforms, roomUniforms, stageCover } from "./room";
@@ -55,8 +55,8 @@ interface GameCanvasProps {
 	onLayout: (size: ScreenSize) => void;
 	/** 0 = live; 1 = fully frosted (blurred and dimmed) for pause / game over */
 	frost: SharedValue<number>;
-	/** The circle of the frosted field left clear and sharp (see frost.ts); none at radius 0 */
-	frostWindow: SharedValue<FrostWindow>;
+	/** Where the frost stops (see frost.ts): all over, a clear window in it, or a frosted disc */
+	frostEdge: SharedValue<FrostEdge>;
 	/** Colour washed into the room's edges (the player's colour while playing) */
 	accent: SharedValue<string>;
 	/** How much of the stage (the scene) shows over the room, 0..1 */
@@ -126,7 +126,8 @@ interface SceneLayersProps {
 
 /**
  * The scene in layers with the wall drops and the liquid body between them (see
- * sceneDrawer.ts): drawn once under the frost, and again sharp through the frost window
+ * sceneDrawer.ts): drawn once under the frost, and again sharp through the frost window or
+ * blurred inside the bloom's disc
  */
 const SceneLayers: React.FC<SceneLayersProps> = ({ below, drops, dropGlares, body, above }) => {
 	const bodyX = useDerivedValue(() => body.get().x);
@@ -158,8 +159,10 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * pictures, with the wall drops and the liquid body as shader nodes between them; how the dots
  * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
  * from follows the device tilt, and freezes while frosted. The frost is the scene blurred and
- * dimmed; Get ready's window in it is the room and the scene drawn again, sharp, clipped to
- * the window's circle, so the field is clear there and frosted around it.
+ * dimmed, up to its edge (see frost.ts): Get ready's window in it is the room and the scene
+ * drawn again, sharp, clipped to the window's circle, so the field is clear there and frosted
+ * around it; the bloom's disc is the scene drawn again blurred and dimmed, clipped to the disc,
+ * over the sharp field. Either costs a second scene draw only while the edge is on the field.
  *
  * The canvas draws everything behind the interface itself, so it can be opaque. On iOS it is,
  * which saves a blend. On Android it stays a TextureView: an opaque canvas there is a
@@ -167,14 +170,14 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * which Android 12 can hold for about 5 ms when it arrives early in the period (see
  * docs/android-performance-2026-10-15.md). The stage fade and the shake are drawn here, and so
  * are the bursts over the scene: they shake and fade with it but stay sharp while it frosts.
- * The blur layer, the dim and the window only exist while frosted and the fade cover only
- * while fading, so a live scene pays for none of them.
+ * The blur layer, the dim and the edge's second draw only exist while frosted and the fade
+ * cover only while fading, so a live scene pays for none of them.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
 	scene,
 	onLayout,
 	frost,
-	frostWindow,
+	frostEdge,
 	accent,
 	stageOpacity,
 	shake,
@@ -187,7 +190,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
 	const [frosted, setFrosted] = useState(false);
-	const [windowOpen, setWindowOpen] = useState(false);
+	const [shape, setShape] = useState<FrostShape>("all");
 	const [fading, setFading] = useState(false);
 
 	// Only track the light while live: frosted scenes stay still even as the phone moves
@@ -202,9 +205,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	);
 
 	useAnimatedReaction(
-		() => frostWindow.get().radius > 0,
+		() => frostShape(frostEdge.get()),
 		(current, previous) => {
-			if (current !== previous) scheduleOnRN(setWindowOpen, current);
+			if (current !== previous) scheduleOnRN(setShape, current);
 		},
 	);
 
@@ -284,8 +287,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
 	const frostSigma = useDerivedValue(() => frost.get() * FROST_MAX_SIGMA);
 	const frostDim = useDerivedValue(() => frost.get() * FROST_MAX_DIM);
-	const windowClip = useDerivedValue(() => {
-		const { x, y, radius } = frostWindow.get();
+	const edgeClip = useDerivedValue(() => {
+		const { x, y, radius } = frostEdge.get();
 		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
 	});
 	const shakeTransform = useDerivedValue(() => [{ translateX: shake.get() }]);
@@ -293,6 +296,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
 	// When using drag, Canvas must not capture touches so the container gets them
 	const canvasPointerEvents = onDragDelta ? "none" : "auto";
+
+	// The whole scene is blurred and dimmed when the frost reaches past any window; inside the
+	// bloom's disc the scene stays sharp and a blurred copy is laid over it
+	const frostedAllOver = frosted && (shape === "all" || shape === "window");
+	const frostPaint = (
+		<Paint>
+			<Blur blur={frostSigma} />
+		</Paint>
+	);
 
 	return (
 		<View style={styles.container} onLayout={handleLayout} {...(panResponder?.panHandlers ?? {})}>
@@ -303,15 +315,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 			>
 				<Room uniforms={room} />
 				<Group transform={shakeTransform}>
-					<Group
-						layer={
-							frosted ? (
-								<Paint>
-									<Blur blur={frostSigma} />
-								</Paint>
-							) : undefined
-						}
-					>
+					<Group layer={frostedAllOver ? frostPaint : undefined}>
 						<SceneLayers
 							below={below}
 							drops={drops}
@@ -322,9 +326,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 					</Group>
 					<Picture picture={burstPicture} />
 				</Group>
-				{frosted ? <Fill color={INK} opacity={frostDim} /> : null}
-				{frosted && windowOpen ? (
-					<Group clip={windowClip}>
+				{frostedAllOver ? <Fill color={INK} opacity={frostDim} /> : null}
+				{frosted && shape === "window" ? (
+					<Group clip={edgeClip}>
 						<Room uniforms={room} />
 						<SceneLayers
 							below={below}
@@ -333,6 +337,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 							body={body}
 							above={above}
 						/>
+					</Group>
+				) : null}
+				{frosted && shape === "disc" ? (
+					<Group clip={edgeClip}>
+						<Group layer={frostPaint}>
+							<SceneLayers
+								below={below}
+								drops={drops}
+								dropGlares={dropGlares}
+								body={body}
+								above={above}
+							/>
+						</Group>
+						<Fill color={INK} opacity={frostDim} />
 					</Group>
 				) : null}
 				{fading ? (
