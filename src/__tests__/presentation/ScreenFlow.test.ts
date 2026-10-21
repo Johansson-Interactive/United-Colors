@@ -201,36 +201,72 @@ describe("screen flow", () => {
 		expect(stepFlow(opened, { type: "covered" }).state).toEqual(INITIAL_FLOW);
 	});
 
-	it("the pause dot and leaving the app pause the game, opening no screen", () => {
+	it("the corner dot in play pauses the game, opening no screen", () => {
 		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
-		expect(stepFlow(running, { type: "pausePressed" })).toEqual({
+		expect(stepFlow(running, { type: "cornerPressed", tiltAvailable: true })).toEqual({
 			state: running,
 			screen: { kind: "hud" },
 			act: { kind: "pause" },
 		});
 	});
 
-	it("the play dot on the pause opens Get ready over the frozen game", () => {
-		expect(stepFlow(PAUSED, { type: "playPressed", tiltAvailable: true })).toEqual({
+	it("the corner dot on the pause opens Get ready over the frozen game", () => {
+		expect(stepFlow(PAUSED, { type: "cornerPressed", tiltAvailable: true })).toEqual({
 			state: GET_READY,
 			screen: { kind: "getReady" },
 		});
 	});
 
-	it("with no tilt to hold level with, the play dot resumes the game straight away", () => {
-		expect(stepFlow(PAUSED, { type: "playPressed", tiltAvailable: false })).toEqual({
+	it("with no tilt to hold level with, the corner dot on the pause resumes the game straight away", () => {
+		expect(stepFlow(PAUSED, { type: "cornerPressed", tiltAvailable: false })).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 			act: { kind: "resume" },
 		});
 	});
 
-	it("the pause dot, or leaving the app, in Get ready closes it back to the pause screen", () => {
-		expect(stepFlow(GET_READY, { type: "pausePressed" })).toEqual({
+	it("the corner dot in Get ready closes it back to the pause screen", () => {
+		expect(stepFlow(GET_READY, { type: "cornerPressed", tiltAvailable: true })).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 		});
 	});
+
+	it("the corner dot does nothing where it is not shown", () => {
+		const hidden: FlowState[] = [
+			INITIAL_FLOW,
+			{ ...INITIAL_FLOW, phase: "GAME_OVER" },
+			{ ...open("pause"), phase: "PAUSED" },
+			{ ...PAUSED, overPause: { kind: "speed", color: PINK } },
+		];
+		for (const state of hidden) {
+			expect(stepFlow(state, { type: "cornerPressed", tiltAvailable: true })).toEqual(rests(state));
+		}
+	});
+
+	it("leaving the app mid-run pauses the game, opening no screen", () => {
+		const running: FlowState = { ...INITIAL_FLOW, phase: "RUNNING" };
+		expect(stepFlow(running, { type: "appLeft" })).toEqual({
+			state: running,
+			screen: { kind: "hud" },
+			act: { kind: "pause" },
+		});
+	});
+
+	it("leaving the app in Get ready closes it, so the player comes back to the pause screen", () => {
+		expect(stepFlow(GET_READY, { type: "appLeft" })).toEqual({
+			state: PAUSED,
+			screen: { kind: "pause" },
+		});
+	});
+
+	it.each<GamePhase>(["KIOSK", "PAUSED", "GAME_OVER"])(
+		"leaving the app leaves %s as it is",
+		(phase) => {
+			const state: FlowState = { ...INITIAL_FLOW, phase };
+			expect(stepFlow(state, { type: "appLeft" })).toEqual(rests(state));
+		},
+	);
 
 	it("the ready hold completing closes Get ready and resumes the game, with no flood", () => {
 		expect(stepFlow(GET_READY, { type: "readyHeld" })).toEqual({
@@ -257,7 +293,7 @@ describe("screen flow", () => {
 	it("after QUIT starts the flood, the play dot does nothing; the flood still lands on the title", () => {
 		const quit = stepFlow(PAUSED, { type: "leavePressed", at: AT });
 		expect(quit.state.flooding).toBe(true);
-		const resume = stepFlow(quit.state, { type: "playPressed", tiltAvailable: false });
+		const resume = stepFlow(quit.state, { type: "cornerPressed", tiltAvailable: false });
 		expect(resume).toEqual(rests(quit.state));
 		const covered = stepFlow(resume.state, { type: "covered" });
 		expect(covered.state).toEqual(PAUSED);
@@ -276,7 +312,8 @@ describe("screen flow", () => {
 	it("screen-changing taps are ignored while a flood runs, until it covers the screen", () => {
 		const flooding = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }).state;
 		for (const event of [
-			{ type: "pausePressed" },
+			{ type: "cornerPressed", tiltAvailable: true },
+			{ type: "appLeft" },
 			{ type: "speedPressed", color: PINK },
 			{ type: "levelPressed", from: "pause", color: PINK },
 			{ type: "startPressed", color: PINK, hasZero: true, at: AT },
@@ -295,7 +332,7 @@ describe("screen flow", () => {
 			facingDown: false,
 			at: AT,
 		});
-		expect(stepFlow(step.state, { type: "playPressed", tiltAvailable: true })).toEqual(
+		expect(stepFlow(step.state, { type: "cornerPressed", tiltAvailable: true })).toEqual(
 			rests(step.state),
 		);
 		expect(

@@ -70,10 +70,13 @@ export type FlowEvent =
 	| { type: "retryPressed"; color: string; at: PressPoint }
 	/** QUIT on the pause or BACK on the game over */
 	| { type: "leavePressed"; at: PressPoint }
-	/** The pause dot on the HUD or in Get ready, or the player leaving the app mid-run */
-	| { type: "pausePressed" }
-	/** The play dot on the pause; `tiltAvailable`: there is tilt to hold level with */
-	| { type: "playPressed"; tiltAvailable: boolean }
+	/**
+	 * The corner dot, which does what it shows (see cornerDot); `tiltAvailable`: there is tilt to
+	 * hold level with, so its play goes through Get ready
+	 */
+	| { type: "cornerPressed"; tiltAvailable: boolean }
+	/** The player left the app (home, app switcher, an incoming call) */
+	| { type: "appLeft" }
 	/** Get ready's hold completed: the ring closed on the player */
 	| { type: "readyHeld" }
 	/** The flood covers the screen; whatever was under it can go */
@@ -106,6 +109,7 @@ export interface FlowStep {
 
 const play = (color: string): FlowAction => ({ kind: "play", color });
 const RESUME: FlowAction = { kind: "resume" };
+const PAUSE: FlowAction = { kind: "pause" };
 
 /**
  * Over the title the drifting dots would pull the eye from the bowl's one dot, so the kiosk
@@ -154,11 +158,14 @@ export function cornerDot(screen: Screen): "pause" | "play" | null {
 	}
 }
 
-/** What can still step the flow in Get ready: the pause dot (or leaving the app), the hold */
+/**
+ * What can still step the flow in Get ready: the corner dot, leaving the app and the hold. No
+ * flood can start from Get ready, so none can cover it.
+ */
 const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
-	"pausePressed",
+	"cornerPressed",
+	"appLeft",
 	"readyHeld",
-	"covered",
 ]);
 
 /** A step before its screen is worked out */
@@ -174,6 +181,9 @@ const startFlood = (
 	...(calibrate && { calibrate }),
 	flood,
 });
+
+/** Back to the pause screen from whatever is over it */
+const closeOverPause = (state: FlowState): BareStep => ({ state: { ...state, overPause: null } });
 
 export function stepFlow(state: FlowState, event: FlowEvent): FlowStep {
 	const step = bareStep(state, event);
@@ -221,25 +231,32 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 		case "speedPressed":
 			return { state: { ...state, overPause: { kind: "speed", color: event.color } } };
 		case "speedBacked":
-			return { state: { ...state, overPause: null } };
+			return closeOverPause(state);
 		case "retryPressed":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "kiosk" } });
-		case "pausePressed":
-			// Get ready is over a game that is already paused; it only closes, so a hold cannot
-			// complete while the player is away
-			return gettingReady
-				? { state: { ...state, overPause: null } }
-				: { state, act: { kind: "pause" } };
+		case "cornerPressed":
+			switch (cornerDot(screenOf(state))) {
+				case "pause":
+					// Get ready is over a game that is already paused; its pause dot only closes it
+					return gettingReady ? closeOverPause(state) : { state, act: PAUSE };
+				case "play":
+					// Without tilt there is no level to hold, so nothing stands between the pause and play
+					return event.tiltAvailable
+						? { state: { ...state, overPause: { kind: "getReady" } } }
+						: { state, act: RESUME };
+				default:
+					return { state };
+			}
+		case "appLeft":
+			// Back from away on the pause screen: a run in play pauses, and Get ready closes so a
+			// hold cannot complete while the player is away
+			if (gettingReady) return closeOverPause(state);
+			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
 			// The hold is the countdown; play picks up the moment the ring closes, no flood
-			return { state: { ...state, overPause: null }, act: RESUME };
-		case "playPressed":
-			// Without tilt there is no level to hold, so nothing stands between the pause and play
-			return event.tiltAvailable
-				? { state: { ...state, overPause: { kind: "getReady" } } }
-				: { state, act: RESUME };
+			return { ...closeOverPause(state), act: RESUME };
 		case "covered":
 			return { state: { ...INITIAL_FLOW, phase: state.phase } };
 	}

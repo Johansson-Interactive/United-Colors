@@ -14,7 +14,7 @@ import type {
 	StoragePort,
 	WatchAppActive,
 } from "../application/ports";
-import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
+import { bindAppLeave } from "../application/useCases/BindAppLeave";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
@@ -186,25 +186,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
 
-	// The corner dot pauses in play and Get ready, and plays on the pause screen: through Get
-	// ready where there is tilt to hold level with, straight back to play where there is none
+	// The corner dot does what it shows; the flow decides what that is on this screen
 	const corner = cornerDot(screen);
 	const handleCorner = useCallback(
-		() =>
-			dispatch(
-				corner === "play"
-					? { type: "playPressed", tiltAvailable: tilt.available.get() }
-					: { type: "pausePressed" },
-			),
-		[dispatch, corner, tilt],
+		() => dispatch({ type: "cornerPressed", tiltAvailable: tilt.available.get() }),
+		[dispatch, tilt],
 	);
 
-	// Leaving the app mid-run lands on the pause screen when the player comes back
-	const pauseOnLeave = useEffectEvent(() => dispatch({ type: "pausePressed" }));
-	useEffect(
-		() => bindPauseOnLeave(store, watchAppActive, () => pauseOnLeave()),
-		[store, watchAppActive],
-	);
+	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
+	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
+	useEffect(() => bindAppLeave(watchAppActive, () => handleAppLeave()), [watchAppActive]);
 
 	const handleStartPress = useCallback(
 		(at: PressPoint, color: string) =>
