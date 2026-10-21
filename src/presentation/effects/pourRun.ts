@@ -595,12 +595,14 @@ function settledRadius(figures: Figures, score: number, pitch: number): number {
 /**
  * The amber layer of a settled drop of `radius` (see amberOf): its surface, its level in radii,
  * how far the tally over it is lifted, and the bonus figure in it, a bare figure: the bonus is
- * seen pouring into the tally, so there is no `+` to add.
+ * seen pouring into the tally, so there is no `+` to add. The drop settles where it holds the
+ * figure (see settledRadius), so it is never drawn under POUR_MIN_PITCH: a fit a hair under it
+ * (see FIT_SLACK) is brought up to it, as the tally's is.
  */
 function settledAmber(tally: MatrixLayout, bonus: BonusFigure, radius: number, pitch: number) {
 	const amber = amberOf(tally, bonus, radius, pitch);
 	const { figure } = bonus;
-	const labelPitch = amber.bonus.pitch;
+	const labelPitch = Math.max(POUR_MIN_PITCH, amber.bonus.pitch);
 	const dots = figure.dots.map(({ col, row }) => ({
 		x: (col + 0.5 - figure.cols / 2) * labelPitch,
 		y: amber.bonus.top + (row + 0.5) * labelPitch,

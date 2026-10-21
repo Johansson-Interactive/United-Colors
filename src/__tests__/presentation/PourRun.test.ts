@@ -749,7 +749,7 @@ describe("the bonus pour and its amber layer", () => {
 		const view = rested(p);
 		expect(view.drop).toEqual(p.settledDrop);
 		expect(view.tallyPitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH);
-		expect(labelOf(view).pitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH - EPSILON);
+		expect(labelOf(view).pitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH);
 		expectInTopPart(view);
 		expectInAmber(view);
 	});
