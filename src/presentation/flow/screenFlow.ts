@@ -79,8 +79,11 @@ export interface GameFacts {
 export type FlowEvent =
 	/** PLAY on the title */
 	| { type: "startPressed"; color: string; at: PressPoint }
-	/** A run starts straight into play, with no bowl whether a level pose is set or not (the bench run) */
-	| { type: "startedStraight"; color: string; at: PressPoint }
+	/**
+	 * Not a tap: the bench run starts itself (see useAutoStart), straight into play with no bowl
+	 * whether a level pose is set or not
+	 */
+	| { type: "autoStarted"; color: string; at: PressPoint }
 	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
 	| { type: "levelPressed"; from: "menu"; color: string }
 	| { type: "levelPressed"; from: "pause" }
@@ -114,7 +117,8 @@ export type FlowAction =
 	| { kind: "play"; color: string }
 	| { kind: "pause" }
 	| { kind: "resume" }
-	| { kind: "kiosk" }
+	/** Start the kiosk afresh */
+	| { kind: "startKiosk" }
 	/** Stop the kiosk and hide it, so only the bowl over it moves */
 	| { kind: "haltKiosk" }
 	/** Show the kiosk again and run it on from where it stopped */
@@ -242,7 +246,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	if (event.type === "stageLaidOut") {
 		return state.kioskStarted
 			? { state }
-			: { state: { ...state, kioskStarted: true }, act: { kind: "kiosk" } };
+			: { state: { ...state, kioskStarted: true }, act: { kind: "startKiosk" } };
 	}
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
@@ -257,7 +261,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			return game.levelPoseSet
 				? startFlood(state, { color: event.color, at: event.at, action: play(event.color) })
 				: { state: { ...state, settle: { from: "start", color: event.color } }, act: HALT_KIOSK };
-		case "startedStraight":
+		case "autoStarted":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "levelPressed":
 			return {
@@ -306,7 +310,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 				action: play(game.playerColor),
 			});
 		case "leavePressed":
-			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "kiosk" } });
+			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "startKiosk" } });
 		case "cornerPressed":
 			switch (cornerDot(screenOf(state))) {
 				case "pause":

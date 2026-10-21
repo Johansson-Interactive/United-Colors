@@ -20,9 +20,9 @@ import {
 } from "./screenFlow";
 
 /**
- * Everything the flow does outside itself; the shell adapts the game to it. The flow store takes
- * it once, when it is created, and keeps it for its lifetime, so what it closes over must not
- * change.
+ * Everything the flow does outside itself; the shell adapts the game to it. Each action's kind is
+ * the name of the control that carries it out. The flow store takes it once, when it is created,
+ * and keeps it for its lifetime, so what it closes over must not change.
  */
 export interface GameControls {
 	/** Start a run with the player in `color` */
@@ -39,43 +39,14 @@ export interface GameControls {
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
 	/** Adopt `zero` as the level pose for the side the screen faced */
 	calibrate: (zero: TiltZero, facingDown: boolean) => void;
-	/** Whether a level pose is set */
-	levelPoseSet: () => boolean;
-	/** Whether there is a tilt sensor to hold level with */
-	tiltPresent: () => boolean;
-	/** The player's colour right now */
-	playerColor: () => string;
+	/** The game's answers to what the flow asks, as they stand at this moment */
+	facts: () => GameFacts;
 }
 
-/** The game's answers to what the flow asks, as they stand at this moment */
-const ask = (controls: GameControls): GameFacts => ({
-	levelPoseSet: controls.levelPoseSet(),
-	tiltPresent: controls.tiltPresent(),
-	playerColor: controls.playerColor(),
-});
-
-/** Carry out `action` on the game */
+/** Carry out `action` on the game, through the control of the same name */
 function perform(controls: GameControls, action: FlowAction) {
-	switch (action.kind) {
-		case "play":
-			controls.play(action.color);
-			return;
-		case "pause":
-			controls.pause();
-			return;
-		case "resume":
-			controls.resume();
-			return;
-		case "kiosk":
-			controls.startKiosk();
-			return;
-		case "haltKiosk":
-			controls.haltKiosk();
-			return;
-		case "runKiosk":
-			controls.runKiosk();
-			return;
-	}
+	if (action.kind === "play") controls.play(action.color);
+	else controls[action.kind]();
 }
 
 export interface FlowStoreState {
@@ -98,7 +69,7 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 	}));
 
 	const apply = (event: FlowEvent) => {
-		const step = stepFlow(flow, event, ask(controls));
+		const step = stepFlow(flow, event, controls.facts());
 		flow = step.state;
 		store.setState({ screen: step.screen });
 		return step;

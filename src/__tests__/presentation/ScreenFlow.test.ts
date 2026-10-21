@@ -48,12 +48,19 @@ describe("screen flow", () => {
 		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
 	});
 
-	it("starting straight into play floods into a game in that colour, with no level pose asked for", () => {
+	it("the bench's auto-start floods into a game in that colour, with no level pose asked for", () => {
 		const step = stepFlow(
 			INITIAL_FLOW,
-			{ type: "startedStraight", color: BLUE, at: AT },
+			{ type: "autoStarted", color: BLUE, at: AT },
 			{ ...GAME, levelPoseSet: false },
 		);
+		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
+		expect(step.act).toBeUndefined();
+		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
+	});
+
+	it("the bench's auto-start also floods straight into a game with a level pose set", () => {
+		const step = stepFlow(INITIAL_FLOW, { type: "autoStarted", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.act).toBeUndefined();
 		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
@@ -142,7 +149,7 @@ describe("screen flow", () => {
 
 	it("QUIT and BACK flood in ink to the title", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }, GAME);
-		expect(step.flood).toEqual({ color: INK_LIFT, at: AT, action: { kind: "kiosk" } });
+		expect(step.flood).toEqual({ color: INK_LIFT, at: AT, action: { kind: "startKiosk" } });
 	});
 
 	it("levelling from the title halts the kiosk, and settling brings it back", () => {
@@ -364,7 +371,7 @@ describe("screen flow", () => {
 		expect(resume).toEqual(rests(quit.state));
 		const covered = stepFlow(resume.state, { type: "covered" }, GAME);
 		expect(covered.state).toEqual(PAUSED);
-		expect(quit.flood?.action).toEqual({ kind: "kiosk" });
+		expect(quit.flood?.action).toEqual({ kind: "startKiosk" });
 	});
 
 	it("a second tap on RETRY while its flood runs starts no second flood", () => {
@@ -417,14 +424,14 @@ describe("screen flow", () => {
 
 	it("the stage's first layout starts the kiosk, and later layouts do nothing", () => {
 		const first = stepFlow(INITIAL_FLOW, { type: "stageLaidOut" }, GAME);
-		expect(first.act).toEqual({ kind: "kiosk" });
+		expect(first.act).toEqual({ kind: "startKiosk" });
 		expect(first.state).toEqual({ ...INITIAL_FLOW, kioskStarted: true });
 		expect(stepFlow(first.state, { type: "stageLaidOut" }, GAME)).toEqual(rests(first.state));
 	});
 
 	it("the first layout still starts the kiosk while a flood runs", () => {
 		const flooding = stepFlow(INITIAL_FLOW, { type: "retryPressed", at: AT }, GAME).state;
-		expect(stepFlow(flooding, { type: "stageLaidOut" }, GAME).act).toEqual({ kind: "kiosk" });
+		expect(stepFlow(flooding, { type: "stageLaidOut" }, GAME).act).toEqual({ kind: "startKiosk" });
 	});
 
 	it("covering a flood keeps the kiosk marked as started", () => {

@@ -126,8 +126,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// The stage fades out while the kiosk is halted under the settle bowl or the speed view
 	const stageOpacity = useSharedValue(1);
 
-	// What the flow does to the game, with the stage fade and the gyro check that go with it,
-	// and what it asks of the game
+	// The flow's controls on the game, with the stage fade and the gyro check that go with them,
+	// and the facts it steps on
 	const { screen, dispatch } = useScreenFlow(store, {
 		play: (color) => {
 			// A run started from the bowl shows at once as its flood lifts
@@ -148,9 +148,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		},
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
-		levelPoseSet: () => store.getState().settings.tiltZero !== null,
-		tiltPresent: () => tilt.available.get(),
-		playerColor: () => playerColorOf(store.getState()),
+		facts: () => ({
+			levelPoseSet: store.getState().settings.tiltZero !== null,
+			tiltPresent: tilt.available.get(),
+			playerColor: playerColorOf(store.getState()),
+		}),
 	});
 
 	// Size and corners go straight to the session; the flow decides what the layout starts

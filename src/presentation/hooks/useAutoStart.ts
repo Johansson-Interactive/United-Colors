@@ -11,7 +11,7 @@ const AUTO_START_DELAY_MS = 2000;
  */
 export function useAutoStart(color: string | undefined, dispatch: (event: FlowEvent) => void) {
 	const start = useEffectEvent((startColor: string) =>
-		dispatch({ type: "startedStraight", color: startColor, at: { x: 200, y: 400 } }),
+		dispatch({ type: "autoStarted", color: startColor, at: { x: 200, y: 400 } }),
 	);
 	useEffect(() => {
 		if (!color) return;

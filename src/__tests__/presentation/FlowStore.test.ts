@@ -1,6 +1,7 @@
 import { createGameStore } from "../../application/GameStore";
 import type { GamePhase } from "../../domain/types";
 import { createFlowStore, type GameControls } from "../../presentation/flow/flowStore";
+import type { GameFacts } from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const AT = { x: 10, y: 20 };
@@ -18,9 +19,7 @@ const IDLE: GameControls = {
 	runKiosk: () => {},
 	flood: () => {},
 	calibrate: () => {},
-	levelPoseSet: () => true,
-	tiltPresent: () => true,
-	playerColor: () => PINK,
+	facts: () => ({ levelPoseSet: true, tiltPresent: true, playerColor: PINK }),
 };
 
 /**
@@ -30,7 +29,7 @@ const IDLE: GameControls = {
 function setup() {
 	const game = createGameStore();
 	const calls: string[] = [];
-	const answers = { levelPoseSet: true, tiltPresent: true, playerColor: PINK };
+	const answers: GameFacts = { levelPoseSet: true, tiltPresent: true, playerColor: PINK };
 	let cover: (() => void) | null = null;
 	const { store: flow, follow } = createFlowStore(game, {
 		play: (color) => calls.push(`play ${color}`),
@@ -45,9 +44,7 @@ function setup() {
 		},
 		calibrate: (zero, facingDown) =>
 			calls.push(`calibrate ${zero.x},${zero.y}${facingDown ? " down" : ""}`),
-		levelPoseSet: () => answers.levelPoseSet,
-		tiltPresent: () => answers.tiltPresent,
-		playerColor: () => answers.playerColor,
+		facts: () => ({ ...answers }),
 	});
 	const unfollow = follow();
 	const publish = (phase: GamePhase) =>
@@ -182,10 +179,10 @@ describe("flow store", () => {
 		expect(calls).toEqual([`flood ${PINK} 10,20`, `play ${PINK}`]);
 	});
 
-	it("starting straight into play floods into a run without the bowl, level pose or not", () => {
+	it("the bench's auto-start floods into a run without the bowl, level pose or not", () => {
 		const { flow, calls, answers, screen, covers } = setup();
 		answers.levelPoseSet = false;
-		flow.getState().dispatch({ type: "startedStraight", color: BLUE, at: AT });
+		flow.getState().dispatch({ type: "autoStarted", color: BLUE, at: AT });
 		expect(screen()).toEqual({ kind: "title" });
 		covers();
 		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
