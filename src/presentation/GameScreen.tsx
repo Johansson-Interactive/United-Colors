@@ -22,7 +22,7 @@ import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
+import { cornerDot, fieldFrosted } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -137,40 +137,25 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// The stage fades out while the kiosk is halted under the settle bowl or the speed view
 	const stageOpacity = useSharedValue(1);
 
-	// What a step does to the game, straight away or once its flood covers the screen
-	const perform = useCallback(
-		(action: FlowAction) => {
-			switch (action.kind) {
-				case "play":
-					// A game started from the bowl shows at once as its flood lifts
-					stageOpacity.set(1);
-					session.start(action.color);
-					detectGyro();
-					return;
-				case "pause":
-					session.pause();
-					return;
-				case "resume":
-					session.resume();
-					return;
-				case "kiosk":
-					session.startKiosk();
-					return;
-				case "haltKiosk":
-					session.halt();
-					stageOpacity.set(withTiming(0, { duration: 300 }));
-					return;
-				case "runKiosk":
-					stageOpacity.set(withTiming(1, { duration: 400 }));
-					session.run();
-					return;
-			}
-		},
-		[session, detectGyro, stageOpacity],
-	);
-
+	// What the flow does to the game, with the stage fade and the gyro check that go with it
 	const { screen, dispatch } = useScreenFlow(store, {
-		perform,
+		play: (color) => {
+			// A run started from the bowl shows at once as its flood lifts
+			stageOpacity.set(1);
+			session.start(color);
+			detectGyro();
+		},
+		pause: () => session.pause(),
+		resume: () => session.resume(),
+		startKiosk: () => session.startKiosk(),
+		haltKiosk: () => {
+			session.halt();
+			stageOpacity.set(withTiming(0, { duration: 300 }));
+		},
+		runKiosk: () => {
+			stageOpacity.set(withTiming(1, { duration: 400 }));
+			session.run();
+		},
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
 	});

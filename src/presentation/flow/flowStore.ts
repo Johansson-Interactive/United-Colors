@@ -18,14 +18,50 @@ import {
 	stepFlow,
 } from "./screenFlow";
 
-/** What the flow does outside itself; the shell supplies them */
-export interface FlowSinks {
-	/** Do this to the game */
-	perform: (action: FlowAction) => void;
+/**
+ * Everything the flow does outside itself; the shell adapts the game to it. The flow store takes
+ * it once, when it is created, and keeps it for its lifetime, so what it closes over must not
+ * change.
+ */
+export interface GameControls {
+	/** Start a run with the player in `color` */
+	play: (color: string) => void;
+	pause: () => void;
+	resume: () => void;
+	/** Start the kiosk afresh */
+	startKiosk: () => void;
+	/** Stop the kiosk and hide it, so only what opened over it moves */
+	haltKiosk: () => void;
+	/** Show the kiosk again and run it on from where it stopped */
+	runKiosk: () => void;
 	/** Grow a dot of `color` from `at` until it covers the screen, then call `onCovered` */
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
 	/** Adopt `zero` as the level pose for the side the screen faced */
 	calibrate: (zero: TiltZero, facingDown: boolean) => void;
+}
+
+/** Carry out `action` on the game */
+function perform(controls: GameControls, action: FlowAction) {
+	switch (action.kind) {
+		case "play":
+			controls.play(action.color);
+			return;
+		case "pause":
+			controls.pause();
+			return;
+		case "resume":
+			controls.resume();
+			return;
+		case "kiosk":
+			controls.startKiosk();
+			return;
+		case "haltKiosk":
+			controls.haltKiosk();
+			return;
+		case "runKiosk":
+			controls.runKiosk();
+			return;
+	}
 }
 
 export interface FlowStoreState {
@@ -40,7 +76,7 @@ export interface FlowStoreState {
  * the game's phase until the unsubscribe it returns is called. Creating the store has no side
  * effects; following can stop and start again, catching up on the phase each time it starts.
  */
-export function createFlowStore(game: GameStore, sinks: FlowSinks) {
+export function createFlowStore(game: GameStore, controls: GameControls) {
 	let flow: FlowState = INITIAL_FLOW;
 	const store = createStore<FlowStoreState>(() => ({
 		screen: screenOf(INITIAL_FLOW),
@@ -56,13 +92,13 @@ export function createFlowStore(game: GameStore, sinks: FlowSinks) {
 
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
-		if (step.calibrate) sinks.calibrate(step.calibrate.zero, step.calibrate.facingDown);
-		if (step.act) sinks.perform(step.act);
+		if (step.calibrate) controls.calibrate(step.calibrate.zero, step.calibrate.facingDown);
+		if (step.act) perform(controls, step.act);
 		if (step.flood) {
 			const { color, at, action } = step.flood;
-			sinks.flood(color, at, () => {
+			controls.flood(color, at, () => {
 				apply({ type: "covered" });
-				sinks.perform(action);
+				perform(controls, action);
 			});
 		}
 	}
