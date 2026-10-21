@@ -74,16 +74,16 @@ describe("screen flow", () => {
 		expect(stepFlow(step.state, { type: "covered" }).state).toEqual(INITIAL_FLOW);
 	});
 
-	it("settling from the pause saves the pose for the side faced and floods into the resume", () => {
-		const step = stepFlow(open("pause", BLUE), {
-			type: "settled",
-			zero: ZERO,
-			facingDown: true,
-			at: AT,
-		});
+	it("settling from the pause saves the pose for the side faced and returns to the pause screen", () => {
+		const step = stepFlow(
+			{ ...open("pause", BLUE), phase: "PAUSED" },
+			{ type: "settled", zero: ZERO, facingDown: true, at: AT },
+		);
 		expect(step.calibrate).toEqual({ zero: ZERO, facingDown: true });
-		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "resume" } });
-		expect(step.state.settle).not.toBeNull();
+		expect(step.flood).toBeUndefined();
+		expect(step.act).toBeUndefined();
+		expect(step.state).toEqual(PAUSED);
+		expect(step.screen).toEqual({ kind: "pause" });
 	});
 
 	it("settling from the title only saves the pose; the title comes straight back", () => {
@@ -338,21 +338,6 @@ describe("screen flow", () => {
 		}
 		const after = stepFlow(flooding, { type: "covered" }).state;
 		expect(stepFlow(after, { type: "retryPressed", color: BLUE, at: AT }).flood).toBeDefined();
-	});
-
-	it("the bowl settling from the pause ignores the play dot while its flood runs", () => {
-		const step = stepFlow(open("pause"), {
-			type: "settled",
-			zero: ZERO,
-			facingDown: false,
-			at: AT,
-		});
-		expect(stepFlow(step.state, { type: "cornerPressed", tiltAvailable: true })).toEqual(
-			rests(step.state),
-		);
-		expect(
-			stepFlow(step.state, { type: "settled", zero: ZERO, facingDown: false, at: AT }),
-		).toEqual(rests(step.state));
 	});
 
 	it("a phase change is recorded and answers with that phase's screen", () => {

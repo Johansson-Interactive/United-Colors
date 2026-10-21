@@ -2,7 +2,8 @@
  * Pure state machine behind the screens: the title, the settle bowl, the pause, the speed
  * view, Get ready and the game over, and the floods between them. A flood is a dot growing from under the finger until it
  * covers the screen; the scene changes underneath, then it lifts. A first game starts by
- * setting the level pose; the settled dot then floods into play. While a flood is on its way
+ * setting the level pose; the settled dot then floods into play. Setting it again from the title
+ * or the pause only saves it and returns there. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
  * comes in as an event too, and every step answers with the one screen to show. While the bowl
  * or the speed view is open over the title the kiosk halts. A paused run continues through Get ready: the game
@@ -233,9 +234,15 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 			if (settle.from === "menu") {
 				return { state: { ...state, settle: null }, calibrate, act: RUN_KIOSK };
 			}
+			// From the pause too: the pause screen comes back, so play never picks up unannounced;
+			// the play dot then leads through Get ready as usual
+			if (settle.from === "pause") return { state: { ...state, settle: null }, calibrate };
 			// The bowl stays under the flood until it has covered the screen
-			const action = settle.from === "start" ? play(settle.color) : RESUME;
-			return startFlood(state, { color: settle.color, at: event.at, action }, calibrate);
+			return startFlood(
+				state,
+				{ color: settle.color, at: event.at, action: play(settle.color) },
+				calibrate,
+			);
 		}
 		case "settleBacked":
 			return {
