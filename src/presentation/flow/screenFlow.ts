@@ -164,12 +164,12 @@ export function cornerDot(screen: Screen): "pause" | "play" | null {
 }
 
 /**
- * Whether the frozen game is frosted over: under the pause and what opens over it, but not
- * Get ready, which shows the field the player is about to play in. (The game over's dimmer
- * frost is the stage's own.)
+ * Whether the frozen game is frosted over: under the pause and everything that opens over it,
+ * Get ready included, where the seat is the one clear window in the frost until the hold thaws
+ * it (see getReady.ts). (The game over's dimmer frost is the stage's own.)
  */
-export function fieldFrosted(phase: GamePhase, screen: Screen): boolean {
-	return phase === "PAUSED" && screen.kind !== "getReady";
+export function fieldFrosted(phase: GamePhase): boolean {
+	return phase === "PAUSED";
 }
 
 /**
@@ -274,7 +274,7 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 			if (gettingReady) return closeOver(state);
 			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
-			// The hold is the countdown; play picks up the moment the ring closes, no flood
+			// The hold is the countdown; play picks up the moment the thaw clears the field, no flood
 			return { ...closeOver(state), act: RESUME };
 		case "covered":
 			return { state: { ...INITIAL_FLOW, phase: state.phase } };

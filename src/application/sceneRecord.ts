@@ -256,16 +256,28 @@ export interface Disc {
 	radius: number;
 }
 
+/** A dot's disc stretched along its jelly stretch vector (see jelly.ts), as the player is drawn */
+export interface StretchedDisc extends Disc {
+	stretchX: number;
+	stretchY: number;
+}
+
 /**
- * Where the player is drawn in `scene`, and how big, for what the interface draws around it
- * (Get ready's ring and outline); null when the scene has no player (kiosk)
+ * Where the player is drawn in `scene`, how big and how stretched, for what the interface
+ * draws around and over it (Get ready's seat); null when the scene has no player (kiosk)
  */
-export function playerDisc(scene: Float32Array): Disc | null {
+export function playerDisc(scene: Float32Array): StretchedDisc | null {
 	"worklet";
 	const index = findPlayer(scene);
 	if (index < 0) return null;
 	const o = index * STRIDE;
-	return { x: scene[o + X], y: scene[o + Y], radius: scene[o + RADIUS] };
+	return {
+		x: scene[o + X],
+		y: scene[o + Y],
+		radius: scene[o + RADIUS],
+		stretchX: scene[o + STRETCH_X],
+		stretchY: scene[o + STRETCH_Y],
+	};
 }
 
 /**

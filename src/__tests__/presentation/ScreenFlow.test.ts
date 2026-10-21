@@ -482,20 +482,14 @@ describe("the corner dot", () => {
 });
 
 describe("the frosted field", () => {
-	it("frosts the frozen game under the pause, the speed view and the bowl opened from it", () => {
-		expect(fieldFrosted("PAUSED", { kind: "pause" })).toBe(true);
-		expect(fieldFrosted("PAUSED", { kind: "speed", color: PINK })).toBe(true);
-		expect(fieldFrosted("PAUSED", { kind: "settle", color: PINK })).toBe(true);
+	it("frosts the frozen game for as long as it is paused: under the pause, the speed view, the bowl and Get ready", () => {
+		expect(fieldFrosted("PAUSED")).toBe(true);
 	});
 
-	it("lifts for Get ready, so the player sees the field they are about to play in", () => {
-		expect(fieldFrosted("PAUSED", { kind: "getReady" })).toBe(false);
-	});
-
-	it("is clear in play and on the title, and the bowl over the title", () => {
-		expect(fieldFrosted("RUNNING", { kind: "hud" })).toBe(false);
-		expect(fieldFrosted("REJECTING", { kind: "hud" })).toBe(false);
-		expect(fieldFrosted("KIOSK", { kind: "title" })).toBe(false);
-		expect(fieldFrosted("KIOSK", { kind: "settle", color: PINK })).toBe(false);
+	it("is clear in play, on the title and on the game over, whose dimmer frost is the stage's own", () => {
+		expect(fieldFrosted("RUNNING")).toBe(false);
+		expect(fieldFrosted("REJECTING")).toBe(false);
+		expect(fieldFrosted("KIOSK")).toBe(false);
+		expect(fieldFrosted("GAME_OVER")).toBe(false);
 	});
 });

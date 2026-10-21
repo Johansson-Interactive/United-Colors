@@ -21,7 +21,6 @@ import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { FrostDim } from "./effects/FrostDim";
 import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -176,11 +175,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	});
 
 	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, shake, bursts, burstClock } = useStageEffects(
+	const { accent, frost, frostWindow, shake, bursts, burstClock } = useStageEffects(
 		store,
 		phase,
 		playerColor,
-		fieldFrosted(phase, screen),
+		fieldFrosted(phase),
 	);
 
 	useAutoStart(autoStart, dispatch);
@@ -222,7 +221,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
 	const handleSnap = useCallback(() => audio.playCollect(0), [audio]);
-	// The ring closed on the dot: a snap, and play picks up at once
+	// The thaw cleared the field: a snap, and play picks up at once
 	const handleReady = useCallback(() => {
 		handleSnap();
 		dispatch({ type: "readyHeld" });
@@ -257,6 +256,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<GameCanvas
 					scene={scene}
 					frost={frost}
+					frostWindow={frostWindow}
 					accent={accent}
 					stageOpacity={stageOpacity}
 					shake={shake}
@@ -266,14 +266,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
 				/>
 
-				<FrostDim frost={frost} />
-
 				{screen.kind === "getReady" && (
 					<GetReadyOverlay
 						scene={scene}
 						color={playerColor}
 						sensitivity={sensitivity}
 						corners={corners}
+						frostWindow={frostWindow}
 						onReady={handleReady}
 					/>
 				)}
