@@ -14,6 +14,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { playerDisc } from "../../application/sceneRecord";
+import { cornerExtent } from "../../domain/arena";
+import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
 import { useStageBox } from "../layout/StageFrame";
@@ -33,6 +35,8 @@ interface GetReadyOverlayProps {
 	color: string;
 	/** The outline moves this many times its usual distance per tilt, like the player dot */
 	sensitivity: number;
+	/** How the stage's corners are rounded, so the outline slides round them (null: square) */
+	corners: Corners | null;
 	/** Fired once, the moment the ring closes on the dot */
 	onReady: () => void;
 }
@@ -57,10 +61,19 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	scene,
 	color,
 	sensitivity,
+	corners,
 	onReady,
 }) => {
 	const tilt = useTilt();
 	const { width, height } = useStageBox();
+	const field = useMemo(
+		() => ({
+			width,
+			height,
+			cornerExtent: cornerExtent({ width, height, corners: corners ?? undefined }),
+		}),
+		[width, height, corners],
+	);
 	const state = useSharedValue(INITIAL_GET_READY);
 	const holding = useSharedValue(false);
 	// The caption's opacity: up until the hold grows, back as soon as it breaks
@@ -96,7 +109,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 			{ x: d.x, y: d.y, radius: d.radius + STROKE / 2 },
 			{ x: tilt.x.get(), y: tilt.y.get() },
 			sensitivity,
-			{ width, height },
+			field,
 		);
 		return vec(at.x, at.y);
 	});

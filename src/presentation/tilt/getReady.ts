@@ -25,6 +25,8 @@ export interface Point {
 export interface FieldSize {
 	width: number;
 	height: number;
+	/** How far its rounded corners reach along each edge (see cornerExtent); 0 for square */
+	cornerExtent: number;
 }
 
 /** Tilt (radians, either axis) that still counts as level */
@@ -59,8 +61,14 @@ function clamp(value: number, min: number, max: number): number {
 
 /**
  * Where the hollow outline of the player dot sits: off the dot by the tilt, scaled like the dot
- * itself moves, and kept wholly inside the playfield so it slides along a wall instead of leaving.
- * `outline` is the outline at rest: centred on the dot, at its outer radius.
+ * itself moves, and kept wholly inside the playfield so it slides along a wall (and round a
+ * rounded corner) instead of leaving. `outline` is the outline at rest: centred on the dot, at
+ * its outer radius.
+ *
+ * A rounded corner is taken as a quarter circle reaching `cornerExtent` along each edge. That is
+ * the circular corner exactly, and lies inside iOS's continuous corner of the same reach, so the
+ * outline never goes under the curve the stage is clipped to; the game's own bound (arena.ts)
+ * is not a worklet, so it can't run here on the UI thread.
  */
 export function outlineCentre(
 	outline: Disc,
@@ -71,10 +79,19 @@ export function outlineCentre(
 	"worklet";
 	const gain = OUTLINE_GAIN * sensitivity;
 	const { radius } = outline;
-	return {
-		x: clamp(outline.x + tilt.x * gain, radius, field.width - radius),
-		y: clamp(outline.y + tilt.y * gain, radius, field.height - radius),
-	};
+	const { width, height, cornerExtent } = field;
+	const x = clamp(outline.x + tilt.x * gain, radius, width - radius);
+	const y = clamp(outline.y + tilt.y * gain, radius, height - radius);
+	// The centre of the corner's quarter circle, when the outline is in a corner's square
+	const cx = x < cornerExtent ? cornerExtent : x > width - cornerExtent ? width - cornerExtent : x;
+	const cy =
+		y < cornerExtent ? cornerExtent : y > height - cornerExtent ? height - cornerExtent : y;
+	const room = cornerExtent - radius;
+	const dx = x - cx;
+	const dy = y - cy;
+	const distance = Math.hypot(dx, dy);
+	if (room <= 0 || distance <= room) return { x, y };
+	return { x: cx + (dx * room) / distance, y: cy + (dy * room) / distance };
 }
 
 /**

@@ -269,6 +269,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						scene={scene}
 						color={playerColor}
 						sensitivity={sensitivity}
+						corners={corners}
 						onReady={handleReady}
 					/>
 				)}

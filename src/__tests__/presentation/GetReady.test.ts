@@ -1,3 +1,5 @@
+import { cornerExtent, holdInside } from "../../domain/arena";
+import type { Corners } from "../../domain/types";
 import {
 	ARMING_MS,
 	type GetReadyState,
@@ -57,7 +59,7 @@ describe("get-ready stepper", () => {
 });
 
 describe("get-ready outline", () => {
-	const field = { width: 400, height: 800 };
+	const field = { width: 400, height: 800, cornerExtent: 0 };
 	const dot = { x: 200, y: 400, radius: 20 };
 	const centre = { x: dot.x, y: dot.y };
 
@@ -93,6 +95,25 @@ describe("get-ready outline", () => {
 			x: 20,
 			y: 780,
 		});
+	});
+
+	it.each<Corners>([
+		{ radius: 55, curve: "continuous" },
+		{ radius: 40, curve: "circular" },
+	])("stays clear of a rounded corner ($curve), where the player slides round it", (corners) => {
+		const screen = { width: 400, height: 800, corners };
+		const rounded = { ...field, cornerExtent: cornerExtent(screen) };
+		const outline = { x: 200, y: 400, radius: 21 };
+		// Tilted hard towards every part of the screen's edge, corners included
+		for (let a = 0; a < 360; a += 5) {
+			const rad = (a * Math.PI) / 180;
+			const tilt = { x: Math.cos(rad) * 5, y: Math.sin(rad) * 5 };
+			const at = outlineCentre(outline, tilt, 1, rounded);
+			// The game's own bound for a dot this size leaves the outline where it is
+			const held = holdInside(screen, at.x, at.y, outline.radius);
+			expect(held.x).toBeCloseTo(at.x, 6);
+			expect(held.y).toBeCloseTo(at.y, 6);
+		}
 	});
 });
 
