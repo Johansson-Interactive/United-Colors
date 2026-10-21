@@ -4,25 +4,11 @@ import { createCatchStagger } from "../../application/catchCue";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
 import type { GamePhase } from "../../domain/types";
-import {
-	advanceBursts,
-	type Burst,
-	layOutBurst,
-	noBurstsLeft,
-	withBurst,
-} from "../effects/burstFrames";
-import type { EffectReducer } from "../effects/effectLane";
+import { BURSTS, layOutBurst } from "../effects/burstFrames";
 import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
 import { NO_CATCH_SPOT, SHAKE, stepBursts } from "../effects/stageBursts";
 import { INK_LIFT } from "../theme/theme";
 import { useEffectLane } from "./useEffectLane";
-
-/** The bursts' lane: each laid out on the JS thread, then added, aged and dropped on the UI thread */
-const BURSTS: EffectReducer<Burst[], Burst> = {
-	add: withBurst,
-	advance: advanceBursts,
-	idle: noBurstsLeft,
-};
 
 /**
  * Presentation-only reactions to what the game does: the edge wash takes the player's
@@ -47,7 +33,7 @@ export function useStageEffects(
 	const frost = useSharedValue(0);
 	const frostWindow = useSharedValue<FrostWindow>(NO_FROST_WINDOW);
 	const shake = useSharedValue(0);
-	const { items: bursts, time: burstClock, add } = useEffectLane(BURSTS, []);
+	const { state: bursts, time: burstClock, add } = useEffectLane(BURSTS, []);
 
 	// Frost the frozen game, dim the game over; wash the edges in the player's colour when playing
 	useEffect(() => {

@@ -5,18 +5,13 @@ import { useDerivedValue } from "react-native-reanimated";
 import { useStore } from "zustand";
 import type { GameStore } from "../../application/GameStore";
 import { onGameEvents } from "../../application/gameEvents";
-import type { EffectReducer } from "../effects/effectLane";
 import {
-	advanceTally,
 	createTally,
 	newCatch,
 	SCORE_PAD,
 	SCORE_PITCH,
-	type Tally,
-	type TallyCatch,
+	TALLY,
 	type TallyStyle,
-	tallyIdle,
-	withCatch,
 } from "../effects/scoreTally";
 import { useEffectLane } from "../hooks/useEffectLane";
 import { useStageBox } from "../layout/StageFrame";
@@ -36,13 +31,6 @@ const STYLE: TallyStyle = "feed";
 /** The meter's height: the total and a few lines of addends under it */
 const METER_HEIGHT = 230;
 
-/** The tally's lane: each catch made on the JS thread, then queued, stamped and counted in on the UI thread */
-const TALLY: EffectReducer<Tally, TallyCatch> = {
-	add: withCatch,
-	advance: advanceTally,
-	idle: tallyIdle,
-};
-
 /**
  * The score at the top of the stage, counting each catch in as it arrives (see scoreTally.ts).
  * Nothing here goes through React: each catch is added to the tally's effect lane (see
@@ -56,7 +44,7 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	const scoreColor = useMemo(() => Skia.Color(color), [color]);
 
 	const {
-		items: tally,
+		state: tally,
 		time: clock,
 		add,
 	} = useEffectLane(TALLY, createTally(store.getState().frame.score));

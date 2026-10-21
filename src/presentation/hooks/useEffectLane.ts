@@ -16,13 +16,13 @@ import { createEffectLane, type EffectLane, type EffectReducer } from "../effect
 export function useEffectLane<S, T>(
 	reducer: EffectReducer<S, T>,
 	initial: S,
-): { items: SharedValue<S>; time: SharedValue<number>; add: EffectLane<T>["add"] } {
+): { state: SharedValue<S>; time: SharedValue<number>; add: EffectLane<T>["add"] } {
 	// Memoised by hand, not by the React Compiler: it reads the frame callback's worklet factory
 	// as a call that may change the shared values, so it rebuilt the callback on every render,
 	// and useFrameCallback re-registers on each new one. The lane is made once instead, and its
 	// step is the one callback the frame clock ever gets
 	"use no memo";
-	const items = useSharedValue(initial);
+	const state = useSharedValue(initial);
 	const time = useSharedValue(0);
 	const seen = useSharedValue(-1);
 	// The frame callback is made from the lane's step, so the lane reaches it once it exists
@@ -30,7 +30,7 @@ export function useEffectLane<S, T>(
 		let frameCallback: FrameCallback | null = null;
 		return {
 			lane: createEffectLane<S, T>(reducer, {
-				items,
+				state,
 				seen,
 				time,
 				clock: { setActive: (active) => frameCallback?.setActive(active) },
@@ -46,5 +46,5 @@ export function useEffectLane<S, T>(
 		bind(clock);
 		return () => lane.dispose();
 	}, [bind, clock, lane]);
-	return { items, time, add: lane.add };
+	return { state, time, add: lane.add };
 }

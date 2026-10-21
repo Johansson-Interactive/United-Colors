@@ -313,6 +313,7 @@ describe("the burst list", () => {
 		advanceBursts(list, 0);
 		list = withBurst(list, ring(1));
 		list = withBurst(list, ring(2));
+		// Not kept: the call stamps the bursts in place, which is what the rest of the test relies on
 		advanceBursts(list, 400);
 		expect(advanceBursts(list, BURST_LIFETIME_MS - 1)).toBe(list);
 		const next = advanceBursts(list, BURST_LIFETIME_MS);
@@ -323,6 +324,7 @@ describe("the burst list", () => {
 	it("has no bursts left only once the list is empty", () => {
 		const list = withBurst([], ring(0));
 		expect(noBurstsLeft(list)).toBe(false);
+		// Not kept: the call stamps the burst in place, so its lifetime starts here
 		advanceBursts(list, 400);
 		expect(noBurstsLeft(advanceBursts(list, 400 + BURST_LIFETIME_MS))).toBe(true);
 	});

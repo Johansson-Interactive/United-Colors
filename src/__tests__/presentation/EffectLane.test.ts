@@ -1,13 +1,11 @@
 import { createEffectLane, type EffectReducer } from "../../presentation/effects/effectLane";
 import {
-	advanceTally,
 	createTally,
 	newCatch,
 	shownScore,
+	TALLY,
 	type Tally,
 	type TallyCatch,
-	tallyIdle,
-	withCatch,
 } from "../../presentation/effects/scoreTally";
 import { WHITE } from "../../presentation/theme/theme";
 
@@ -49,11 +47,11 @@ function setup<S, T>(reducer: EffectReducer<S, T>, initial: S) {
 			});
 		},
 	});
-	const items = cell(initial);
+	const state = cell(initial);
 	const time = cell(0);
 	let on = false;
 	const lane = createEffectLane(reducer, {
-		items,
+		state,
 		seen: cell(-1),
 		time,
 		clock: {
@@ -71,10 +69,10 @@ function setup<S, T>(reducer: EffectReducer<S, T>, initial: S) {
 		log,
 		/** Whether the clock is running */
 		running: () => on,
-		/** What the drawing sees: the items and the frame time */
-		drawn: () => items.get(),
+		/** What the drawing sees: the state and the frame time */
+		drawn: () => state.get(),
 		/** Replace the state from the JS thread, as a shared value's set does */
-		replace: (state: S) => items.set(state),
+		replace: (next: S) => state.set(next),
 		time: () => time.get(),
 		/** The UI thread's next frame at `now`, if the clock runs */
 		frame: (now: number) => {
@@ -260,13 +258,6 @@ describe("effect lane", () => {
 		expect(running()).toBe(false);
 	});
 });
-
-/** The score meter's lane: catches queued on the JS thread, counted into the total on the UI thread */
-const TALLY: EffectReducer<Tally, TallyCatch> = {
-	add: withCatch,
-	advance: advanceTally,
-	idle: tallyIdle,
-};
 
 /** Frames 16 ms apart from `from` while the clock runs, up to `until`; the last frame's time */
 function runFrames(

@@ -41,7 +41,7 @@ interface LaneCell<V> {
 /** What a lane touches outside itself; in the app, shared values, a frame callback and scheduleOnRN */
 export interface LanePorts<S> {
 	/** The lane's state, as drawing reads it */
-	items: LaneCell<S>;
+	state: LaneCell<S>;
 	/** The newest id the UI thread has seen; starts at -1 */
 	seen: LaneCell<number>;
 	/** The time of the latest frame, which drawing reads the state at */
@@ -66,7 +66,7 @@ export interface EffectLane<T> {
 
 export function createEffectLane<S, T>(
 	reducer: EffectReducer<S, T>,
-	{ items, seen, time, clock, toJS }: LanePorts<S>,
+	{ state, seen, time, clock, toJS }: LanePorts<S>,
 ): EffectLane<T> {
 	let next = 0;
 	let open = true;
@@ -79,18 +79,18 @@ export function createEffectLane<S, T>(
 			const id = next;
 			next = id + 1;
 			const item = make(id);
-			items.modify((state) => {
+			state.modify((current) => {
 				"worklet";
 				seen.set(id);
-				return reducer.add(state, item);
+				return reducer.add(current, item);
 			});
 			clock.setActive(true);
 		},
 		step(frame) {
 			"worklet";
-			const current = items.get();
+			const current = state.get();
 			const advanced = reducer.advance(current, frame.timestamp);
-			if (advanced !== current) items.set(advanced);
+			if (advanced !== current) state.set(advanced);
 			time.set(frame.timestamp);
 			if (reducer.idle(advanced, frame.timestamp)) toJS(stop, seen.get());
 		},

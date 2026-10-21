@@ -12,6 +12,7 @@ import {
 	spriteBatch,
 } from "../dotSprites";
 import { COMBO_AMBER, WHITE } from "../theme/theme";
+import type { EffectReducer } from "./effectLane";
 
 /**
  * Short-lived feedback drawn at a point in the playfield, in the game canvas: a score pop that
@@ -25,6 +26,13 @@ import { COMBO_AMBER, WHITE } from "../theme/theme";
  * sprites and rings for drawing (packBursts). Packing runs every frame a burst is alive, so it
  * indexes directly, calls nothing per dot and reuses its objects from frame to frame.
  */
+
+/** The bursts' effect lane: each laid out on the JS thread, then added, aged and dropped on the UI thread */
+export const BURSTS: EffectReducer<Burst[], Burst> = {
+	add: withBurst,
+	advance: advanceBursts,
+	idle: noBurstsLeft,
+};
 
 /** How long a burst lasts (ms) */
 export const BURST_LIFETIME_MS = 900;
