@@ -5,7 +5,7 @@
  * short arming delay, so the jolt of the thumb on the play dot can't start play.
  */
 
-import { BOWL_SIZE } from "../theme/theme";
+import type { Disc } from "../../application/sceneRecord";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the ring has closed on the dot at 1 */
@@ -13,6 +13,18 @@ export interface GetReadyState {
 	/** Time since Get ready opened */
 	elapsedMs: number;
 	fired: boolean;
+}
+
+/** A tilt (radians) or a spot on the stage (px), by axis */
+export interface Point {
+	x: number;
+	y: number;
+}
+
+/** The playfield the outline must stay inside, from its top-left corner */
+export interface FieldSize {
+	width: number;
+	height: number;
 }
 
 /** Tilt (radians, either axis) that still counts as level */
@@ -33,18 +45,11 @@ function isLevel(x: number, y: number): boolean {
 	return Math.abs(x) < LEVEL_RAD && Math.abs(y) < LEVEL_RAD;
 }
 
-export interface Point {
-	x: number;
-	y: number;
-}
-
-/** The playfield the outline must stay inside, from its top-left corner */
-export interface FieldSize {
-	width: number;
-	height: number;
-}
-
-/** Pixels the outline moves per radian of tilt at the default sensitivity (the old bubble's gain) */
+/**
+ * Pixels the outline moves per radian of tilt at the default sensitivity: a little off level
+ * shows as a clear step off the dot, and the ~0.1 rad that still counts as level keeps the
+ * outline within about a dot's radius of it
+ */
 const OUTLINE_GAIN = 150;
 
 function clamp(value: number, min: number, max: number): number {
@@ -55,25 +60,28 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Where the hollow outline of the player dot sits: off the dot by the tilt, scaled like the dot
  * itself moves, and kept wholly inside the playfield so it slides along a wall instead of leaving.
- * `radius` is the outline's outer radius.
+ * `outline` is the outline at rest: centred on the dot, at its outer radius.
  */
 export function outlineCentre(
-	dot: Point,
-	radius: number,
+	outline: Disc,
 	tilt: Point,
 	sensitivity: number,
 	field: FieldSize,
 ): Point {
 	"worklet";
 	const gain = OUTLINE_GAIN * sensitivity;
+	const { radius } = outline;
 	return {
-		x: clamp(dot.x + tilt.x * gain, radius, field.width - radius),
-		y: clamp(dot.y + tilt.y * gain, radius, field.height - radius),
+		x: clamp(outline.x + tilt.x * gain, radius, field.width - radius),
+		y: clamp(outline.y + tilt.y * gain, radius, field.height - radius),
 	};
 }
 
-/** The ring's radius as Get ready opens: the old spirit level's inner circle at the pause screen's size */
-export const RING_START_RADIUS = BOWL_SIZE * 0.17;
+/**
+ * The ring's radius as Get ready opens (px): well clear of a player dot, so the contraction
+ * onto it is long enough to read as the countdown
+ */
+export const RING_START_RADIUS = 40;
 
 /**
  * The ring around the player dot contracts with the hold, from its starting size onto the dot

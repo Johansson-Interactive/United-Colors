@@ -91,8 +91,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		const d = disc.get();
 		if (!d) return vec(0, 0);
 		const at = outlineCentre(
-			d,
-			d.radius + STROKE / 2,
+			{ x: d.x, y: d.y, radius: d.radius + STROKE / 2 },
 			{ x: tilt.x.get(), y: tilt.y.get() },
 			sensitivity,
 			{ width, height },

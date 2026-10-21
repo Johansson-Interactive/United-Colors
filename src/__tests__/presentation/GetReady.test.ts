@@ -58,16 +58,16 @@ describe("get-ready stepper", () => {
 
 describe("get-ready outline", () => {
 	const field = { width: 400, height: 800 };
-	const dot = { x: 200, y: 400 };
-	const radius = 20;
+	const dot = { x: 200, y: 400, radius: 20 };
+	const centre = { x: dot.x, y: dot.y };
 
 	it("sits on the dot when level", () => {
-		expect(outlineCentre(dot, radius, { x: 0, y: 0 }, 1, field)).toEqual(dot);
+		expect(outlineCentre(dot, { x: 0, y: 0 }, 1, field)).toEqual(centre);
 	});
 
-	it("follows the tilt by the bubble gain times the sensitivity", () => {
-		expect(outlineCentre(dot, radius, { x: 0.2, y: -0.1 }, 1, field)).toEqual({ x: 230, y: 385 });
-		expect(outlineCentre(dot, radius, { x: 0.2, y: -0.1 }, 1.5, field)).toEqual({
+	it("follows the tilt by its gain times the sensitivity", () => {
+		expect(outlineCentre(dot, { x: 0.2, y: -0.1 }, 1, field)).toEqual({ x: 230, y: 385 });
+		expect(outlineCentre(dot, { x: 0.2, y: -0.1 }, 1.5, field)).toEqual({
 			x: 245,
 			y: 377.5,
 		});
@@ -75,21 +75,21 @@ describe("get-ready outline", () => {
 
 	it("stays inside the playfield at each wall, sliding along it", () => {
 		const far = 2;
-		expect(outlineCentre(dot, radius, { x: -far, y: 0.1 }, 1, field)).toEqual({ x: 20, y: 415 });
-		expect(outlineCentre(dot, radius, { x: far, y: 0.1 }, 1, field)).toEqual({ x: 380, y: 415 });
-		expect(outlineCentre(dot, radius, { x: 0.1, y: -far * 2 }, 1, field)).toEqual({
+		expect(outlineCentre(dot, { x: -far, y: 0.1 }, 1, field)).toEqual({ x: 20, y: 415 });
+		expect(outlineCentre(dot, { x: far, y: 0.1 }, 1, field)).toEqual({ x: 380, y: 415 });
+		expect(outlineCentre(dot, { x: 0.1, y: -far * 2 }, 1, field)).toEqual({
 			x: 215,
 			y: 20,
 		});
-		expect(outlineCentre(dot, radius, { x: 0.1, y: far * 2 }, 1, field)).toEqual({
+		expect(outlineCentre(dot, { x: 0.1, y: far * 2 }, 1, field)).toEqual({
 			x: 215,
 			y: 780,
 		});
 	});
 
 	it("stays inside the playfield in a corner", () => {
-		const cornerDot = { x: 25, y: 790 };
-		expect(outlineCentre(cornerDot, radius, { x: -0.5, y: 0.5 }, 1, field)).toEqual({
+		const cornerDot = { x: 25, y: 790, radius: 20 };
+		expect(outlineCentre(cornerDot, { x: -0.5, y: 0.5 }, 1, field)).toEqual({
 			x: 20,
 			y: 780,
 		});
@@ -99,8 +99,8 @@ describe("get-ready outline", () => {
 describe("get-ready ring", () => {
 	const dotRadius = 18;
 
-	it("starts at about the old spirit level's inner circle", () => {
-		expect(RING_START_RADIUS).toBeCloseTo(40, 0);
+	it("starts well clear of the dot", () => {
+		expect(RING_START_RADIUS).toBe(40);
 		expect(ringRadius(0, dotRadius)).toBe(RING_START_RADIUS);
 	});
 
