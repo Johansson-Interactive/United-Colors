@@ -4,7 +4,7 @@
  * clock runs up to the run time. Every run of POUR_FULL_SPAN_S or more pours in the same span
  * (POUR_SPAN_MS), whatever its length, and a shorter one in its share of it, so a short run
  * pours quickly. The catches count in at what they were worth on their own. The tally sits in
- * the drop throughout, as large as the drop holds it (see tallyFit), growing with it, and only
+ * the drop throughout, as large as the drop holds it (see tallyPitchIn), growing with it, and only
  * spilling past its edge, at the smallest readable size, while the drop is still too small.
  * Once the drop settles, the combo bonus pours in: an amber body falls in, the amber rises as a
  * layer at the drop's bottom, the drop swells and the tally counts up to the score, so the bonus
@@ -25,7 +25,7 @@ import { catchPitch } from "../../application/catchCue";
 import { MERGE_MAX_DOTS } from "../../application/renderScene";
 import { comboBonus, ownValue, runSeconds } from "../../domain/run";
 import type { RunCatch, RunRecord } from "../../domain/types";
-import { layoutDotMatrix } from "../dotmatrix/layout";
+import { layoutDotMatrix, type MatrixLayout } from "../dotmatrix/layout";
 import { amberWaveReach } from "../mergeShader";
 import { COMBO_AMBER } from "../theme/theme";
 
@@ -223,7 +223,7 @@ export interface PourPlan {
 	/** The tally's dot spacing in play (px), as given: the most it is ever drawn at */
 	pitch: number;
 	/**
-	 * The settled tally's dot spacing (px), by the one rule (see tallyFit): as large as its room
+	 * The settled tally's dot spacing (px), by the one rule (see tallyPitchIn): as large as its room
 	 * holds, the whole drop, or with a combo bonus the drop's top part above the amber
 	 */
 	tallyPitch: number;
@@ -246,8 +246,9 @@ export interface PourView {
 	/** The bonus body's landing, when it landed after the previous sample, up to this one */
 	bonusLanding: PourLanding | null;
 	/**
-	 * The drop: at what the catches were worth alone, then swelling to its settled size as the
-	 * bonus pours in or to hold its tally readably
+	 * The stepper's drop: at what the catches were worth alone, then swelling to its settled
+	 * size as the bonus pours in or to hold its tally readably. The shell kicks, steps and
+	 * fills the liquid by it, and eases what it draws toward it.
 	 */
 	drop: PourDrop;
 	/**
@@ -256,11 +257,14 @@ export interface PourView {
 	 */
 	swell: number;
 	/**
-	 * The tally's dots, inside the drop as drawn where it holds them, lifted with the amber as it
-	 * rises into the top part
+	 * The tally's dots, lifted with the amber as it rises into the top part; `ink` where inside
+	 * the drop as drawn (pourAt's `drawnRadius`), not the stepper's `drop`
 	 */
 	digits: readonly PourDigitDot[];
-	/** Their spacing (px), which the shell sizes them by: as large as the drop holds them */
+	/**
+	 * Their spacing (px), which the shell sizes them by: as large as the drop as drawn holds them
+	 * (see tallyPitchIn)
+	 */
 	tallyPitch: number;
 	/** The clock: run time so far as `M:SS`, rounded down */
 	clock: string;
@@ -426,149 +430,154 @@ function shareBelow(d: number): number {
 	return (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI;
 }
 
+/** Halvings a search takes (see bisect): to well under a thousandth of a px over any range here */
+const BISECT_STEPS = 30;
+
+/**
+ * Where `below` stops holding between `lo`, where it holds, and `hi`, where it does not, after
+ * BISECT_STEPS halvings: the last point found where it still holds, and the first where it does not
+ */
+function bisect(lo: number, hi: number, below: (x: number) => boolean) {
+	"worklet";
+	let low = lo;
+	let high = hi;
+	for (let i = 0; i < BISECT_STEPS; i++) {
+		const mid = (low + high) / 2;
+		if (below(mid)) low = mid;
+		else high = mid;
+	}
+	return { lo: low, hi: high };
+}
+
 /**
  * Where the amber layer's level sits, in radii below the drop's centre (1 is its bottom, -1 its
  * top), so that the part of the drop below it is `share` of the drop's area
  */
 function levelForShare(share: number): number {
-	let lo = -1;
-	let hi = 1;
-	for (let i = 0; i < 40; i++) {
-		const mid = (lo + hi) / 2;
-		if (shareBelow(mid) > share) lo = mid;
-		else hi = mid;
-	}
+	const { lo, hi } = bisect(-1, 1, (d) => shareBelow(d) > share);
 	return (lo + hi) / 2;
 }
 
+/** A figure's size in dot-matrix cells */
+type Cells = Pick<MatrixLayout, "cols" | "rows">;
+
 /**
- * Where a box `cols` by `rows` cells at `pitch` can go in a drop of `radius` under a surface
- * `surface` px below its centre, clear of it: the highest its top can be, and the height to
- * spare under the box from there, as the drop's outline narrows away from its middle; negative
- * when it does not fit
+ * Where a box of `cells` at `pitch` can go in a drop of `radius` under an amber surface
+ * `surface` px below its centre, clear of it, or anywhere in the drop without amber (null): the
+ * highest its top can be, and the height to spare under the box from there, as the drop's
+ * outline narrows away from its middle; negative when it does not fit
  */
-function roomUnder(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+function roomUnder(radius: number, surface: number | null, { cols, rows }: Cells, pitch: number) {
 	"worklet";
 	const half = (cols * pitch) / 2;
 	// How far from the centre the drop is still as wide as the box
 	const reach = half < radius ? Math.sqrt(radius * radius - half * half) : 0;
-	const top = Math.max(-reach, surface + AMBER_CLEAR);
+	const top = surface === null ? -reach : Math.max(-reach, surface + AMBER_CLEAR);
 	return { top, spare: reach - top - rows * pitch };
 }
 
 /**
- * The lowest a surface can be, px below the centre of a drop of `radius`, with a box `cols` by
- * `rows` cells still fitting under it at POUR_MIN_PITCH; null when it fits under none
+ * The lowest a surface can be, px below the centre of a drop of `radius`, with a box of `cells`
+ * still fitting under it at POUR_MIN_PITCH; null when it fits under none
  */
-function lowestSurface(radius: number, cols: number, rows: number): number | null {
-	const least = roomUnder(radius, -radius, cols, rows, POUR_MIN_PITCH);
+function lowestSurface(radius: number, cells: Cells): number | null {
+	const least = roomUnder(radius, -radius, cells, POUR_MIN_PITCH);
 	return least.spare >= 0 ? least.top + least.spare - AMBER_CLEAR : null;
 }
 
 /**
- * A box `cols` by `rows` cells under a surface `surface` px below the centre of a drop of
- * `radius`: as large as it fits, up to `pitch`, and centred in the room it has there; its top
+ * A box of `cells` under a surface `surface` px below the centre of a drop of `radius`, or
+ * anywhere in it without one (null): as large as it fits, up to `pitch`, however small that is,
+ * and centred in the room it has there; its top
  */
-function fitUnder(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+function fitUnder(radius: number, surface: number | null, cells: Cells, pitch: number) {
 	"worklet";
-	let fitted = pitch;
-	if (roomUnder(radius, surface, cols, rows, pitch).spare < 0) {
-		let lo = 0;
-		let hi = pitch;
-		for (let i = 0; i < 30; i++) {
-			const mid = (lo + hi) / 2;
-			if (roomUnder(radius, surface, cols, rows, mid).spare >= 0) lo = mid;
-			else hi = mid;
-		}
-		fitted = lo;
-	}
-	const { top, spare } = roomUnder(radius, surface, cols, rows, fitted);
+	const fits = (p: number) => roomUnder(radius, surface, cells, p).spare >= 0;
+	const fitted = fits(pitch) ? pitch : bisect(0, pitch, fits).lo;
+	const { top, spare } = roomUnder(radius, surface, cells, fitted);
 	return { pitch: fitted, top: top + spare / 2 };
 }
 
 /**
- * The one rule for the tally's size: its dot spacing as a box `cols` by `rows` cells in a drop of
- * `radius` over an amber surface `surface` px below its centre (Infinity: no amber, the whole drop
- * its room), as large as fits, never more than `pitch` nor less than POUR_MIN_PITCH
+ * A box of `cells` over a surface `surface` px below the centre of a drop of `radius`, or
+ * anywhere in it without one (null), as fitUnder: the room over a surface is the room under it,
+ * upside down, so its top is measured up from the drop's centre
  */
-function tallyFit(radius: number, surface: number, cols: number, rows: number, pitch: number) {
+function fitOver(radius: number, surface: number | null, cells: Cells, pitch: number) {
 	"worklet";
-	return Math.max(POUR_MIN_PITCH, fitUnder(radius, -surface, cols, rows, pitch).pitch);
+	return fitUnder(radius, surface === null ? null : -surface, cells, pitch);
 }
 
 /**
- * The tally's dot spacing in a drop of `radius` with no amber in it, by the one rule (see
- * tallyFit), fitted as the score's figure, the widest it gets, so its size follows the drop and
- * never jumps as a digit is added; an empty run's `pitch`, as it has no drop to fit its 0 into
+ * The one rule for the tally's size, as it pours and once settled, with or without a combo
+ * bonus: its dot spacing in a drop of `radius`, over an amber surface `surface` px below its
+ * centre, or in the whole drop without amber (null), as large as fits, never more than its
+ * in-play `pitch` nor less than POUR_MIN_PITCH. It is fitted as the score's figure, the widest
+ * it gets, so its size follows the drop and never jumps as a digit is added. An empty run's is
+ * `pitch`, as it has no drop to fit its 0 into.
  */
-function wholeDropPitch(
+function tallyPitchIn(
 	{ settledDrop, tallyCells, pitch }: Pick<PourPlan, "settledDrop" | "tallyCells" | "pitch">,
 	radius: number,
+	surface: number | null,
 ): number {
 	"worklet";
 	if (settledDrop.tally === 0) return pitch;
-	return tallyFit(radius, Number.POSITIVE_INFINITY, tallyCells.cols, tallyCells.rows, pitch);
+	return Math.max(POUR_MIN_PITCH, fitOver(radius, surface, tallyCells, pitch).pitch);
+}
+
+/** A combo bonus's figure, and the bonus's share of the score */
+interface BonusFigure {
+	figure: MatrixLayout;
+	share: number;
+}
+
+/** The settled drop's figures, laid out once */
+interface Figures {
+	/** The score's figure */
+	tally: MatrixLayout;
+	/** null without a combo bonus */
+	bonus: BonusFigure | null;
 }
 
 /**
- * The settled drop of `score` and `radius`, `bonus` of it amber, its tally's dots `pitch` apart:
- * the amber's level, and each figure inside its own layer, as large as the layer holds up to
- * `pitch`, the bonus under the level and the tally over it. The level sits at the bonus's share
- * of the drop, raised where needed to hold the bonus figure at POUR_MIN_PITCH, and lowered where
- * the tally would come out smaller than the bonus figure, to where the two match: the total
- * never reads as less than its part. A bare bonus figure: the bonus is seen pouring into the
- * tally, so there is no `+` to add. Either figure comes out under POUR_MIN_PITCH in a drop too
- * small to hold it readably, which settledRadius never settles at.
+ * The amber's surface in a settled drop of `radius`, px below its centre, and each figure fitted
+ * inside its own layer, as large as the layer holds up to `pitch`, however small: the bonus
+ * under the surface and the tally over it. The surface sits at the bonus's share of the drop,
+ * raised where needed to hold the bonus figure at POUR_MIN_PITCH, and lowered where the tally
+ * would come out smaller than the bonus figure, to where the two match: the total never reads
+ * as less than its part.
  */
-function settledOf(bonus: number, score: number, radius: number, pitch: number) {
-	const bonusLayout = layoutDotMatrix(String(bonus));
-	const tallyLayout = layoutDotMatrix(String(score));
-	const bonusAt = (surface: number) =>
-		fitUnder(radius, surface, bonusLayout.cols, bonusLayout.rows, pitch);
-	// The tally's room over a surface is the bonus's under it, upside down
-	const tallyAt = (surface: number) =>
-		fitUnder(radius, -surface, tallyLayout.cols, tallyLayout.rows, pitch);
-	const under = lowestSurface(radius, bonusLayout.cols, bonusLayout.rows) ?? -radius;
-	const share = Math.min(levelForShare(bonus / score) * radius, under);
-	let surface = share;
-	if (tallyAt(surface).pitch < bonusAt(surface).pitch) {
-		let lo = surface;
-		let hi = radius;
-		for (let i = 0; i < 30; i++) {
-			const mid = (lo + hi) / 2;
-			if (tallyAt(mid).pitch < bonusAt(mid).pitch) lo = mid;
-			else hi = mid;
-		}
-		surface = hi;
-	}
-	const tally = tallyAt(surface);
-	const lift = -(tally.top + (tallyLayout.rows * tally.pitch) / 2);
-	const fittedBonus = bonusAt(surface);
-	const dots = bonusLayout.dots.map(({ col, row }) => ({
-		x: (col + 0.5 - bonusLayout.cols / 2) * fittedBonus.pitch,
-		y: fittedBonus.top + (row + 0.5) * fittedBonus.pitch,
-	}));
-	return {
-		level: surface / radius,
-		label: { dots, pitch: fittedBonus.pitch },
-		tallyPitch: tally.pitch,
-		lift,
-	};
+function amberOf(
+	tally: MatrixLayout,
+	{ figure, share }: BonusFigure,
+	radius: number,
+	pitch: number,
+) {
+	const bonusAt = (surface: number) => fitUnder(radius, surface, figure, pitch);
+	const tallyAt = (surface: number) => fitOver(radius, surface, tally, pitch);
+	const squeezed = (surface: number) => tallyAt(surface).pitch < bonusAt(surface).pitch;
+	const under = lowestSurface(radius, figure) ?? -radius;
+	const atShare = Math.min(levelForShare(share) * radius, under);
+	const surface = squeezed(atShare) ? bisect(atShare, radius, squeezed).hi : atShare;
+	return { surface, tally: tallyAt(surface), bonus: bonusAt(surface) };
 }
+
+/**
+ * A fit's search stops a hair under the size that just fits (see bisect), so a figure this
+ * close to POUR_MIN_PITCH is held at it (px)
+ */
+const FIT_SLACK = 1e-6;
 
 /**
  * Whether a settled drop of `radius` holds its figures at POUR_MIN_PITCH or more: the tally in
  * the whole drop, or with a combo bonus, the tally over the amber and the bonus figure in it
  */
-function holdsFigures(bonus: number, score: number, radius: number, pitch: number): boolean {
-	// A fit's search lands a hair under the size that just fits
-	const readable = (fitted: number) => fitted >= POUR_MIN_PITCH - 1e-6;
-	if (bonus === 0) {
-		const { cols, rows } = layoutDotMatrix(String(score));
-		return readable(fitUnder(radius, Number.NEGATIVE_INFINITY, cols, rows, pitch).pitch);
-	}
-	const settled = settledOf(bonus, score, radius, pitch);
-	return readable(settled.tallyPitch) && readable(settled.label.pitch);
+function holdsFigures({ tally, bonus }: Figures, radius: number, pitch: number): boolean {
+	const readable = (fit: { pitch: number }) => fit.pitch >= POUR_MIN_PITCH - FIT_SLACK;
+	if (bonus === null) return readable(fitOver(radius, null, tally, pitch));
+	const amber = amberOf(tally, bonus, radius, pitch);
+	return readable(amber.tally) && readable(amber.bonus);
 }
 
 /**
@@ -577,17 +586,31 @@ function holdsFigures(bonus: number, score: number, radius: number, pitch: numbe
  * follows the tally" for tiny scores only, once settled: the catches still land at their worth.
  * An empty run has no figure to hold.
  */
-function settledRadius(bonus: number, score: number, pitch: number): number {
+function settledRadius(figures: Figures, score: number, pitch: number): number {
 	const radius = radiusOf(score);
-	if (score === 0 || holdsFigures(bonus, score, radius, pitch)) return radius;
-	let lo = radius;
-	let hi = POUR_MAX_RADIUS;
-	for (let i = 0; i < 40; i++) {
-		const mid = (lo + hi) / 2;
-		if (holdsFigures(bonus, score, mid, pitch)) hi = mid;
-		else lo = mid;
-	}
-	return hi;
+	if (score === 0 || holdsFigures(figures, radius, pitch)) return radius;
+	return bisect(radius, POUR_MAX_RADIUS, (r) => !holdsFigures(figures, r, pitch)).hi;
+}
+
+/**
+ * The amber layer of a settled drop of `radius` (see amberOf): its surface, its level in radii,
+ * how far the tally over it is lifted, and the bonus figure in it, a bare figure: the bonus is
+ * seen pouring into the tally, so there is no `+` to add.
+ */
+function settledAmber(tally: MatrixLayout, bonus: BonusFigure, radius: number, pitch: number) {
+	const amber = amberOf(tally, bonus, radius, pitch);
+	const { figure } = bonus;
+	const labelPitch = amber.bonus.pitch;
+	const dots = figure.dots.map(({ col, row }) => ({
+		x: (col + 0.5 - figure.cols / 2) * labelPitch,
+		y: amber.bonus.top + (row + 0.5) * labelPitch,
+	}));
+	return {
+		surface: amber.surface,
+		level: amber.surface / radius,
+		lift: -(amber.tally.top + (tally.rows * amber.tally.pitch) / 2),
+		label: { dots, pitch: labelPitch },
+	};
 }
 
 /** Work out a run's pour */
@@ -606,13 +629,16 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 	const poured = drops[drops.length - 1];
 	const bonus = comboBonus(record);
 	const score = poured.tally + bonus;
-	const radius = settledRadius(bonus, score, pitch);
+	const figures: Figures = {
+		tally: layoutDotMatrix(String(score)),
+		bonus: bonus > 0 ? { figure: layoutDotMatrix(String(bonus)), share: bonus / score } : null,
+	};
+	const radius = settledRadius(figures, score, pitch);
 	const settledDrop: PourDrop = { radius, color: poured.color, tally: score };
 	// The drop swells as it settles when the bonus pours in, or to hold its tally readably
 	const swells = bonus > 0 || radius > poured.radius;
-	const amber = bonus > 0 ? settledOf(bonus, score, radius, pitch) : null;
-	const { cols, rows } = layoutDotMatrix(String(score));
-	const tallyCells = { cols, rows };
+	const amber = figures.bonus ? settledAmber(figures.tally, figures.bonus, radius, pitch) : null;
+	const tallyCells = { cols: figures.tally.cols, rows: figures.tally.rows };
 	const { bodies, spots } = bodiesOf(catches, times, drops);
 	const settleMs = endMs + POUR_SETTLE_MS;
 	return {
@@ -636,9 +662,7 @@ export function planPour({ record, color, pitch }: PourInput): PourPlan {
 		restMs: swells ? settleMs + POUR_RISE_MS : settleMs,
 		level: amber?.level ?? 1,
 		pitch,
-		tallyPitch: amber
-			? Math.max(POUR_MIN_PITCH, amber.tallyPitch)
-			: wholeDropPitch({ settledDrop, tallyCells, pitch }, radius),
+		tallyPitch: tallyPitchIn({ settledDrop, tallyCells, pitch }, radius, amber?.surface ?? null),
 		lift: amber?.lift ?? 0,
 		tallyCells,
 		bonusLabel: amber?.label ?? null,
@@ -704,11 +728,13 @@ export function dropAt(plan: PourPlan, ms: number): Pick<PourView, "drop" | "swe
 }
 
 /**
- * The pour at `ms` since the game over appeared, with the landings since `sinceMs`, its tally
- * fitted to the drop drawn at `drawn` px, which may lag the stepper's (see dropAt) as the shell
- * eases it; the stepper's own by default
+ * The pour at `ms` since the game over appeared, with the landings since `sinceMs`. The view's
+ * drop is the stepper's (see dropAt); its tally, though, is fitted to and inked against the drop
+ * as the shell draws it, `drawnRadius` px, which lags the stepper's as the shell eases the
+ * landings' jumps, so figure and vessel move together on screen. The stepper's own radius by
+ * default, for a caller that draws the drop as the stepper has it.
  */
-export function pourAt(plan: PourPlan, ms: number, sinceMs = ms, drawn?: number): PourView {
+export function pourAt(plan: PourPlan, ms: number, sinceMs = ms, drawnRadius?: number): PourView {
 	"worklet";
 	const landings: PourLanding[] = [];
 	const sounds: PourSound[] = [];
@@ -741,9 +767,9 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms, drawn?: number)
 		sounds.push({ pitch: top, point: false });
 	}
 	const { drop, swell } = dropAt(plan, ms);
-	const radius = drawn ?? drop.radius;
+	const radius = drawnRadius ?? drop.radius;
 	// The tally's size follows the drop as drawn, by the one rule
-	let tallyPitch = wholeDropPitch(plan, radius);
+	let tallyPitch = tallyPitchIn(plan, radius, null);
 	let digits = plan.digits[landedBy(plan, ms)];
 	let amberLevel: number | null = null;
 	let lift = 0;
@@ -755,7 +781,7 @@ export function pourAt(plan: PourPlan, ms: number, sinceMs = ms, drawn?: number)
 		const poured = plan.drops[plan.drops.length - 1];
 		digits = plan.counts[Math.round(risen * (plan.counts.length - 1))].digits;
 		lift = plan.lift * risen;
-		const from = wholeDropPitch(plan, poured.radius);
+		const from = tallyPitchIn(plan, poured.radius, null);
 		tallyPitch = from + (plan.tallyPitch - from) * risen;
 		// Never up into the tally: the amber waits under it until the lift and the swell make
 		// room, so the tally's ink never stands in amber
