@@ -17,6 +17,7 @@ import {
 	advanceBursts,
 	BURST_COLORS,
 	BURST_LIFETIME_MS,
+	BURSTS,
 	type Burst,
 	burstColor,
 	burstSprites,
@@ -285,6 +286,19 @@ describe("burstColor", () => {
 
 describe("the burst list", () => {
 	const ring = (id: number) => ringBurst(id, 0, 0, 0);
+
+	// Vitest runs this file's worklets as the app ships them (vitest.config.mts), where a worklet
+	// function is made where it stands: a reducer table above its reducers would hold nothing
+	it("is worklet-compiled, as the app ships it", () => {
+		expect(withBurst).toHaveProperty("__workletHash");
+	});
+
+	it("adds a burst through the lane's reducers", () => {
+		const list = BURSTS.add([ring(0)], ring(1));
+		expect(list.map((b) => b.id)).toEqual([0, 1]);
+		expect(BURSTS.advance(list, 500)).toBe(list);
+		expect(BURSTS.idle(list, 500)).toBe(false);
+	});
 
 	it("adds a burst at the end, without changing the list it was given", () => {
 		const list = [ring(0)];
