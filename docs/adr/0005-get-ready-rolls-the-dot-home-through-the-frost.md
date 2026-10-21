@@ -1,5 +1,7 @@
 # Get ready rolls the dot home through a window in the frost
 
+_Amended by ADR 0008: Get ready now opens from a finger held on the frost rather than the play dot, its window runs from the finger to the seat, and it stays open only while the finger is down. The frost window described here became the frost edge._
+
 Get ready (ADR 0004) used to lift the pause's frost and draw a hollow outline of the player dot that slid with the tilt, with a ring around the dot contracting as the hold filled. It worked, but it was a cursor and a progress ring: nothing in it belonged to the game's language of liquid dots, frost, pulses and catches, and the unfrosted field looked as if play had already begun.
 
 Now the frost stays. The seat, where the player dot froze, is the one clear window in it, its rim pulsing in the player's colour on the point dot's rhythm, which already means "come here" in play. A solid copy of the dot rolls off the seat with the tilt, carried by a lightly underdamped spring so it has some weight. Rolling it home and holding level thaws the frost outward from the seat; the rim fades as the thaw passes the walls, and play resumes the instant the field is clear. The hold rules (arming delay, level zone, hold time, faster drain) are unchanged.

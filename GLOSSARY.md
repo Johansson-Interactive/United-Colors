@@ -54,17 +54,29 @@ _Avoid_: combo points, multiplier bonus
 How long a run lasted, counting only time the game was being played: not paused, and not the refusal that ends it. Shown as `M:SS`, rounded down.
 _Avoid_: duration, survival time
 
+**Bloom**:
+How a run pauses: a finger held on the field, anywhere clear of a button, freezes the run at once and frosts the field from under the finger outward, the frost's edge wearing the rim. It covers the field in about half a second and the pause opens; a finger lifted before then drains the frost back into the fingertip, faster than it grew, and play goes on from the frozen frame. The bloom is the Get ready window run the other way. In code it is `frostBloom.ts`, screen `frosting`.
+_Avoid_: long press, hold to pause, pause gesture
+
+**Frost edge**:
+The circle where the frost stops, with one side frosted and the other clear, and the rim on it: frosted inside for the bloom, clear inside for Get ready's cup. Both grow through the same ease, and the rim fades the same way once the edge is past sixty percent of the way to the walls. In code it is `FrostEdge` in `frost.ts`, drawn by the game canvas.
+_Avoid_: mask, clip, cutout
+
+**Rim**:
+The thin line in the player's colour, over a soft glow, on the frost edge: pulsing like a point dot while the Get ready dot is away from the seat, steady once it is home, and in full while the bloom grows. In code it is `FrostRim`.
+_Avoid_: ring, progress ring, loading circle
+
 **Get ready**:
-The step between the pause and play, entered from the play dot: the field stays frosted, the seat is the one clear window in the frost, and a solid copy of the player dot rolls off the seat with the tilt. The player rolls it home and holds their level pose; the window thaws outward from the seat, and play resumes the instant the whole field is clear. The game stays paused throughout. On a device without tilt, the play dot resumes play directly.
+The step between the pause and play, held open by a finger on the frost: the field stays frosted, the cup opens in it at the seat, and a solid copy of the player dot rolls around inside the cup with the tilt. The player rolls it home and holds their level pose; the frost thaws outward from the cup, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the cup and the pause screen comes back. The game stays paused throughout. On a device without tilt, a finger on the frost resumes play directly.
 _Avoid_: calibrate, level gate, resume screen
 
 **Seat**:
 Where the player dot froze when the run paused, shown in Get ready as the dot's dimple under the clear window. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
 _Avoid_: socket, target, home position
 
-**Window**:
-The circle of the frosted field left sharp and full colour in Get ready. It rests a little clear of the seat, its rim pulsing in the player's colour like a point dot while the dot is away, and thaws outward with the hold until the field is clear.
-_Avoid_: hole, spotlight, clearing
+**Cup**:
+The title's bowl, opened in the frost at the seat in Get ready: a circle of the field left sharp and full colour, the bowl's size, with the bowl's glass drawn over it, which the rolling copy of the player dot cannot leave. Its rim pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The thaw grows the clear circle outward from the cup with the hold until the field is clear, and the cup shuts if the finger lifts first.
+_Avoid_: window, hole, spotlight, bowl (that is the title's and the settle screen's)
 
 **Run record**:
 What a run did, as the game keeps it for its game over: its catches in order (each with the tick it landed on, what it paid, its combo step, its colour and whether it was a point dot) and its run time. It is never stored, and it is not the personal best.
@@ -100,8 +112,8 @@ _Avoid_: menu, home, start screen
 The attract-mode game that plays itself behind the title screen. It halts and fades while a view opens over the title.
 
 **Pause**:
-The screen over a paused run, the frozen field frosted under it: the score, in the player's colour, and the run time stand in its middle; the play dot opens Get ready, QUIT ends the run, and the corner menus hold the settings and the sound. Nothing in the field moves. In code it is `PauseOverlay`.
-_Avoid_: pause menu
+The screen over a paused run, the frozen field frosted under it: the score, in the player's colour, and the run time stand in its middle; QUIT ends the run, and the corner menus hold the settings and the sound. The frost itself is the way back: a finger held on it, clear of the buttons, opens Get ready. There is no play dot, and no pause dot in play: the field is both (see Bloom). Nothing in the field moves. In code it is `PauseOverlay`.
+_Avoid_: pause menu, pause button, play button
 
 **Sink and rise**:
 How the score moves between play and the pause: as the pause opens it sinks from the top into the middle and swells, and the run time follows it in; as Get ready opens it rises back to the top, where it waits dimmed until play resumes, while the run time fades where it stands. Silent, and never seen with any other screen: elsewhere the score and time fade with the pause.
