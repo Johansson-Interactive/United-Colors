@@ -1,12 +1,9 @@
 import type React from "react";
 import { CORNER_INSET, WHITE } from "../theme/theme";
+import { useCornerMenus } from "./CornerMenusProvider";
 import { DotMenu } from "./DotMenu";
 
 interface SoundMenuProps {
-	soundEnabled: boolean;
-	musicEnabled: boolean;
-	onToggleSound: () => void;
-	onToggleMusic: () => void;
 	/** Glyph colour while a switch is on */
 	color?: string;
 }
@@ -15,13 +12,8 @@ interface SoundMenuProps {
  * The sound corner (bottom right): the sound dot opens into two smaller dots, one for the
  * music and one for the effects, each toggled with a tap
  */
-export const SoundMenu: React.FC<SoundMenuProps> = ({
-	soundEnabled,
-	musicEnabled,
-	onToggleSound,
-	onToggleMusic,
-	color = WHITE,
-}) => {
+export const SoundMenu: React.FC<SoundMenuProps> = ({ color = WHITE }) => {
+	const { soundEnabled, musicEnabled, toggleSound, toggleMusic } = useCornerMenus();
 	const anyOn = soundEnabled || musicEnabled;
 	return (
 		<DotMenu
@@ -36,14 +28,14 @@ export const SoundMenu: React.FC<SoundMenuProps> = ({
 					key: "music",
 					icon: "music",
 					on: musicEnabled,
-					onPress: onToggleMusic,
+					onPress: toggleMusic,
 					label: musicEnabled ? "Turn music off" : "Turn music on",
 				},
 				{
 					key: "effects",
 					icon: "effects",
 					on: soundEnabled,
-					onPress: onToggleSound,
+					onPress: toggleSound,
 					label: soundEnabled ? "Turn sound effects off" : "Turn sound effects on",
 				},
 			]}

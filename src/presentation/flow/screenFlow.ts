@@ -17,6 +17,12 @@ import { INK_LIFT } from "../theme/theme";
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
 type SettleFrom = "start" | "pause" | "menu";
 
+/**
+ * Where the level bowl or the speed view was opened from: the title's menu, with the colour the
+ * play dot showed at the tap, or the pause, whose views open in the player's colour
+ */
+export type MenuOpening = { from: "menu"; color: string } | { from: "pause" };
+
 /** The settle bowl is open: where play continues afterwards, and the colour of its dot */
 interface SettleRequest {
 	from: SettleFrom;
@@ -28,7 +34,7 @@ interface SettleRequest {
  * dot in the colour play takes; or, over the pause, Get ready, where the player holds level
  * until play resumes
  */
-type Over = { kind: "speed"; from: "menu" | "pause"; color: string } | { kind: "getReady" };
+type Over = { kind: "speed"; from: MenuOpening["from"]; color: string } | { kind: "getReady" };
 
 export interface FlowState {
 	/** The game's phase, as the session last reported it */
@@ -85,14 +91,12 @@ export type FlowEvent =
 	 */
 	| { type: "autoStarted"; color: string; at: PressPoint }
 	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
-	| { type: "levelPressed"; from: "menu"; color: string }
-	| { type: "levelPressed"; from: "pause" }
+	| ({ type: "levelPressed" } & MenuOpening)
 	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
 	| { type: "settled"; zero: TiltZero; facingDown: boolean; at: PressPoint }
 	| { type: "settleBacked" }
 	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
-	| { type: "speedPressed"; from: "menu"; color: string }
-	| { type: "speedPressed"; from: "pause" }
+	| ({ type: "speedPressed" } & MenuOpening)
 	/** BACK on the speed view */
 	| { type: "speedBacked" }
 	/** RETRY on the game over; the next run keeps the player's colour */

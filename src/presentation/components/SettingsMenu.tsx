@@ -1,15 +1,16 @@
 import type React from "react";
+import type { MenuOpening } from "../flow/screenFlow";
 import { CORNER_INSET, WHITE } from "../theme/theme";
 import { sensitivityChoice } from "../tilt/sensitivity";
+import { useCornerMenus } from "./CornerMenusProvider";
 import { DotMenu } from "./DotMenu";
 
 interface SettingsMenuProps {
-	/** Tilt sensitivity, a multiple of the default speed; the speed dot shows it */
-	sensitivity: number;
-	/** Open the settle bowl to set the level pose */
-	onLevel: () => void;
-	/** Open the speed view to choose how fast the dot moves */
-	onSpeed: () => void;
+	/**
+	 * Called at the tap: returns where the tap came from and, on the title, the colour the play
+	 * dot shows then, which the level bowl or the speed view opens in
+	 */
+	openingAt: () => MenuOpening;
 	/** Glyph colour of the level dot, the colour its bowl will open in */
 	levelColor?: string;
 	/** Glyph colour of the settings and speed dots */
@@ -21,12 +22,11 @@ interface SettingsMenuProps {
  * the level dot, nearest it, and the speed dot above, each opening its own view
  */
 export const SettingsMenu: React.FC<SettingsMenuProps> = ({
-	sensitivity,
-	onLevel,
-	onSpeed,
+	openingAt,
 	levelColor,
 	color = WHITE,
 }) => {
+	const { sensitivity, openLevel, openSpeed } = useCornerMenus();
 	const speed = sensitivityChoice(sensitivity);
 	return (
 		<DotMenu
@@ -39,14 +39,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 				{
 					key: "speed",
 					icon: `speed-${speed.key}`,
-					onPress: onSpeed,
+					onPress: () => openSpeed(openingAt()),
 					label: `Tilt speed, ${speed.label.toLowerCase()}`,
 				},
 				{
 					key: "level",
 					icon: "level",
 					color: levelColor,
-					onPress: onLevel,
+					onPress: () => openLevel(openingAt()),
 					label: "Set level pose",
 				},
 			]}

@@ -6,25 +6,19 @@ import { DotMatrixText } from "../components/DotMatrixText";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
 import { SINK_MS } from "../effects/scoreSink";
+import type { MenuOpening } from "../flow/screenFlow";
 import { WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
 	/** Player dot colour at the moment of pausing; the level pose button wears it */
 	color: string;
 	onQuit: (point: PressPoint) => void;
-	/** Open the settle bowl to set the level pose again */
-	onCalibrate: () => void;
-	soundEnabled: boolean;
-	musicEnabled: boolean;
-	onToggleSound: () => void;
-	onToggleMusic: () => void;
-	/** Tilt sensitivity, a multiple of the default speed; the speed dot shows it */
-	sensitivity: number;
-	/** Open the speed view to choose how fast the dot moves */
-	onSpeed: () => void;
 	/** Extra content below the controls (e.g. dev tools) */
 	children?: React.ReactNode;
 }
+
+/** The pause's level bowl and speed view open in the player's colour, which the flow knows */
+const fromPause = (): MenuOpening => ({ from: "pause" });
 
 /** PAUSED waits until the sinking score has cleared its band at the top (ms) */
 const CAPTION_DELAY_MS = SINK_MS * 0.6;
@@ -35,18 +29,7 @@ const CAPTION_DELAY_MS = SINK_MS * 0.6;
  * dot, a play dot here, carries on through Get ready. The corners hold the settings (level
  * pose and tilt speed) and the sound.
  */
-export const PauseOverlay: React.FC<PauseOverlayProps> = ({
-	color,
-	onQuit,
-	onCalibrate,
-	soundEnabled,
-	musicEnabled,
-	onToggleSound,
-	onToggleMusic,
-	sensitivity,
-	onSpeed,
-	children,
-}) => {
+export const PauseOverlay: React.FC<PauseOverlayProps> = ({ color, onQuit, children }) => {
 	return (
 		<Animated.View
 			style={styles.container}
@@ -74,19 +57,9 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				{children ? <View style={styles.extra}>{children}</View> : null}
 			</View>
 
-			<SettingsMenu
-				sensitivity={sensitivity}
-				onLevel={onCalibrate}
-				onSpeed={onSpeed}
-				levelColor={color}
-			/>
+			<SettingsMenu openingAt={fromPause} levelColor={color} />
 
-			<SoundMenu
-				soundEnabled={soundEnabled}
-				musicEnabled={musicEnabled}
-				onToggleSound={onToggleSound}
-				onToggleMusic={onToggleMusic}
-			/>
+			<SoundMenu />
 		</Animated.View>
 	);
 };

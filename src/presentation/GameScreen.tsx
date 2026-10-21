@@ -17,11 +17,12 @@ import { bindAppLeave } from "../application/useCases/BindAppLeave";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
+import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { cornerDot } from "./flow/screenFlow";
+import { cornerDot, type MenuOpening } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -30,7 +31,6 @@ import { useGameBindings } from "./hooks/useGameBindings";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
-import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { useStageLook } from "./hooks/useStageLook";
 import { StageFrame } from "./layout/StageFrame";
@@ -82,8 +82,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Phase only: the HUD and the game over read their own score, dots never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
 	const highScore = useStore(store, (s) => s.highScore);
-	const soundEnabled = useStore(store, (s) => s.settings.soundEnabled);
-	const musicEnabled = useStore(store, (s) => s.settings.musicEnabled);
 	const playerColor = useStore(store, playerColorOf);
 	const flood = useFlood();
 	const scene = useSessionScene(session);
@@ -174,12 +172,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		(at: PressPoint, color: string) => dispatch({ type: "startPressed", color, at }),
 		[dispatch],
 	);
-	const handleCalibratePress = useCallback(
-		() => dispatch({ type: "levelPressed", from: "pause" }),
-		[dispatch],
-	);
-	const handleMenuCalibratePress = useCallback(
-		(color: string) => dispatch({ type: "levelPressed", from: "menu", color }),
+	const handleLevelPress = useCallback(
+		(opening: MenuOpening) => dispatch({ type: "levelPressed", ...opening }),
 		[dispatch],
 	);
 	const handleSettled = useCallback(
@@ -195,11 +189,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		dispatch({ type: "readyHeld" });
 	}, [handleSnap, dispatch]);
 	const handleSpeedPress = useCallback(
-		() => dispatch({ type: "speedPressed", from: "pause" }),
-		[dispatch],
-	);
-	const handleMenuSpeedPress = useCallback(
-		(color: string) => dispatch({ type: "speedPressed", from: "menu", color }),
+		(opening: MenuOpening) => dispatch({ type: "speedPressed", ...opening }),
 		[dispatch],
 	);
 	const handleSpeedBack = useCallback(() => dispatch({ type: "speedBacked" }), [dispatch]);
@@ -212,7 +202,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[dispatch],
 	);
 
-	const { handleToggleSound, handleToggleMusic } = useSoundToggles(store, storage);
 	const { sensitivity, setSensitivity } = useSensitivitySetting(store, storage, session);
 
 	// Everything lives in the stage frame, clear of the top inset (notch / Dynamic Island) and
@@ -247,34 +236,27 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
-						{screen.kind === "title" && (
-							<KioskOverlay
-								highScore={highScore}
-								soundEnabled={soundEnabled}
-								musicEnabled={musicEnabled}
-								onStart={handleStartPress}
-								onCalibrate={handleMenuCalibratePress}
-								onToggleSound={handleToggleSound}
-								onToggleMusic={handleToggleMusic}
-								sensitivity={sensitivity}
-								onSpeed={handleMenuSpeedPress}
-								versionTag={versionTag}
-							/>
-						)}
+						{/* The title's and the pause's corner menus read and change their settings here */}
+						<CornerMenusProvider
+							store={store}
+							storage={storage}
+							sensitivity={sensitivity}
+							onLevel={handleLevelPress}
+							onSpeed={handleSpeedPress}
+						>
+							{screen.kind === "title" && (
+								<KioskOverlay
+									highScore={highScore}
+									onStart={handleStartPress}
+									sensitivity={sensitivity}
+									versionTag={versionTag}
+								/>
+							)}
 
-						{screen.kind === "pause" && (
-							<PauseOverlay
-								color={playerColor}
-								onQuit={handleLeavePress}
-								onCalibrate={handleCalibratePress}
-								soundEnabled={soundEnabled}
-								musicEnabled={musicEnabled}
-								onToggleSound={handleToggleSound}
-								onToggleMusic={handleToggleMusic}
-								sensitivity={sensitivity}
-								onSpeed={handleSpeedPress}
-							/>
-						)}
+							{screen.kind === "pause" && (
+								<PauseOverlay color={playerColor} onQuit={handleLeavePress} />
+							)}
+						</CornerMenusProvider>
 
 						{screen.kind === "speed" && (
 							<SpeedOverlay
