@@ -47,3 +47,6 @@ scripts/__pycache__/
 
 # Agent worktrees (full repo copies; keep them out of every check)
 .claude/worktrees/
+
+# Machine paths for the Android bench build
+scripts/android.env

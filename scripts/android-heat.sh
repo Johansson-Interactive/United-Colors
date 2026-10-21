@@ -2,7 +2,7 @@
 # Measure sustained play: the bench run for five minutes, with the phone's temperatures before
 # and after, then a 15 s trace. Start each run from the same temperatures, or the comparison
 # says nothing; with --cool it waits until every CPU is at or below 34 °C and the skin at or
-# below 33 °C, so the phone should be locked while it waits.
+# below 33 °C, then waits for the phone to be unlocked (it may lock while it cools).
 #
 # Usage (from the repo root, phone unlocked, a bench build installed):
 #
@@ -11,11 +11,12 @@
 # The temperatures come from "Current temperatures from HAL" in dumpsys thermalservice; the
 # block above it, "Cached temperatures", only changes when a threshold is crossed and can be
 # minutes old. The app is stopped at the end, because a bench build keeps drawing behind the
-# lock screen and would heat the phone through a cool-down.
+# lock screen and would heat the phone through a cool-down. Like android-bench.sh, it stops if
+# the phone locks or the app dies during play.
 set -euo pipefail
 
-PACKAGE=com.johanssoninteractive.tiltling
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/android-phone.sh"
 COOL=0
 if [ "${1:-}" = "--cool" ]; then
 	COOL=1
@@ -44,22 +45,24 @@ if [ "$COOL" = 1 ]; then
 		[ "$(echo "$CPU <= 34 && $SKIN <= 33" | bc)" = 1 ] && break
 		sleep 60
 	done
-	echo "cool enough: unlock the phone, starting in 15 s"
-	sleep 15
+	echo "cool enough"
+	wait_unlocked
 fi
+phone_ready
 
 echo "before:"
 temps
 adb shell am force-stop "$PACKAGE"
 adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 echo "playing (${PLAY_S} s)..."
-sleep "$PLAY_S"
+measure_for "$PLAY_S"
 echo "after:"
 temps
 "$ROOT/scripts/android-perf-trace.sh" "$LABEL" 15 | grep -E '^(thermal|trace):'
+still_measuring
 adb shell am force-stop "$PACKAGE"
 
-TP=${TRACE_PROCESSOR:-$(command -v trace_processor || true)}
+TP=$(find_trace_processor)
 if [ -z "$TP" ]; then
 	echo "trace_processor not found; open the trace at https://ui.perfetto.dev" >&2
 	exit 0
