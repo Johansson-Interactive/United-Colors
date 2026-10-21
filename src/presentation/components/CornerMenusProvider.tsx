@@ -3,13 +3,8 @@ import { createContext, use, useMemo } from "react";
 import { useStore } from "zustand";
 import type { GameStore } from "../../application/GameStore";
 import type { StoragePort } from "../../application/ports";
+import type { MenuOpening } from "../flow/screenFlow";
 import { useSoundToggles } from "../hooks/useSoundToggles";
-
-/**
- * Where a corner menu opened the level bowl or the speed view from: the title, with the colour
- * the play dot showed at the tap, or the pause, whose views open in the player's colour
- */
-export type MenuOpening = { from: "menu"; color: string } | { from: "pause" };
 
 /**
  * What the title's and the pause's corner menus show and do: the sound settings with their

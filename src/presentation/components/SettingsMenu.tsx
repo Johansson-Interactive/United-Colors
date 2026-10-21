@@ -1,7 +1,8 @@
 import type React from "react";
+import type { MenuOpening } from "../flow/screenFlow";
 import { CORNER_INSET, WHITE } from "../theme/theme";
 import { sensitivityChoice } from "../tilt/sensitivity";
-import { type MenuOpening, useCornerMenus } from "./CornerMenusProvider";
+import { useCornerMenus } from "./CornerMenusProvider";
 import { DotMenu } from "./DotMenu";
 
 interface SettingsMenuProps {

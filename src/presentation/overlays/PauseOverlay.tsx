@@ -1,12 +1,12 @@
 import type React from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
-import type { MenuOpening } from "../components/CornerMenusProvider";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
 import { SINK_MS } from "../effects/scoreSink";
+import type { MenuOpening } from "../flow/screenFlow";
 import { WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
