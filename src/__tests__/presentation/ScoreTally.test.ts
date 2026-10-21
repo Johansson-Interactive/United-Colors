@@ -15,8 +15,8 @@ import {
 	newCatch,
 	packTally,
 	packTallySprites,
+	SCORE_METER_CY,
 	SCORE_METER_HEIGHT,
-	SCORE_PAD,
 	SCORE_PITCH,
 	shownScore,
 	type Tally,
@@ -201,7 +201,7 @@ describe("packing the total", () => {
 
 	it("keeps the total's glow inside the meter at the peak of its hard bump", () => {
 		// The total as the meter centres it, a catch's last point just landed, the next one queued
-		const geometry = { cx: 200, cy: SCORE_PAD + SCORE_PITCH * 3.5 };
+		const geometry = { cx: 200, cy: SCORE_METER_CY };
 		let tally = advanceTally(tallyWith(0, [[1]], 1000), 5000);
 		tally = advanceTally(withCatch(tally, newCatch(1, 9, PINK)), tally.lastLand + 70);
 		const out = tallyFrame();

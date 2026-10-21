@@ -17,9 +17,8 @@ import {
 	advanceTally,
 	createTally,
 	newCatch,
+	SCORE_METER_CY,
 	SCORE_METER_HEIGHT,
-	SCORE_PAD,
-	SCORE_PITCH,
 	type Tally,
 	tallyIdle,
 	withCatch,
@@ -47,7 +46,7 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	// callback's worklet factory as a call that may change the shared values
 	"use no memo";
 	const { width } = useStageBox();
-	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_PAD + SCORE_PITCH * 3.5 }), [width]);
+	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_METER_CY }), [width]);
 	const scoreColor = useMemo(() => Skia.Color(color), [color]);
 
 	const tally = useSharedValue<Tally>(createTally(store.getState().frame.score));

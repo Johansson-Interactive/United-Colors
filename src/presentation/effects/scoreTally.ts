@@ -39,9 +39,16 @@ export const SCORE_PITCH = 7;
 const SCORE_DOT_SCALE = 0.38;
 /** The meter's offset below the stage's top (px), and the room it keeps above the total for its glow and its bump */
 export const SCORE_TOP = 10;
-export const SCORE_PAD = 10;
+const SCORE_PAD = 10;
+/** The total's centre line below the meter's top (px) */
+export const SCORE_METER_CY = SCORE_PAD + (SCORE_PITCH * 7) / 2;
+/**
+ * The meter's height: the total with SCORE_PAD above and below it, room enough for its glow at
+ * the peak of its bump; the feed's ribbon and its points in the air stay within the total's rows
+ */
+export const SCORE_METER_HEIGHT = 2 * SCORE_METER_CY;
 /** The total's centre line below the stage's top (px), where the paused score returns to */
-export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_PAD + (SCORE_PITCH * 7) / 2;
+export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_METER_CY;
 /** The feed's ribbon: its dot spacing, how many rows, its gap from the total, its dot radius */
 export const FEED_PITCH = 5;
 export const FEED_ROWS = 3;
@@ -68,11 +75,6 @@ const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
 const GLYPH_ROWS = 7;
 const GLYPH_COLS = 5;
 const DIGIT_CELLS = GLYPH_COLS + 1;
-/**
- * The meter's height: the total with SCORE_PAD above and below it, room enough for its glow at
- * the peak of its bump; the feed's ribbon and its points in the air stay within the total's rows
- */
-export const SCORE_METER_HEIGHT = 2 * SCORE_PAD + GLYPH_ROWS * SCORE_PITCH;
 
 /** Each digit's dots as (col, row) pairs within its 5x7 cell */
 const DIGIT_DOTS: readonly (readonly number[])[] = "0123456789".split("").map((digit) => {
