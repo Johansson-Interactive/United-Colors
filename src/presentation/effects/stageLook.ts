@@ -28,8 +28,8 @@ export interface StagePlace {
 	playerColor: string;
 }
 
-/** How a value gets to its target: at once, or over `duration` ms after `delay` ms */
-type StageTransition = { kind: "instant" } | { kind: "timed"; duration: number; delay: number };
+/** How a value gets to its target: at once, or over `duration` ms, after `delay` ms if given */
+type StageTransition = { kind: "instant" } | { kind: "timed"; duration: number; delay?: number };
 
 /** A value the stage moves to, and how */
 export interface StageMove<T> {
@@ -50,17 +50,17 @@ export interface StageLook {
 }
 
 /** The field frosts over as the pause opens */
-const FROST_ON: StageTransition = { kind: "timed", duration: 450, delay: 0 };
+const FROST_ON: StageTransition = { kind: "timed", duration: 450 };
 /** How far the field dims for the game over, and how: a moment after the run ends, slowly */
 const GAME_OVER_FROST = 0.6;
 const GAME_OVER_DIM: StageTransition = { kind: "timed", duration: 700, delay: 350 };
 /** The field clears quickly as play starts or resumes */
-const CLEAR: StageTransition = { kind: "timed", duration: 300, delay: 0 };
+const CLEAR: StageTransition = { kind: "timed", duration: 300 };
 const INSTANT: StageTransition = { kind: "instant" };
 /** The stage fades out as the bowl or the speed view opens over the title */
-const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300, delay: 0 };
+const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300 };
 /** And back in, a little slower, as it closes to the title */
-const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400, delay: 0 };
+const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400 };
 
 export function stageLook({ screen, phase, playerColor }: StagePlace): StageLook {
 	const frost = frostOf(phase);

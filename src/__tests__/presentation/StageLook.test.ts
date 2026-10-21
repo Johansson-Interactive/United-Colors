@@ -14,7 +14,7 @@ describe("the stage look", () => {
 
 	it("frosts the field over the pause in 450 ms, all over, with no window left from an earlier Get ready", () => {
 		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED", playerColor: PINK });
-		expect(look.frost).toEqual({ to: 1, over: { kind: "timed", duration: 450, delay: 0 } });
+		expect(look.frost).toEqual({ to: 1, over: { kind: "timed", duration: 450 } });
 		expect(look.shutWindow).toBe(true);
 	});
 
@@ -45,7 +45,7 @@ describe("the stage look", () => {
 
 	it("clears the field in 300 ms as play starts or resumes, with the edges in the player's colour", () => {
 		const look = stageLook({ screen: { kind: "hud" }, phase: "RUNNING", playerColor: PINK });
-		expect(look.frost).toEqual({ to: 0, over: { kind: "timed", duration: 300, delay: 0 } });
+		expect(look.frost).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
 		expect(look.accent).toEqual({ to: PINK, over: { kind: "instant" } });
 		expect(look.shutWindow).toBe(false);
 	});
@@ -56,13 +56,13 @@ describe("the stage look", () => {
 			{ kind: "speed", color: PINK },
 		] as const) {
 			const look = stageLook({ screen, phase: "KIOSK", playerColor: PINK });
-			expect(look.opacity).toEqual({ to: 0, over: { kind: "timed", duration: 300, delay: 0 } });
+			expect(look.opacity).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
 		}
 	});
 
 	it("fades the stage back in over 400 ms as the bowl or the speed view closes to the title", () => {
 		const look = stageLook({ screen: { kind: "title" }, phase: "KIOSK", playerColor: PINK });
-		expect(look.opacity).toEqual({ to: 1, over: { kind: "timed", duration: 400, delay: 0 } });
+		expect(look.opacity).toEqual({ to: 1, over: { kind: "timed", duration: 400 } });
 	});
 
 	it("shows the stage at once as a run started from the bowl comes out from under its flood", () => {
