@@ -4,6 +4,7 @@ import { GLYPH_ROWS } from "../../presentation/dotmatrix/glyphs";
 import { layoutDotMatrix } from "../../presentation/dotmatrix/layout";
 import {
 	POUR_COUNT_TICKS,
+	POUR_DOT_RADIUS,
 	POUR_FADE_MS,
 	POUR_FALL_MS,
 	POUR_FULL_SPAN_S,
@@ -743,6 +744,17 @@ describe("the bonus pour and its amber layer", () => {
 		expect(labelOf(view).pitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH - 1e-6);
 		expectInTopPart(view);
 		expectInAmber(view);
+	});
+
+	it("lands a small combo's last catch at what the catches were worth, unswelled by the minimum", () => {
+		// A combo of three alone: its catches are worth 3 on their own, the bonus of 6 pours in later
+		const p = plan(comboRun(3, 0));
+		const landed = pourAt(p, p.settleMs - 1).drop;
+		expect(landed.tally).toBe(3);
+		expect(landed.radius).toBeCloseTo(POUR_DOT_RADIUS * Math.sqrt(3));
+		expect(p.drops.at(-1)?.radius).toBe(landed.radius);
+		// Only the settled drop is enlarged to hold its figures
+		expect(p.settledDrop.radius).toBeGreaterThan(POUR_DOT_RADIUS * Math.sqrt(9));
 	});
 
 	it("lifts the tally with the amber as it rises, holding the amber under it until there is room", () => {
