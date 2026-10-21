@@ -360,6 +360,25 @@ describe("screen flow", () => {
 		expect(step.screen).toEqual({ kind: "settle", color: BLUE });
 		expect(stepFlow(step.state, { type: "settleBacked" }).screen).toEqual({ kind: "title" });
 	});
+
+	it("the stage's first layout starts the kiosk, and later layouts do nothing", () => {
+		const first = stepFlow(INITIAL_FLOW, { type: "stageLaidOut" });
+		expect(first.act).toEqual({ kind: "kiosk" });
+		expect(first.state).toEqual({ ...INITIAL_FLOW, kioskStarted: true });
+		expect(stepFlow(first.state, { type: "stageLaidOut" })).toEqual(rests(first.state));
+	});
+
+	it("the first layout still starts the kiosk while a flood runs", () => {
+		const flooding = stepFlow(INITIAL_FLOW, { type: "retryPressed", color: BLUE, at: AT }).state;
+		expect(stepFlow(flooding, { type: "stageLaidOut" }).act).toEqual({ kind: "kiosk" });
+	});
+
+	it("covering a flood keeps the kiosk marked as started", () => {
+		const started = stepFlow(INITIAL_FLOW, { type: "stageLaidOut" }).state;
+		const covered = stepFlow(started, { type: "covered" }).state;
+		expect(covered.kioskStarted).toBe(true);
+		expect(stepFlow(covered, { type: "stageLaidOut" }).act).toBeUndefined();
+	});
 });
 
 describe("which screen shows", () => {
@@ -435,6 +454,7 @@ describe("which screen shows", () => {
 						settle: from ? { from, color: PINK } : null,
 						over,
 						flooding,
+						kioskStarted: false,
 					};
 					const expected = EXPECTED[phase][from ?? "none"][i];
 					const overName = over
