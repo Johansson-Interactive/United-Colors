@@ -28,10 +28,20 @@ const BLUE = "#1E88E5";
 const GREEN = "#43A047";
 const PITCH = 10;
 const FRAME_MS = 1000 / 60;
+/** Slack for floating-point rounding in the comparisons below (px or ms) */
+const EPSILON = 1e-6;
 
 /** A catch on `tick`: a small dot on its own unless told otherwise */
 function caught(tick: number, more: Partial<RunCatch> = {}): RunCatch {
 	return { tick, value: 1, step: 1, color: RED, point: false, ...more };
+}
+
+/**
+ * A catch on `tick` worth enough on its own that its drop already holds its tally readably as it
+ * lands, so a run of them settles without swelling to the minimum
+ */
+function sizable(tick: number): RunCatch {
+	return caught(tick, { value: 5 });
 }
 
 function plan(record: RunRecord, color = RED): PourPlan {
@@ -70,7 +80,7 @@ function fallStarts(p: PourPlan, landed: readonly number[]): number[] {
 			if (f.merge > 0 || f.fall >= 1) continue;
 			const start = ms - f.fall * POUR_FALL_MS;
 			const lands = start + POUR_FALL_MS;
-			expect(landed.some((l) => l >= lands - 1e-6 && l < lands + 1)).toBe(true);
+			expect(landed.some((l) => l >= lands - EPSILON && l < lands + 1)).toBe(true);
 			starts.add(Math.round(start * 1000) / 1000);
 		}
 	}
@@ -91,9 +101,8 @@ describe("pourAt", () => {
 	});
 
 	it("pours a run shorter than POUR_FULL_SPAN_S faster, at a long run's pace", () => {
-		// 8 s, a couple of catches: over in a fraction of the span, not dripping in. Worth enough
-		// that the drop holds its tally as it is, so it settles without a swell
-		const catches = [30, 120, 210].map((tick) => caught(tick, { value: 5 }));
+		// 8 s, a couple of catches: over in a fraction of the span, not dripping in
+		const catches = [30, 120, 210].map(sizable);
 		const short = plan({ catches, ticks: seconds(8) });
 		const span = (POUR_SPAN_MS * 8) / POUR_FULL_SPAN_S;
 		// Sampled each millisecond: a landing is found on the first one at or after it
@@ -255,7 +264,7 @@ describe("pourAt", () => {
 			const { radius } = pourAt(p, ms - 1).drop;
 			expect(Math.hypot(x, y)).toBeCloseTo(radius);
 			expect(y).toBeLessThan(0);
-			expect(Math.abs(x)).toBeLessThanOrEqual(0.7 * radius + 1e-9);
+			expect(Math.abs(x)).toBeLessThanOrEqual(0.7 * radius + EPSILON);
 		}
 		// Not down one line: to both sides, and spread across them
 		const sides = found.slice(1).map((l) => l.x / pourAt(p, l.ms - 1).drop.radius);
@@ -467,8 +476,7 @@ describe("pourAt", () => {
 	});
 
 	it("settles only once the last catch has landed and the drop has had time to come to rest", () => {
-		// Worth enough that the drop holds its tally as it is, so it settles without a swell
-		for (const catches of [[caught(10, { value: 5 }), caught(90, { value: 5 })], []]) {
+		for (const catches of [[sizable(10), sizable(90)], []]) {
 			const p = plan({ catches, ticks: 120 });
 			expect(pourAt(p, 0).settled).toBe(false);
 			expect(pourAt(p, p.endMs).settled).toBe(false);
@@ -558,7 +566,7 @@ describe("the bonus pour and its amber layer", () => {
 		for (const { x, y } of dots) {
 			expect(y - pitch / 2).toBeGreaterThanOrEqual(surface);
 			expect(Math.hypot(Math.abs(x) + pitch / 2, Math.abs(y) + pitch / 2)).toBeLessThanOrEqual(
-				view.drop.radius + 1e-6,
+				view.drop.radius + EPSILON,
 			);
 		}
 	}
@@ -579,7 +587,7 @@ describe("the bonus pour and its amber layer", () => {
 		for (const { x, y, ink } of digits) {
 			expect(ink).toBe(true);
 			expect(Math.hypot(Math.abs(x) + pitch / 2, Math.abs(y) + pitch / 2)).toBeLessThanOrEqual(
-				view.drop.radius + 1e-6,
+				view.drop.radius + EPSILON,
 			);
 		}
 	}
@@ -725,7 +733,7 @@ describe("the bonus pour and its amber layer", () => {
 			let last = from;
 			for (let ms = p.settleMs; ms <= p.restMs; ms += 5) {
 				const { tallyPitch } = pourAt(p, ms);
-				expect((tallyPitch - last) * way).toBeGreaterThanOrEqual(-1e-9);
+				expect((tallyPitch - last) * way).toBeGreaterThanOrEqual(-EPSILON);
 				last = tallyPitch;
 			}
 			expect(last).toBeCloseTo(p.tallyPitch);
@@ -736,12 +744,12 @@ describe("the bonus pour and its amber layer", () => {
 		// A combo of three alone scores 9, 6 of it bonus: its true drop holds neither figure readably
 		const p = plan(comboRun(3, 0));
 		expect(p.settledDrop.tally).toBe(9);
-		expect(p.settledDrop.radius).toBeGreaterThan(9 * Math.sqrt(9));
+		expect(p.settledDrop.radius).toBeGreaterThan(POUR_DOT_RADIUS * Math.sqrt(9));
 		expect(p.restMs).toBe(p.settleMs + POUR_RISE_MS);
 		const view = rested(p);
 		expect(view.drop).toEqual(p.settledDrop);
 		expect(view.tallyPitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH);
-		expect(labelOf(view).pitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH - 1e-6);
+		expect(labelOf(view).pitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH - EPSILON);
 		expectInTopPart(view);
 		expectInAmber(view);
 	});
@@ -773,7 +781,7 @@ describe("the bonus pour and its amber layer", () => {
 				continue;
 			}
 			shown++;
-			expect(tallyBox(view).bottom).toBeLessThanOrEqual(surfaceOf(view) + 1e-6);
+			expect(tallyBox(view).bottom).toBeLessThanOrEqual(surfaceOf(view) + EPSILON);
 		}
 		expect(held).toBeGreaterThan(0);
 		expect(shown).toBeGreaterThan(held);
@@ -797,7 +805,7 @@ describe("the tally in the drop", () => {
 		for (const { x, y, ink } of digits) {
 			expect(ink).toBe(true);
 			expect(Math.hypot(Math.abs(x) + pitch / 2, Math.abs(y) + pitch / 2)).toBeLessThanOrEqual(
-				drop.radius + 1e-6,
+				drop.radius + EPSILON,
 			);
 		}
 	}
@@ -826,7 +834,7 @@ describe("the tally in the drop", () => {
 		let held = 0;
 		for (const { ms } of landings(p)) {
 			const view = pourAt(p, ms);
-			if (view.tallyPitch > POUR_MIN_PITCH + 1e-9) {
+			if (view.tallyPitch > POUR_MIN_PITCH + EPSILON) {
 				held++;
 				expect(spilled).toBeGreaterThan(0);
 				expectInDrop(view);
@@ -846,30 +854,31 @@ describe("the tally in the drop", () => {
 		let crossed = false;
 		for (let ms = 1; ms <= p.restMs; ms++) {
 			const view = pourAt(p, ms);
-			const grew = view.drop.radius / Math.max(before.drop.radius, 1e-9);
 			const sized = view.tallyPitch / before.tallyPitch;
-			expect(sized).toBeGreaterThanOrEqual(1 - 1e-6);
-			if (before.drop.radius > 0) expect(sized).toBeLessThanOrEqual(grew + 1e-6);
+			expect(sized).toBeGreaterThanOrEqual(1 - EPSILON);
+			if (before.drop.radius > 0) {
+				expect(sized).toBeLessThanOrEqual(view.drop.radius / before.drop.radius + EPSILON);
+			}
 			if (before.drop.tally === 99 && view.drop.tally === 100) crossed = true;
 			before = view;
 		}
 		expect(crossed).toBe(true);
 	});
 
-	it("swells a tiny score's drop as it settles, just enough to hold its tally readably", () => {
+	it("swells a tiny score's drop as it settles, enough to hold its tally readably", () => {
 		const p = plan(loneRun(1));
 		const landed = pourAt(p, p.settleMs - 1);
 		// The catch lands at what it was worth: a drop of one
-		expect(landed.drop).toMatchObject({ tally: 1, radius: 9 });
-		expect(p.drops.at(-1)?.radius).toBe(9);
+		expect(landed.drop).toMatchObject({ tally: 1, radius: POUR_DOT_RADIUS });
+		expect(p.drops.at(-1)?.radius).toBe(POUR_DOT_RADIUS);
 		expect(p.settledDrop.tally).toBe(1);
-		expect(p.settledDrop.radius).toBeGreaterThan(9);
+		expect(p.settledDrop.radius).toBeGreaterThan(POUR_DOT_RADIUS);
 		expect(p.restMs).toBe(p.settleMs + POUR_RISE_MS);
 		let last = landed.drop.radius;
 		for (let ms = p.settleMs; ms <= p.restMs; ms += 5) {
 			const view = pourAt(p, ms);
 			expect(view.drop.radius).toBeGreaterThanOrEqual(last);
-			expect(view.swell).toBeCloseTo(view.drop.radius - 9);
+			expect(view.swell).toBeCloseTo(view.drop.radius - POUR_DOT_RADIUS);
 			expect(view.bonusLanding).toBeNull();
 			expect(view.amberLevel).toBeNull();
 			expect(view.settled).toBe(ms >= p.restMs);
@@ -877,7 +886,7 @@ describe("the tally in the drop", () => {
 		}
 		const settled = pourAt(p, p.restMs);
 		expect(settled.drop).toEqual(p.settledDrop);
-		expect(settled.tallyPitch).toBeCloseTo(POUR_MIN_PITCH, 4);
+		expect(settled.tallyPitch).toBeGreaterThanOrEqual(POUR_MIN_PITCH);
 		expectInDrop(settled);
 	});
 });

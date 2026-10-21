@@ -2,6 +2,7 @@ import type { BestVerdict } from "../../application/GameStore";
 import { SMALL_DOT_SIZE_RATIO } from "../../domain/constants";
 import type { RunCatch } from "../../domain/types";
 import {
+	POUR_DOT_RADIUS,
 	POUR_MAX_RADIUS,
 	POUR_START_MS,
 	type PourFlight,
@@ -61,13 +62,15 @@ describe("pourFit", () => {
 
 	it("holds a tiny score's drop as it settles enlarged, and its tally", () => {
 		const tiny = scored(1, 1);
-		expect(tiny.settledDrop.radius).toBeGreaterThan(9);
+		expect(tiny.settledDrop.radius).toBeGreaterThan(POUR_DOT_RADIUS);
 		const fit = pourFit(tiny, 1000);
 		expect(fit.scale).toBe(1);
 		expect(fit.half).toBeGreaterThanOrEqual(tiny.settledDrop.radius);
 		const settled = pourAt(tiny, tiny.restMs);
 		for (const d of settled.digits) {
-			expect(fit.half).toBeGreaterThanOrEqual(Math.abs(d.y) + settled.tallyPitch * 0.38);
+			expect(fit.half).toBeGreaterThanOrEqual(
+				Math.abs(d.y) + settled.tallyPitch * POUR_DIGIT_SCALE,
+			);
 		}
 	});
 
@@ -91,7 +94,7 @@ describe("pourFit", () => {
 			pitch: PITCH,
 		});
 		const radius = combo.settledDrop.radius;
-		expect(radius).toBeGreaterThan(9 * Math.sqrt(9));
+		expect(radius).toBeGreaterThan(POUR_DOT_RADIUS * Math.sqrt(9));
 		const fit = pourFit(combo, 1000);
 		expect(fit.scale).toBe(1);
 		expect(fit.half).toBeGreaterThanOrEqual(radius);
