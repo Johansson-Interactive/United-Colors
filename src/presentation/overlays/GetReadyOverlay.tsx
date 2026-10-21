@@ -18,6 +18,7 @@ import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
+import { SCORE_CENTRE_Y, SCORE_PITCH } from "../effects/scoreTally";
 import { useStageBox } from "../layout/StageFrame";
 import {
 	INITIAL_GET_READY,
@@ -46,6 +47,8 @@ const CAPTION = "HOLD LEVEL";
 const CAPTION_PITCH = 8;
 /** Room the caption keeps from the stage's sides */
 const CAPTION_MARGIN = 48;
+/** The caption's top: below the score waiting at the HUD's spot (see scoreSink.ts), with room */
+const CAPTION_TOP = SCORE_CENTRE_Y + SCORE_PITCH * 3.5 + 16;
 const STROKE = 2;
 const CAPTION_FADE_MS = 250;
 
@@ -53,7 +56,8 @@ const CAPTION_FADE_MS = 250;
  * Get ready: over the unfrosted frozen field, a ring sits around the player dot and a hollow
  * outline of the dot follows the tilt. Holding the outline on the dot contracts the ring onto
  * it, and the moment it closes play resumes. One caption says what to do; it fades while the
- * player holds and comes back when the hold breaks. Taps go through to nothing.
+ * player holds and comes back when the hold breaks. Taps go through to nothing. The paused
+ * score waits dimmed at the top (see PausedScore), so the caption sits under it.
  *
  * The rules live in the get-ready stepper, run here on the UI thread where the tilt is.
  */
@@ -145,6 +149,6 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 const styles = StyleSheet.create({
 	top: {
 		alignItems: "center",
-		paddingTop: 52,
+		paddingTop: CAPTION_TOP,
 	},
 });

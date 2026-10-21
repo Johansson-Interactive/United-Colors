@@ -42,6 +42,11 @@ export type TallyStyle = "feed" | "transfer";
 /** The total's dot spacing (px) and its dot radius as a fraction of it, as the HUD had it */
 export const SCORE_PITCH = 7;
 const SCORE_DOT_SCALE = 0.38;
+/** The meter's offset below the stage's top (px), and the room it keeps above the total for its glow and its bump */
+export const SCORE_TOP = 10;
+export const SCORE_PAD = 10;
+/** The total's centre line below the stage's top (px), where the paused score returns to */
+export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_PAD + (SCORE_PITCH * 7) / 2;
 /** The feed's ribbon: its dot spacing, how many rows, its gap from the total, its dot radius */
 export const FEED_PITCH = 5;
 export const FEED_ROWS = 3;

@@ -20,6 +20,7 @@ import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
+import { PausedScore } from "./components/PausedScore";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
 import { cornerDot, type FlowAction, fieldFrosted } from "./flow/screenFlow";
@@ -336,6 +337,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								onBack={handleLeavePress}
 							/>
 						)}
+
+						{/* The paused score and run time, sinking in from the HUD's spot and rising back */}
+						<PausedScore store={store} color={playerColor} screen={screen.kind} />
 
 						{/* Over the pause's own controls, so its corner dot stays pressable */}
 						{corner && (

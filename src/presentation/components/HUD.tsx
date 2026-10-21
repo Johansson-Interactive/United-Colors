@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import type { GameStore } from "../../application/GameStore";
 import type { Corners } from "../../domain/types";
+import { SCORE_TOP } from "../effects/scoreTally";
 import { cornerButton } from "../layout/cornerButton";
 import { useStageBox } from "../layout/StageFrame";
 import { IconDot } from "./IconDot";
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
 	},
 	score: {
 		position: "absolute",
-		top: 10,
+		top: SCORE_TOP,
 		left: 0,
 		right: 0,
 	},

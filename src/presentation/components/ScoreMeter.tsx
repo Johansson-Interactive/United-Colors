@@ -17,6 +17,7 @@ import {
 	advanceTally,
 	createTally,
 	newCatch,
+	SCORE_PAD,
 	SCORE_PITCH,
 	type Tally,
 	type TallyStyle,
@@ -37,8 +38,6 @@ interface ScoreMeterProps {
 
 /** Which way the total takes its catches in (see scoreTally.ts) */
 const STYLE: TallyStyle = "feed";
-/** Room above the total for its glow and its bump */
-const TOP_PAD = 10;
 /** The meter's height: the total and a few lines of addends under it */
 const METER_HEIGHT = 230;
 
@@ -53,7 +52,7 @@ export const ScoreMeter: React.FC<ScoreMeterProps> = ({ store, color }) => {
 	// callback's worklet factory as a call that may change the shared values
 	"use no memo";
 	const { width } = useStageBox();
-	const geometry = useMemo(() => ({ cx: width / 2, cy: TOP_PAD + SCORE_PITCH * 3.5 }), [width]);
+	const geometry = useMemo(() => ({ cx: width / 2, cy: SCORE_PAD + SCORE_PITCH * 3.5 }), [width]);
 	const scoreColor = useMemo(() => Skia.Color(color), [color]);
 
 	const tally = useSharedValue<Tally>(createTally(store.getState().frame.score));
