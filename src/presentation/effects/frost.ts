@@ -1,5 +1,5 @@
 /**
- * The frost over the frozen field (see fieldFrosted): the game canvas blurs and dims the scene
+ * The frost over the frozen field (see stageLook.ts): the game canvas blurs and dims the scene
  * by the frost amount, and Get ready opens a window in it, a circle of the field left sharp and
  * full colour at the seat (see getReady.ts). No React, so the canvas and the steppers share it.
  */

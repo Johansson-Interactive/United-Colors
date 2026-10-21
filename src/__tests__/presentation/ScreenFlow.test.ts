@@ -2,7 +2,6 @@ import type { GamePhase } from "../../domain/types";
 import {
 	cornerDot,
 	type FlowState,
-	fieldFrosted,
 	INITIAL_FLOW,
 	type Screen,
 	screenOf,
@@ -463,18 +462,5 @@ describe("the corner dot", () => {
 		expect(cornerDot({ kind: "settle", color: PINK })).toBeNull();
 		expect(cornerDot({ kind: "speed", color: PINK })).toBeNull();
 		expect(cornerDot({ kind: "gameOver" })).toBeNull();
-	});
-});
-
-describe("the frosted field", () => {
-	it("frosts the frozen game for as long as it is paused: under the pause, the speed view, the bowl and Get ready", () => {
-		expect(fieldFrosted("PAUSED")).toBe(true);
-	});
-
-	it("is clear in play, on the title and on the game over, whose dimmer frost is the stage's own", () => {
-		expect(fieldFrosted("RUNNING")).toBe(false);
-		expect(fieldFrosted("REJECTING")).toBe(false);
-		expect(fieldFrosted("KIOSK")).toBe(false);
-		expect(fieldFrosted("GAME_OVER")).toBe(false);
 	});
 });
