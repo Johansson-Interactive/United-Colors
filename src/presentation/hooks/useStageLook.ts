@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { type FrostWindow, NO_FROST_WINDOW } from "../effects/frost";
-import { type StagePlace, type StageTransition, stageLook } from "../flow/stageLook";
+import { type StagePlace, type StageTransition, stageLook } from "../effects/stageLook";
 import { INK_LIFT } from "../theme/theme";
 
 /**

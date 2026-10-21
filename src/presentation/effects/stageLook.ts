@@ -17,8 +17,8 @@
  */
 
 import type { GamePhase } from "../../domain/types";
+import type { Screen } from "../flow/screenFlow";
 import { INK_LIFT } from "../theme/theme";
-import type { Screen } from "./screenFlow";
 
 /**
  * Where the flow is: the screen it shows, over the game's phase (the bowl and the speed view

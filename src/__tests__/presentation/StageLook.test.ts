@@ -1,5 +1,5 @@
+import { stageLook } from "../../presentation/effects/stageLook";
 import { type FlowEvent, INITIAL_FLOW, stepFlow } from "../../presentation/flow/screenFlow";
-import { stageLook } from "../../presentation/flow/stageLook";
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const PINK = "#E91E63";
