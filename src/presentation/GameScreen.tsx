@@ -14,25 +14,20 @@ import type {
 	StoragePort,
 	WatchAppActive,
 } from "../application/ports";
-import { bindHaptics } from "../application/useCases/BindHaptics";
-import { bindMusic } from "../application/useCases/BindMusic";
 import { bindPauseOnLeave } from "../application/useCases/BindPauseOnLeave";
-import { bindSoundEffects } from "../application/useCases/BindSoundEffects";
-import { bindSoundSetting } from "../application/useCases/BindSoundSetting";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
-import { loadHighScore } from "../application/useCases/LoadHighScore";
-import { loadSettings } from "../application/useCases/LoadSettings";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import type { PressPoint } from "./components/DotButton";
 import { HUD } from "./components/HUD";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { FrostDim } from "./effects/FrostDim";
-import type { FlowAction } from "./flow/screenFlow";
+import { cornerDot, type FlowAction } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
 import { useDevControlMode } from "./hooks/useDevControlMode";
+import { useGameBindings } from "./hooks/useGameBindings";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
@@ -40,6 +35,7 @@ import { useSoundToggles } from "./hooks/useSoundToggles";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { StageFrame } from "./layout/StageFrame";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
+import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
@@ -96,32 +92,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Dev only: prefer gyro, fall back to touch drag when gyro is missing (e.g. simulator)
 	const { touch: devTouch, detectGyro, onGyroSample } = useDevControlMode();
 
-	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
-	const { accent, frost, shake, bursts, burstClock } = useStageEffects(store, phase, playerColor);
-
-	// Sounds load with the screen and follow the music and effect settings; the effects follow
-	// the game's events and the music the phase. Dispose discards a load in flight.
-	useEffect(() => {
-		void audio.load();
-		const unbindSetting = bindSoundSetting(store, audio);
-		const unbindEffects = bindSoundEffects(store, audio);
-		const unbindMusic = bindMusic(store, audio);
-		return () => {
-			unbindMusic();
-			unbindEffects();
-			unbindSetting();
-			audio.dispose();
-		};
-	}, [audio, store]);
-
-	// A buzz as the player spits out a wrong-colour dot
-	useEffect(() => bindHaptics(store, haptics), [store, haptics]);
-
-	// Restore persisted settings and high score
-	useEffect(() => {
-		void loadSettings(store, storage);
-		void loadHighScore(store, storage);
-	}, [store, storage]);
+	useGameBindings(store, audio, haptics, storage);
 
 	// The level pose reaches the game and the interface together, so the dot in the game and
 	// the dots on the menus rest in the same hand position
@@ -204,23 +175,35 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
 	});
 
+	// Colour wash, frost, shake and bursts react to the store; the flood is the transition
+	const { accent, frost, shake, bursts, burstClock } = useStageEffects(
+		store,
+		phase,
+		playerColor,
+		screen.kind === "getReady",
+	);
+
 	useAutoStart(autoStart, dispatch);
 	useBenchStats(autoStart !== undefined);
 
-	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
+	// The corner dot pauses in play and Get ready, and plays on the pause screen: through Get
+	// ready where there is tilt to hold level with, straight back to play where there is none
+	const corner = cornerDot(screen);
+	const handleCorner = useCallback(
+		() =>
+			dispatch(
+				corner === "play"
+					? { type: "playPressed", tiltAvailable: tilt.available.get() }
+					: { type: "pausePressed" },
+			),
+		[dispatch, corner, tilt],
+	);
 
 	// Leaving the app mid-run lands on the pause screen when the player comes back
 	const pauseOnLeave = useEffectEvent(() => dispatch({ type: "pausePressed" }));
 	useEffect(
 		() => bindPauseOnLeave(store, watchAppActive, () => pauseOnLeave()),
 		[store, watchAppActive],
-	);
-
-	// The pause's spirit level is still the hold until Get ready has an overlay of its own, so
-	// play resumes straight away rather than opening a screen with nothing drawn on it
-	const handleResume = useCallback(
-		() => dispatch({ type: "playPressed", tiltAvailable: false }),
-		[dispatch],
 	);
 
 	const handleStartPress = useCallback(
@@ -247,7 +230,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[dispatch],
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
-	const handleSettleSnap = useCallback(() => audio.playCollect(0), [audio]);
+	const handleSnap = useCallback(() => audio.playCollect(0), [audio]);
+	// The ring closed on the dot: a snap, and play picks up at once
+	const handleReady = useCallback(() => {
+		handleSnap();
+		dispatch({ type: "readyHeld" });
+	}, [handleSnap, dispatch]);
 	const handleSpeedPress = useCallback(
 		() => dispatch({ type: "speedPressed", color: playerColor }),
 		[dispatch, playerColor],
@@ -285,12 +273,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 				<FrostDim frost={frost} />
 
+				{screen.kind === "getReady" && (
+					<GetReadyOverlay
+						scene={scene}
+						color={playerColor}
+						sensitivity={sensitivity}
+						onReady={handleReady}
+					/>
+				)}
+
 				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
-						{screen.kind === "hud" && (
-							<HUD store={store} color={playerColor} onPause={handlePause} corners={corners} />
-						)}
-
 						{screen.kind === "title" && (
 							<KioskOverlay
 								highScore={highScore}
@@ -308,7 +301,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						{screen.kind === "pause" && (
 							<PauseOverlay
 								color={playerColor}
-								onResume={handleResume}
 								onQuit={handleLeavePress}
 								onCalibrate={handleCalibratePress}
 								soundEnabled={soundEnabled}
@@ -334,7 +326,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								color={screen.color}
 								onSettled={handleSettled}
 								onBack={handleSettleBack}
-								onSnap={handleSettleSnap}
+								onSnap={handleSnap}
 							/>
 						)}
 
@@ -345,6 +337,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								audio={audio}
 								onRetry={handleRetryPress}
 								onBack={handleLeavePress}
+							/>
+						)}
+
+						{/* Over the pause's own controls, so its corner dot stays pressable */}
+						{corner && (
+							<HUD
+								store={store}
+								color={playerColor}
+								showScore={screen.kind === "hud"}
+								corner={corner}
+								onCorner={handleCorner}
+								corners={corners}
 							/>
 						)}
 					</View>

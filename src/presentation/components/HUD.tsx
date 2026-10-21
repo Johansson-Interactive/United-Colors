@@ -13,28 +13,42 @@ interface HUDProps {
 	store: GameStore;
 	/** The player's current colour; the score wears it so a switch is always visible */
 	color: string;
-	onPause: () => void;
-	/** How the frame rounds its corners; the pause button keeps clear of the curve (null: square) */
+	/** The score shows in play only; the pause and Get ready keep just the corner dot */
+	showScore: boolean;
+	/** What the corner dot does: pause in play and Get ready, play on the pause screen */
+	corner: "pause" | "play";
+	onCorner: () => void;
+	/** How the frame rounds its corners; the corner dot keeps clear of the curve (null: square) */
 	corners: Corners | null;
 }
 
-const PAUSE_SIZE = 44;
-const PAUSE_OFFSET = { top: 12, right: 16 };
+const CORNER_SIZE = 44;
+const CORNER_OFFSET = { top: 12, right: 16 };
 
-export const HUD: React.FC<HUDProps> = ({ store, color, onPause, corners }) => {
+const LABELS = { pause: "Pause", play: "Play" } as const;
+
+export const HUD: React.FC<HUDProps> = ({ store, color, showScore, corner, onCorner, corners }) => {
 	const { width, height } = useStageBox();
-	const pauseAt = useMemo(
-		() => cornerButton({ width, height, corners: corners ?? undefined }, PAUSE_SIZE, PAUSE_OFFSET),
+	const cornerAt = useMemo(
+		() =>
+			cornerButton({ width, height, corners: corners ?? undefined }, CORNER_SIZE, CORNER_OFFSET),
 		[width, height, corners],
 	);
 
 	return (
 		<View style={styles.container} pointerEvents="box-none">
-			<View style={styles.score} pointerEvents="none">
-				<ScoreMeter store={store} color={color} />
-			</View>
-			<View style={[styles.pause, pauseAt]}>
-				<IconDot size={PAUSE_SIZE} icon="pause" onPress={onPause} accessibilityLabel="Pause" />
+			{showScore ? (
+				<View style={styles.score} pointerEvents="none">
+					<ScoreMeter store={store} color={color} />
+				</View>
+			) : null}
+			<View style={[styles.corner, cornerAt]}>
+				<IconDot
+					size={CORNER_SIZE}
+					icon={corner}
+					onPress={onCorner}
+					accessibilityLabel={LABELS[corner]}
+				/>
 			</View>
 		</View>
 	);
@@ -50,7 +64,7 @@ const styles = StyleSheet.create({
 		left: 0,
 		right: 0,
 	},
-	pause: {
+	corner: {
 		position: "absolute",
 	},
 });
