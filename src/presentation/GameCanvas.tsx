@@ -5,19 +5,23 @@ import {
 	Group,
 	Paint,
 	Picture,
-	RadialGradient,
 	Rect,
 	rect,
 	rrect,
 	Shader,
 	Skia,
 	type SkPicture,
-	type SkPoint,
-	vec,
 } from "@shopify/react-native-skia";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
-import { type LayoutChangeEvent, PanResponder, Platform, StyleSheet, View } from "react-native";
+import {
+	type LayoutChangeEvent,
+	PanResponder,
+	PixelRatio,
+	Platform,
+	StyleSheet,
+	View,
+} from "react-native";
 import {
 	type SharedValue,
 	useAnimatedReaction,
@@ -30,17 +34,9 @@ import type { Burst } from "./effects/burstFrames";
 import { FROST_MAX_DIM, type FrostWindow } from "./effects/frost";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
+import { ROOM_SKSL, type RoomUniforms, roomUniforms, stageCover } from "./room";
 import {
-	LIGHT_ALPHAS,
-	LIGHT_RADIUS,
-	lightCentre,
-	RAMP,
-	stageCover,
-	WASH_ALPHAS,
-	WASH_POSITIONS,
-	WASH_RADIUS,
-} from "./room";
-import {
+	compileEffect,
 	drawBursts,
 	drawScene,
 	type LiquidBody,
@@ -76,46 +72,26 @@ interface GameCanvasProps {
 
 const FROST_MAX_SIGMA = 14;
 
-/** The light pool's colour stops: white, easing out to nothing (see room.ts) */
-const LIGHT_COLORS = LIGHT_ALPHAS.map((a) => Float32Array.of(1, 1, 1, a));
+/** The room (see room.ts), compiled once */
+const ROOM_EFFECT = compileEffect("room", ROOM_SKSL);
+const INK_RGB = Array.from(Skia.Color(INK));
 
 interface RoomProps {
-	width: number;
-	height: number;
-	/** Where the light pool is centred, following the tilt */
-	light: SharedValue<SkPoint>;
-	/** The edge wash's colour stops, in the accent colour */
-	wash: SharedValue<Float32Array[]>;
+	/** The room shader's uniforms: the light follows the tilt, the wash the accent */
+	uniforms: SharedValue<RoomUniforms>;
 }
 
 /**
- * The room (see room.ts): ink, the light pool and the edge wash. Drawn as Skia nodes driven by
- * shared values rather than recorded into a picture every frame: a full-screen gradient
- * picture reports hundreds of KB to Hermes as external memory each time it is recorded, which
- * set off a garbage collection on the UI thread nearly every frame.
+ * The room (see room.ts): ink, the light pool and the edge wash, one shader filling the
+ * canvas. Drawn as a Skia node driven by a shared value rather than recorded into a picture
+ * every frame: a full-screen picture reports hundreds of KB to Hermes as external memory
+ * each time it is recorded, which set off a garbage collection on the UI thread nearly every
+ * frame. No dither on the paint: the shader dithers itself.
  */
-const Room: React.FC<RoomProps> = ({ width, height, light, wash }) => (
-	<>
-		<Fill color={INK} />
-		{/* Faint gradients over dark ink only span a handful of 8-bit steps; dither them so they
-		    read as a smooth falloff instead of visible bands */}
-		<Fill dither>
-			<RadialGradient
-				c={light}
-				r={Math.max(width, height) * LIGHT_RADIUS}
-				colors={LIGHT_COLORS}
-				positions={RAMP}
-			/>
-		</Fill>
-		<Fill dither>
-			<RadialGradient
-				c={vec(width / 2, height / 2)}
-				r={Math.hypot(width, height) * WASH_RADIUS}
-				colors={wash}
-				positions={WASH_POSITIONS}
-			/>
-		</Fill>
-	</>
+const Room: React.FC<RoomProps> = ({ uniforms }) => (
+	<Fill>
+		<Shader source={ROOM_EFFECT} uniforms={uniforms} />
+	</Fill>
 );
 
 /** The wall drop slots, by index (see wallDrops) */
@@ -271,20 +247,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 		});
 	}, [onDragDelta]);
 
-	const light = useDerivedValue(() => {
-		const centre = lightCentre(width, height, lightX.get(), lightY.get());
-		return vec(centre.x, centre.y);
-	});
-
-	// The wash only changes with the accent, so its stops are rebuilt then and not per frame
-	const wash = useDerivedValue(() => {
-		const c = Skia.Color(accent.get());
-		// A plain loop, not .map(callback): the React Compiler hoists callbacks out of the
-		// worklet into plain JS functions, which the UI thread cannot call
-		const colors: Float32Array[] = [];
-		for (const a of WASH_ALPHAS) colors.push(Float32Array.of(c[0], c[1], c[2], a));
-		return colors;
-	});
+	// The accent is parsed only when it changes, not with the light every frame
+	const accentRgb = useDerivedValue(() => Skia.Color(accent.get()));
+	const pixelRatio = PixelRatio.get();
+	const room = useDerivedValue(() =>
+		roomUniforms(width, height, lightX.get(), lightY.get(), INK_RGB, accentRgb.get(), pixelRatio),
+	);
 
 	// The scene's layers (see SceneLayers), each recorded every frame and so into the same
 	// recorder each time (see recordPicture.ts)
@@ -333,7 +301,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 				opaque={OPAQUE_CANVAS}
 				pointerEvents={canvasPointerEvents}
 			>
-				<Room width={width} height={height} light={light} wash={wash} />
+				<Room uniforms={room} />
 				<Group transform={shakeTransform}>
 					<Group
 						layer={
@@ -357,7 +325,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 				{frosted ? <Fill color={INK} opacity={frostDim} /> : null}
 				{frosted && windowOpen ? (
 					<Group clip={windowClip}>
-						<Room width={width} height={height} light={light} wash={wash} />
+						<Room uniforms={room} />
 						<SceneLayers
 							below={below}
 							drops={drops}
@@ -369,7 +337,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 				) : null}
 				{fading ? (
 					<Group layer={<Paint opacity={cover} />}>
-						<Room width={width} height={height} light={light} wash={wash} />
+						<Room uniforms={room} />
 					</Group>
 				) : null}
 			</Canvas>

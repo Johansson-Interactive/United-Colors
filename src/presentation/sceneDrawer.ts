@@ -127,7 +127,7 @@ export function drawGlareAt(
 	canvas.restore();
 }
 
-function compileEffect(name: string, sksl: string): SkRuntimeEffect {
+export function compileEffect(name: string, sksl: string): SkRuntimeEffect {
 	const effect = Skia.RuntimeEffect.Make(sksl);
 	if (!effect) throw new Error(`${name} shader failed to compile`);
 	return effect;
