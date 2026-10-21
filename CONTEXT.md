@@ -78,6 +78,22 @@ _Avoid_: bonus bar, combo fill
 The running total inside the pour's drop: what the catches landed so far were worth on their own, then, in the bonus pour, counting up to the run's score as it rises into the drop's top part, above the amber layer, shrinking to fit inside it as the bonus figure fits inside the amber. Only a drop too small to hold it readably leaves it at full size, standing on the amber and out of the drop's top.
 _Avoid_: counter, subtotal
 
+### Screens
+
+**Title screen**:
+Where a run starts: the name, the PLAY dot rolling in its bowl and the personal best, over the kiosk. Also called the start game view. In code it is `KioskOverlay`, screen `title`, game phase `KIOSK`.
+_Avoid_: menu, home, start screen
+
+**Kiosk**:
+The attract-mode game that plays itself behind the title screen. It halts and fades while a view opens over the title.
+
+**Pause**:
+The screen over a paused run: a spirit level that resumes play once the phone is held level again. In code it is `PauseOverlay`.
+
+**Corner menu**:
+A dot in a bottom corner that opens into smaller dots, one per item (`DotMenu`). The title screen and the pause share two: the settings corner bottom left (`SettingsMenu`: level pose and tilt speed) and the sound corner bottom right (`SoundMenu`: music and effects).
+_Avoid_: settings page, popup
+
 ### Ranking
 
 **Personal best**:
