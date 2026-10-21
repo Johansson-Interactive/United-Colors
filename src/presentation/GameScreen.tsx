@@ -163,7 +163,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		if (size) session.setScreen({ ...size, corners: corners ?? undefined });
 	}, [session, corners]);
 
-	// The stage fades out while the kiosk is halted under the settle bowl
+	// The stage fades out while the kiosk is halted under the settle bowl or the speed view
 	const stageOpacity = useSharedValue(1);
 
 	// What a step does to the game, straight away or once its flood covers the screen
@@ -244,8 +244,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
 	const handleSettleSnap = useCallback(() => audio.playCollect(0), [audio]);
 	const handleSpeedPress = useCallback(
-		() => dispatch({ type: "speedPressed", color: playerColor }),
+		() => dispatch({ type: "speedPressed", from: "pause", color: playerColor }),
 		[dispatch, playerColor],
+	);
+	const handleMenuSpeedPress = useCallback(
+		(color: string) => dispatch({ type: "speedPressed", from: "menu", color }),
+		[dispatch],
 	);
 	const handleSpeedBack = useCallback(() => dispatch({ type: "speedBacked" }), [dispatch]);
 	const handleRetryPress = useCallback(
@@ -296,6 +300,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								onToggleSound={handleToggleSound}
 								onToggleMusic={handleToggleMusic}
 								sensitivity={sensitivity}
+								onSpeed={handleMenuSpeedPress}
 								versionTag={versionTag}
 							/>
 						)}

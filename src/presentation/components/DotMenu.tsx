@@ -8,8 +8,10 @@ import { type Icon, IconDot } from "./IconDot";
 interface DotMenuItem {
 	key: string;
 	icon: Icon;
-	/** Shown in the menu's colour when on, dimmed and struck through when off */
-	on: boolean;
+	/** A switch: shown in colour when on, dimmed and struck through when off; omitted for an action */
+	on?: boolean;
+	/** Glyph colour, when the item is not in the menu's colour */
+	color?: string;
 	onPress: () => void;
 	label: string;
 }
@@ -17,8 +19,8 @@ interface DotMenuItem {
 interface DotMenuProps {
 	/** Glyph on the corner dot */
 	icon: Icon;
-	/** Whether the corner dot shows in colour or dimmed */
-	on: boolean;
+	/** Whether the corner dot shows in colour or dimmed; in colour when omitted */
+	on?: boolean;
 	/** Accessibility label of the corner dot while closed */
 	label: string;
 	/** Top to bottom, rising out of the corner dot */
@@ -41,7 +43,7 @@ const ITEM_SIZE = 36;
  */
 export const DotMenu: React.FC<DotMenuProps> = ({
 	icon,
-	on,
+	on = true,
 	label,
 	items,
 	color,
@@ -76,8 +78,8 @@ export const DotMenu: React.FC<DotMenuProps> = ({
 									icon={item.icon}
 									onPress={item.onPress}
 									accessibilityLabel={item.label}
-									color={item.on ? color : DIM}
-									struck={!item.on}
+									color={item.on === false ? DIM : (item.color ?? color)}
+									struck={item.on === false}
 								/>
 							</Animated.View>
 						))

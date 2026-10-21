@@ -5,12 +5,11 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { BowlStage } from "../components/BowlStage";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
-import { IconDot } from "../components/IconDot";
 import { LevelGate } from "../components/LevelGate";
+import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
-import { BOWL_SIZE, CORNER_DOT_SIZE, CORNER_INSET, WHITE } from "../theme/theme";
+import { BOWL_SIZE, WHITE } from "../theme/theme";
 import type { LevelGatePhase } from "../tilt/levelGate";
-import { sensitivityChoice } from "../tilt/sensitivity";
 import { useTiltAvailable } from "../tilt/useTiltAvailable";
 
 interface PauseOverlayProps {
@@ -24,7 +23,7 @@ interface PauseOverlayProps {
 	musicEnabled: boolean;
 	onToggleSound: () => void;
 	onToggleMusic: () => void;
-	/** Tilt sensitivity, a multiple of the default speed; the speed button shows it */
+	/** Tilt sensitivity, a multiple of the default speed; the speed dot shows it */
 	sensitivity: number;
 	/** Open the speed view to choose how fast the dot moves */
 	onSpeed: () => void;
@@ -35,8 +34,8 @@ interface PauseOverlayProps {
 /**
  * Paused: the scene frosts over and a spirit level takes the middle. Tipping the bubble out
  * of the inner circle and then holding the phone level resumes, so play restarts from rest;
- * tapping the level resumes immediately. The corners hold the level pose, the tilt speed and
- * the sound settings.
+ * tapping the level resumes immediately. The corners hold the settings (level pose and tilt
+ * speed) and the sound.
  */
 export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	color,
@@ -52,7 +51,6 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 	children,
 }) => {
 	const tiltAvailable = useTiltAvailable();
-	const speed = sensitivityChoice(sensitivity);
 	const [gatePhase, setGatePhase] = useState<LevelGatePhase>("leave");
 	const caption = !tiltAvailable
 		? "tap the ring to resume"
@@ -93,25 +91,12 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({
 				{children ? <View style={styles.extra}>{children}</View> : null}
 			</View>
 
-			<View style={styles.level}>
-				<IconDot
-					size={CORNER_DOT_SIZE}
-					icon="level"
-					onPress={onCalibrate}
-					accessibilityLabel="Set level pose"
-					color={color}
-				/>
-			</View>
-
-			<View style={styles.speed}>
-				<IconDot
-					size={CORNER_DOT_SIZE}
-					icon={`speed-${speed.key}`}
-					onPress={onSpeed}
-					accessibilityLabel={`Tilt speed, ${speed.label.toLowerCase()}`}
-					color={WHITE}
-				/>
-			</View>
+			<SettingsMenu
+				sensitivity={sensitivity}
+				onLevel={onCalibrate}
+				onSpeed={onSpeed}
+				levelColor={color}
+			/>
 
 			<SoundMenu
 				soundEnabled={soundEnabled}
@@ -142,15 +127,5 @@ const styles = StyleSheet.create({
 	},
 	extra: {
 		alignItems: "center",
-	},
-	level: {
-		position: "absolute",
-		left: CORNER_INSET,
-		bottom: 26,
-	},
-	speed: {
-		position: "absolute",
-		left: CORNER_INSET + CORNER_DOT_SIZE + 18,
-		bottom: 26,
 	},
 });

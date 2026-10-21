@@ -17,6 +17,7 @@ export type Icon =
 	| "sound-on"
 	| "sound-off"
 	| "level"
+	| "settings"
 	| "music"
 	| "effects"
 	| "speed-slow"
@@ -46,6 +47,31 @@ const Level: React.FC<GlyphProps> = ({ c, r, color }) => (
 		<Circle cx={c} cy={c} r={r * 0.17} color={color} />
 	</>
 );
+
+/** A slider across the dot at height `y`, its knob at `knob` */
+const Slider: React.FC<GlyphProps & { y: number; knob: number }> = ({ c, r, color, y, knob }) => (
+	<>
+		<Line
+			p1={vec(c - r * 0.36, y)}
+			p2={vec(c + r * 0.36, y)}
+			color={color}
+			strokeWidth={1.5}
+			strokeCap="round"
+		/>
+		<Circle cx={knob} cy={y} r={r * 0.11} color={color} />
+	</>
+);
+
+/** Two sliders, their knobs set apart: the settings tucked behind the dot */
+const Settings: React.FC<GlyphProps> = (props) => {
+	const { c, r } = props;
+	return (
+		<>
+			<Slider {...props} y={c - r * 0.17} knob={c + r * 0.15} />
+			<Slider {...props} y={c + r * 0.17} knob={c - r * 0.15} />
+		</>
+	);
+};
 
 const Pause: React.FC<GlyphProps> = ({ c, r, color }) => (
 	<>
@@ -155,6 +181,7 @@ const GLYPHS: Record<Icon, React.FC<GlyphProps>> = {
 	"sound-on": SoundOn,
 	"sound-off": SoundOff,
 	level: Level,
+	settings: Settings,
 	music: Music,
 	effects: Effects,
 	"speed-slow": SpeedSlow,

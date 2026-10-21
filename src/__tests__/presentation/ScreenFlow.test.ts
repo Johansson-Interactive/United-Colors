@@ -175,9 +175,9 @@ describe("screen flow", () => {
 	});
 
 	it("the speed button opens the speed view in the player's colour, and BACK closes it", () => {
-		const opened = stepFlow(PAUSED, { type: "speedPressed", color: BLUE });
+		const opened = stepFlow(PAUSED, { type: "speedPressed", from: "pause", color: BLUE });
 		expect(opened).toEqual({
-			state: { ...PAUSED, speed: { color: BLUE } },
+			state: { ...PAUSED, speed: { from: "pause", color: BLUE } },
 			screen: { kind: "speed", color: BLUE },
 		});
 		expect(stepFlow(opened.state, { type: "speedBacked" })).toEqual({
@@ -186,17 +186,31 @@ describe("screen flow", () => {
 		});
 	});
 
-	it("the speed view saves nothing and starts no flood, and leaves the kiosk alone", () => {
-		const opened = stepFlow(PAUSED, { type: "speedPressed", color: PINK });
+	it("the speed view over the pause saves nothing and starts no flood, and leaves the kiosk alone", () => {
+		const opened = stepFlow(PAUSED, { type: "speedPressed", from: "pause", color: PINK });
 		expect(opened.calibrate).toBeUndefined();
 		expect(opened.flood).toBeUndefined();
 		expect(opened.act).toBeUndefined();
 		expect(stepFlow(opened.state, { type: "speedBacked" }).act).toBeUndefined();
 	});
 
+	it("the speed button on the title opens the speed view in the play dot's colour, halting the kiosk", () => {
+		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", from: "menu", color: BLUE });
+		expect(opened).toEqual({
+			state: { ...INITIAL_FLOW, speed: { from: "menu", color: BLUE } },
+			screen: { kind: "speed", color: BLUE },
+			act: { kind: "haltKiosk" },
+		});
+		expect(stepFlow(opened.state, { type: "speedBacked" })).toEqual({
+			state: INITIAL_FLOW,
+			screen: { kind: "title" },
+			act: { kind: "runKiosk" },
+		});
+	});
+
 	it("a flood covering the screen closes the speed view too", () => {
-		const opened = stepFlow(INITIAL_FLOW, { type: "speedPressed", color: PINK }).state;
-		expect(stepFlow(opened, { type: "covered" }).state).toEqual(INITIAL_FLOW);
+		const opened = stepFlow(PAUSED, { type: "speedPressed", from: "pause", color: PINK }).state;
+		expect(stepFlow(opened, { type: "covered" }).state).toEqual(PAUSED);
 	});
 
 	it("the pause dot and leaving the app pause the game, opening no screen", () => {
@@ -239,7 +253,7 @@ describe("screen flow", () => {
 		const flooding = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }).state;
 		for (const event of [
 			{ type: "pausePressed" },
-			{ type: "speedPressed", color: PINK },
+			{ type: "speedPressed", from: "menu", color: PINK },
 			{ type: "levelPressed", from: "pause", color: PINK },
 			{ type: "startPressed", color: PINK, hasZero: true, at: AT },
 			{ type: "settleBacked" },
@@ -288,7 +302,7 @@ describe("screen flow", () => {
 describe("which screen shows", () => {
 	const PHASES: readonly GamePhase[] = ["KIOSK", "RUNNING", "REJECTING", "PAUSED", "GAME_OVER"];
 	const SETTLES = [null, "start", "menu", "pause"] as const;
-	const SPEEDS = [false, true] as const;
+	const SPEEDS = [null, "menu", "pause"] as const;
 	const FLOODS = [false, true] as const;
 
 	const title: Screen = { kind: "title" };
@@ -305,53 +319,54 @@ describe("which screen shows", () => {
 	 */
 	const EXPECTED: Record<
 		GamePhase,
-		Record<NonNullable<(typeof SETTLES)[number]> | "none", [Screen, Screen]>
+		Record<NonNullable<(typeof SETTLES)[number]> | "none", [Screen, Screen, Screen]>
 	> = {
-		// [without speed view, with speed view]; the speed view only opens over the pause
+		// [speed view closed, open from the title, open from the pause]; the bowl and the speed
+		// view are never open together
 		KIOSK: {
-			none: [title, title], // impossible: speed over the title
-			start: [bowl, bowl], // a first PLAY; speed: impossible
-			menu: [bowl, bowl], // the level button on the title; speed: impossible
-			pause: [title, title], // impossible: the pause's bowl over the title
+			none: [title, speed, title], // the speed button on the title; the pause's: impossible
+			start: [bowl, bowl, bowl], // a first PLAY; speed: impossible
+			menu: [bowl, bowl, bowl], // the level button on the title; speed: impossible
+			pause: [title, speed, title], // impossible: the pause's bowl over the title
 		},
 		RUNNING: {
-			none: [hud, hud], // speed: impossible
-			start: [hud, hud], // impossible: a bowl over a running game
-			menu: [hud, hud], // impossible
-			pause: [hud, hud], // impossible
+			none: [hud, hud, hud], // speed: impossible
+			start: [hud, hud, hud], // impossible: a bowl over a running game
+			menu: [hud, hud, hud], // impossible
+			pause: [hud, hud, hud], // impossible
 		},
 		REJECTING: {
-			none: [hud, hud], // speed: impossible
-			start: [hud, hud], // impossible
-			menu: [hud, hud], // impossible
-			pause: [hud, hud], // impossible
+			none: [hud, hud, hud], // speed: impossible
+			start: [hud, hud, hud], // impossible
+			menu: [hud, hud, hud], // impossible
+			pause: [hud, hud, hud], // impossible
 		},
 		PAUSED: {
-			none: [pause, speed],
-			start: [pause, speed], // impossible: the title's bowl over the pause
-			menu: [pause, speed], // impossible
-			pause: [bowl, bowl], // the level button on the pause; with speed: impossible
+			none: [pause, pause, speed], // the speed button on the pause; the title's: impossible
+			start: [pause, pause, speed], // impossible: the title's bowl over the pause
+			menu: [pause, pause, speed], // impossible
+			pause: [bowl, bowl, bowl], // the level button on the pause; with speed: impossible
 		},
 		GAME_OVER: {
-			none: [gameOver, gameOver], // speed: impossible
-			start: [gameOver, gameOver], // impossible
-			menu: [gameOver, gameOver], // impossible
-			pause: [gameOver, gameOver], // impossible
+			none: [gameOver, gameOver, gameOver], // speed: impossible
+			start: [gameOver, gameOver, gameOver], // impossible
+			menu: [gameOver, gameOver, gameOver], // impossible
+			pause: [gameOver, gameOver, gameOver], // impossible
 		},
 	};
 
 	for (const phase of PHASES) {
 		for (const from of SETTLES) {
-			for (const withSpeed of SPEEDS) {
+			for (const speedFrom of SPEEDS) {
 				for (const flooding of FLOODS) {
 					const state: FlowState = {
 						phase,
 						settle: from ? { from, color: PINK } : null,
-						speed: withSpeed ? { color: BLUE } : null,
+						speed: speedFrom ? { from: speedFrom, color: BLUE } : null,
 						flooding,
 					};
-					const expected = EXPECTED[phase][from ?? "none"][withSpeed ? 1 : 0];
-					it(`${phase}, bowl ${from ?? "closed"}, speed ${withSpeed ? "open" : "closed"}${flooding ? ", flooding" : ""}: ${expected.kind}`, () => {
+					const expected = EXPECTED[phase][from ?? "none"][SPEEDS.indexOf(speedFrom)];
+					it(`${phase}, bowl ${from ?? "closed"}, speed ${speedFrom ?? "closed"}${flooding ? ", flooding" : ""}: ${expected.kind}`, () => {
 						expect(screenOf(state)).toEqual(expected);
 					});
 				}

@@ -5,7 +5,7 @@
  * setting the level pose; the settled dot then floods into play. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
  * comes in as an event too, and every step answers with the one screen to show. While the bowl
- * is open over the title the kiosk halts.
+ * or the speed view is open over the title the kiosk halts.
  */
 
 import type { GamePhase, TiltZero } from "../../domain/types";
@@ -21,8 +21,9 @@ interface SettleRequest {
 	color: string;
 }
 
-/** The speed view is open over the pause, its dot in the player's colour */
+/** The speed view is open over the title or the pause, its dot in the colour play takes */
 interface SpeedRequest {
+	from: "menu" | "pause";
 	color: string;
 }
 
@@ -59,8 +60,8 @@ export type FlowEvent =
 	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
 	| { type: "settled"; zero: TiltZero; facingDown: boolean; at: PressPoint }
 	| { type: "settleBacked" }
-	/** The speed button on the pause, in the player's colour */
-	| { type: "speedPressed"; color: string }
+	/** The speed button on the title or the pause, in the colour the bowl's dot takes */
+	| { type: "speedPressed"; from: "menu" | "pause"; color: string }
 	/** BACK on the speed view */
 	| { type: "speedBacked" }
 	/** RETRY on the game over, in the player's colour */
@@ -103,27 +104,26 @@ const play = (color: string): FlowAction => ({ kind: "play", color });
 
 /**
  * Over the title the drifting dots would pull the eye from the bowl's one dot, so the kiosk
- * halts while it is open; the pause already holds a frozen game. A game started from the bowl
+ * halts while the bowl or the speed view is open; the pause already holds a frozen game. A game started from the bowl
  * replaces the kiosk under its flood, so only closing the bowl back to the title runs it again.
  */
 const HALT_KIOSK: FlowAction = { kind: "haltKiosk" };
 const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
 
 /**
- * The screen for a phase and the flow over it. The bowl opens over the screen it was opened
- * from, and the speed view over the pause; anywhere else they cannot be open, and the phase's
- * own screen shows. A flood leaves the screen under it as it is until it covers.
+ * The screen for a phase and the flow over it. The bowl and the speed view open over the
+ * screen they were opened from; anywhere else they cannot be open, and the phase's own screen
+ * shows. A flood leaves the screen under it as it is until it covers.
  */
 export function screenOf(state: FlowState): Screen {
 	const { phase, settle, speed } = state;
 	switch (phase) {
 		case "KIOSK":
-			return settle && settle.from !== "pause"
-				? { kind: "settle", color: settle.color }
-				: { kind: "title" };
+			if (settle && settle.from !== "pause") return { kind: "settle", color: settle.color };
+			return speed?.from === "menu" ? { kind: "speed", color: speed.color } : { kind: "title" };
 		case "PAUSED":
 			if (settle?.from === "pause") return { kind: "settle", color: settle.color };
-			return speed ? { kind: "speed", color: speed.color } : { kind: "pause" };
+			return speed?.from === "pause" ? { kind: "speed", color: speed.color } : { kind: "pause" };
 		case "RUNNING":
 		case "REJECTING":
 			return { kind: "hud" };
@@ -184,9 +184,15 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 				...(state.settle && state.settle.from !== "pause" && { act: RUN_KIOSK }),
 			};
 		case "speedPressed":
-			return { state: { ...state, speed: { color: event.color } } };
+			return {
+				state: { ...state, speed: { from: event.from, color: event.color } },
+				...(event.from === "menu" && { act: HALT_KIOSK }),
+			};
 		case "speedBacked":
-			return { state: { ...state, speed: null } };
+			return {
+				state: { ...state, speed: null },
+				...(state.speed?.from === "menu" && { act: RUN_KIOSK }),
+			};
 		case "retryPressed":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "leavePressed":

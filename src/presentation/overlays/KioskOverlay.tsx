@@ -15,7 +15,7 @@ import Animated, {
 import { BowlStage } from "../components/BowlStage";
 import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
-import { IconDot } from "../components/IconDot";
+import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
 import { TiltBowl } from "../components/TiltBowl";
 import { TITLE, TITLE_FOOTER_HEIGHT, titlePitch } from "../layout/bowlStage";
@@ -32,8 +32,10 @@ interface KioskOverlayProps {
 	onCalibrate: (color: string) => void;
 	onToggleSound: () => void;
 	onToggleMusic: () => void;
-	/** Tilt sensitivity, so the play dot rolls as fast as the player dot will */
+	/** Tilt sensitivity, so the play dot rolls as fast as the player dot will; the speed dot shows it */
 	sensitivity: number;
+	/** Open the speed view, in the play dot's current colour */
+	onSpeed: (color: string) => void;
 	/** The version and build, shown as small print under the best score; empty shows none */
 	versionTag: string;
 }
@@ -55,7 +57,7 @@ function heldColor(cycle: number): string {
  * sits right above the bowl so the two read as one group, lifted a little above centre; it
  * drifts with the tilt. The play dot is a drop of the player's liquid rolling in a bowl the
  * way the player will, and the best score waits at the bottom, with the version and build as
- * small print beneath it.
+ * small print beneath it. The corners hold the settings and the sound, as on the pause.
  */
 export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	highScore,
@@ -66,6 +68,7 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	onToggleSound,
 	onToggleMusic,
 	sensitivity,
+	onSpeed,
 	versionTag,
 }) => {
 	const { width } = useWindowDimensions();
@@ -84,6 +87,8 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 	const playColor = useDerivedValue(() =>
 		playColourAt((cycle.get() + startIndex) % TRIO.length, interpolateColor),
 	);
+	/** The colour the play dot holds now, which whatever it opens takes on */
+	const colorNow = () => heldColor(cycle.get() + startIndex);
 
 	return (
 		<Animated.View
@@ -114,31 +119,28 @@ export const KioskOverlay: React.FC<KioskOverlayProps> = ({
 						liquid
 						label="PLAY"
 						labelPitch={4}
-						onPress={(point) => onStart(point, heldColor(cycle.get() + startIndex))}
+						onPress={(point) => onStart(point, colorNow())}
 						accessibilityLabel="Play"
 					/>
 				</TiltBowl>
 			</BowlStage>
 
-			<View style={styles.footer} pointerEvents="box-none">
-				<View style={styles.best} pointerEvents="none">
+			<View style={styles.footer} pointerEvents="none">
+				<View style={styles.best}>
 					<DotMatrixText text={`BEST ${highScore}`} pitch={4} color="rgba(244,246,251,0.6)" />
 				</View>
 				{versionTag ? (
-					<View style={styles.version} pointerEvents="none">
+					<View style={styles.version}>
 						<DotMatrixText text={versionTag} pitch={VERSION_PITCH} color={DIM} />
 					</View>
 				) : null}
-				<View style={styles.level}>
-					<IconDot
-						size={44}
-						icon="level"
-						onPress={() => onCalibrate(heldColor(cycle.get() + startIndex))}
-						accessibilityLabel="Set level pose"
-						color="#F4F6FB"
-					/>
-				</View>
 			</View>
+
+			<SettingsMenu
+				sensitivity={sensitivity}
+				onLevel={() => onCalibrate(colorNow())}
+				onSpeed={() => onSpeed(colorNow())}
+			/>
 
 			<SoundMenu
 				soundEnabled={soundEnabled}
@@ -172,10 +174,5 @@ const styles = StyleSheet.create({
 		right: 0,
 		bottom: VERSION_BOTTOM,
 		alignItems: "center",
-	},
-	level: {
-		position: "absolute",
-		left: 20,
-		bottom: 26,
 	},
 });
