@@ -11,9 +11,7 @@
  * the stage is up as the flood lifts. Anywhere else it is already showing.
  *
  * The frost window is Get ready's to open and widen; the look only shuts it as the frost
- * comes on, so a pause always starts frosted all over. The shell applies a look to the stage
- * as it changes: each value's move is one of the constants here, so an unchanged value keeps
- * the same move and is left alone.
+ * comes on, so a pause always starts frosted all over.
  */
 
 import type { GamePhase } from "../../domain/types";
@@ -31,12 +29,10 @@ export interface StagePlace {
 }
 
 /** How a value gets to its target: at once, or over `duration` ms after `delay` ms */
-export type StageTransition =
-	| { kind: "instant" }
-	| { kind: "timed"; duration: number; delay: number };
+type StageTransition = { kind: "instant" } | { kind: "timed"; duration: number; delay: number };
 
 /** A value the stage moves to, and how */
-interface StageMove<T> {
+export interface StageMove<T> {
 	to: T;
 	over: StageTransition;
 }
