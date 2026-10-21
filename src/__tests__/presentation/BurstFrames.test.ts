@@ -20,7 +20,6 @@ import {
 	type Burst,
 	burstColor,
 	burstSprites,
-	createBurstIds,
 	FULL_RING_SIZE,
 	layOutBurst,
 	MAX_BURSTS,
@@ -326,32 +325,5 @@ describe("the burst list", () => {
 		expect(noBurstsLeft(list)).toBe(false);
 		advanceBursts(list, 400);
 		expect(noBurstsLeft(advanceBursts(list, 400 + BURST_LIFETIME_MS))).toBe(true);
-	});
-});
-
-describe("burst ids", () => {
-	it("hands out ids from 0, one at a time", () => {
-		const ids = createBurstIds();
-		expect([ids.take(), ids.take(), ids.take()]).toEqual([0, 1, 2]);
-	});
-
-	it("takes a stop for the newest burst taken", () => {
-		const ids = createBurstIds();
-		ids.take();
-		const newest = ids.take();
-		expect(ids.isNewest(newest)).toBe(true);
-	});
-
-	it("refuses a stop sent before a newer burst reached the UI thread", () => {
-		const ids = createBurstIds();
-		const drawn = ids.take();
-		ids.take();
-		expect(ids.isNewest(drawn)).toBe(false);
-	});
-
-	it("refuses a stop before any burst was drawn once one is taken", () => {
-		const ids = createBurstIds();
-		ids.take();
-		expect(ids.isNewest(-1)).toBe(false);
 	});
 });

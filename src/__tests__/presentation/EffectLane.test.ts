@@ -1,4 +1,15 @@
 import { createEffectLane, type EffectReducer } from "../../presentation/effects/effectLane";
+import {
+	advanceTally,
+	createTally,
+	newCatch,
+	shownScore,
+	type Tally,
+	type TallyCatch,
+	tallyIdle,
+	withCatch,
+} from "../../presentation/effects/scoreTally";
+import { WHITE } from "../../presentation/theme/theme";
 
 /** A test item: an id from the lane, and how long it lives once it has drawn a frame */
 interface Item {
@@ -62,6 +73,8 @@ function setup<S, T>(reducer: EffectReducer<S, T>, initial: S) {
 		running: () => on,
 		/** What the drawing sees: the items and the frame time */
 		drawn: () => items.get(),
+		/** Replace the state from the JS thread, as a shared value's set does */
+		replace: (state: S) => items.set(state),
 		time: () => time.get(),
 		/** The UI thread's next frame at `now`, if the clock runs */
 		frame: (now: number) => {
@@ -245,5 +258,60 @@ describe("effect lane", () => {
 		frame(1200);
 		flush();
 		expect(running()).toBe(false);
+	});
+});
+
+/** The score meter's lane: catches queued on the JS thread, counted into the total on the UI thread */
+const TALLY: EffectReducer<Tally, TallyCatch> = {
+	add: withCatch,
+	advance: advanceTally,
+	idle: tallyIdle,
+};
+
+/** Frames 16 ms apart from `from` while the clock runs, up to `until`; the last frame's time */
+function runFrames(
+	{ frame, flush, running }: ReturnType<typeof setup<Tally, TallyCatch>>,
+	from: number,
+	until = from + 10_000,
+): number {
+	let now = from;
+	frame(now);
+	flush();
+	while (running() && now < until) {
+		now += 16;
+		frame(now);
+		flush();
+	}
+	return now;
+}
+
+describe("score tally lane", () => {
+	it("counts each catch into the total completely, then stops the clock", () => {
+		const meter = setup(TALLY, createTally(40));
+		meter.lane.add((id) => newCatch(id, 3, WHITE));
+		meter.lane.add((id) => newCatch(id, 5, WHITE));
+		const end = runFrames(meter, 1000);
+		expect(meter.running()).toBe(false);
+		expect(meter.drawn().catches).toEqual([]);
+		expect(shownScore(meter.drawn(), end)).toBe(48);
+	});
+
+	it("still stops the clock after a reset to a new run's score mid-count", () => {
+		const meter = setup(TALLY, createTally(40));
+		meter.lane.add((id) => newCatch(id, 9, WHITE));
+		runFrames(meter, 1000, 1100);
+		expect(meter.running()).toBe(true);
+		meter.replace(createTally(0));
+		const end = runFrames(meter, 1116);
+		expect(meter.running()).toBe(false);
+		expect(shownScore(meter.drawn(), end)).toBe(0);
+	});
+
+	it("gives each catch the lane's id", () => {
+		const meter = setup(TALLY, createTally(0));
+		meter.lane.add((id) => newCatch(id, 1, WHITE));
+		meter.lane.add((id) => newCatch(id, 1, WHITE));
+		meter.frame(1000);
+		expect(meter.drawn().catches.map((c) => c.id)).toEqual([0, 1]);
 	});
 });

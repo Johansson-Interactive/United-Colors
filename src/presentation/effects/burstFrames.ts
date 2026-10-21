@@ -126,36 +126,6 @@ export function withBurst(list: readonly Burst[], burst: Burst): Burst[] {
 	return next;
 }
 
-/** Hands out burst ids on the JS thread, and judges the UI thread's requests to stop the clock */
-export interface BurstIds {
-	/** The next burst's id: 0, then 1, and so on */
-	take(): number;
-	/**
-	 * Whether `seen`, the newest burst the UI thread had drawn when its list ran empty, is the
-	 * newest taken. A stop sent before a newer burst reached the UI thread is for an older one,
-	 * and stopping then would leave the newer burst undrawn past its first frame.
-	 */
-	isNewest(seen: number): boolean;
-}
-
-/**
- * Burst ids, kept outside the hook: the React Compiler turns `ref.current++` in a hook into a
- * pre-increment, which once made every stop for the burst before the newest look current
- */
-export function createBurstIds(): BurstIds {
-	let next = 0;
-	return {
-		take() {
-			const id = next;
-			next = id + 1;
-			return id;
-		},
-		isNewest(seen) {
-			return seen === next - 1;
-		},
-	};
-}
-
 /**
  * Advance the list to frame time `now`: a burst not yet drawn starts now (stamped in place),
  * and one whose lifetime is up is dropped. Returns `list` itself unless one was dropped.
