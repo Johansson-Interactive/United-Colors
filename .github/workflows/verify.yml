@@ -24,3 +24,26 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+
+  # Ships each green push to main: TestFlight on iOS, the internal track on Android.
+  # Builds run on EAS (--no-wait), which bumps the build numbers and submits them.
+  # Put [skip build] in the head commit message to skip a push.
+  release:
+    needs: verify
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip build]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # eas-cli resolves the config plugins in app.json from node_modules
+      - run: pnpm install --frozen-lockfile
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 24.12.1
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: eas build --platform all --profile production --auto-submit --non-interactive --no-wait
