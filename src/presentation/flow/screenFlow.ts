@@ -1,11 +1,12 @@
 /**
  * Pure state machine behind the screens: the title, the settle bowl, the pause, the speed
- * view and the game over, and the floods between them. A flood is a dot growing from under the finger until it
+ * view, Get ready and the game over, and the floods between them. A flood is a dot growing from under the finger until it
  * covers the screen; the scene changes underneath, then it lifts. A first game starts by
  * setting the level pose; the settled dot then floods into play. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
  * comes in as an event too, and every step answers with the one screen to show. While the bowl
- * is open over the title the kiosk halts.
+ * is open over the title the kiosk halts. A paused run continues through Get ready: the game
+ * stays paused until the player has held level, then resumes with no flood.
  */
 
 import type { GamePhase, TiltZero } from "../../domain/types";
@@ -21,16 +22,17 @@ interface SettleRequest {
 	color: string;
 }
 
-/** The speed view is open over the pause, its dot in the player's colour */
-interface SpeedRequest {
-	color: string;
-}
+/**
+ * A screen in place of the pause's own, over the frozen game: the speed view, its dot in the
+ * player's colour, or Get ready, where the player holds level until play resumes
+ */
+type OverPause = Extract<Screen, { kind: "speed" | "getReady" }>;
 
 export interface FlowState {
 	/** The game's phase, as the session last reported it */
 	phase: GamePhase;
 	settle: SettleRequest | null;
-	speed: SpeedRequest | null;
+	overPause: OverPause | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
 }
@@ -38,7 +40,7 @@ export interface FlowState {
 export const INITIAL_FLOW: FlowState = {
 	phase: "KIOSK",
 	settle: null,
-	speed: null,
+	overPause: null,
 	flooding: false,
 };
 
@@ -48,6 +50,7 @@ export type Screen =
 	| { kind: "hud" }
 	| { kind: "pause" }
 	| { kind: "speed"; color: string }
+	| { kind: "getReady" }
 	| { kind: "settle"; color: string }
 	| { kind: "gameOver" };
 
@@ -67,10 +70,12 @@ export type FlowEvent =
 	| { type: "retryPressed"; color: string; at: PressPoint }
 	/** QUIT on the pause or BACK on the game over */
 	| { type: "leavePressed"; at: PressPoint }
-	/** The pause dot on the HUD, or the player leaving the app mid-run */
+	/** The pause dot on the HUD or in Get ready, or the player leaving the app mid-run */
 	| { type: "pausePressed" }
-	/** The level ring on the pause, held level or tapped */
-	| { type: "resumePressed" }
+	/** The play dot on the pause; `tiltAvailable`: there is tilt to hold level with */
+	| { type: "playPressed"; tiltAvailable: boolean }
+	/** Get ready's hold completed: the ring closed on the player */
+	| { type: "readyHeld" }
 	/** The flood covers the screen; whatever was under it can go */
 	| { type: "covered" }
 	/** The game moved to another phase */
@@ -100,6 +105,7 @@ export interface FlowStep {
 }
 
 const play = (color: string): FlowAction => ({ kind: "play", color });
+const RESUME: FlowAction = { kind: "resume" };
 
 /**
  * Over the title the drifting dots would pull the eye from the bowl's one dot, so the kiosk
@@ -111,11 +117,11 @@ const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
 
 /**
  * The screen for a phase and the flow over it. The bowl opens over the screen it was opened
- * from, and the speed view over the pause; anywhere else they cannot be open, and the phase's
+ * from, and the speed view and Get ready over the pause; anywhere else they cannot be open, and the phase's
  * own screen shows. A flood leaves the screen under it as it is until it covers.
  */
 export function screenOf(state: FlowState): Screen {
-	const { phase, settle, speed } = state;
+	const { phase, settle, overPause } = state;
 	switch (phase) {
 		case "KIOSK":
 			return settle && settle.from !== "pause"
@@ -123,7 +129,7 @@ export function screenOf(state: FlowState): Screen {
 				: { kind: "title" };
 		case "PAUSED":
 			if (settle?.from === "pause") return { kind: "settle", color: settle.color };
-			return speed ? { kind: "speed", color: speed.color } : { kind: "pause" };
+			return overPause ?? { kind: "pause" };
 		case "RUNNING":
 		case "REJECTING":
 			return { kind: "hud" };
@@ -131,6 +137,13 @@ export function screenOf(state: FlowState): Screen {
 			return { kind: "gameOver" };
 	}
 }
+
+/** What can still step the flow in Get ready: the pause dot (or leaving the app), the hold */
+const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
+	"pausePressed",
+	"readyHeld",
+	"covered",
+]);
 
 /** A step before its screen is worked out */
 type BareStep = Omit<FlowStep, "screen">;
@@ -156,6 +169,12 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 	if (event.type === "phaseChanged") return { state: { ...state, phase: event.phase } };
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
+	// Get ready shows only the hold; the pause's controls have faded out under it, and a hold
+	// that lands once Get ready has closed is too late to count
+	const gettingReady = state.overPause?.kind === "getReady";
+	if (gettingReady ? !GET_READY_EVENTS.has(event.type) : event.type === "readyHeld") {
+		return { state };
+	}
 	switch (event.type) {
 		case "startPressed":
 			return event.hasZero
@@ -175,7 +194,7 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 				return { state: { ...state, settle: null }, calibrate, act: RUN_KIOSK };
 			}
 			// The bowl stays under the flood until it has covered the screen
-			const action = settle.from === "start" ? play(settle.color) : { kind: "resume" as const };
+			const action = settle.from === "start" ? play(settle.color) : RESUME;
 			return startFlood(state, { color: settle.color, at: event.at, action }, calibrate);
 		}
 		case "settleBacked":
@@ -184,17 +203,27 @@ function bareStep(state: FlowState, event: FlowEvent): BareStep {
 				...(state.settle && state.settle.from !== "pause" && { act: RUN_KIOSK }),
 			};
 		case "speedPressed":
-			return { state: { ...state, speed: { color: event.color } } };
+			return { state: { ...state, overPause: { kind: "speed", color: event.color } } };
 		case "speedBacked":
-			return { state: { ...state, speed: null } };
+			return { state: { ...state, overPause: null } };
 		case "retryPressed":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "kiosk" } });
 		case "pausePressed":
-			return { state, act: { kind: "pause" } };
-		case "resumePressed":
-			return { state, act: { kind: "resume" } };
+			// Get ready is over a game that is already paused; it only closes, so a hold cannot
+			// complete while the player is away
+			return gettingReady
+				? { state: { ...state, overPause: null } }
+				: { state, act: { kind: "pause" } };
+		case "readyHeld":
+			// The hold is the countdown; play picks up the moment the ring closes, no flood
+			return { state: { ...state, overPause: null }, act: RESUME };
+		case "playPressed":
+			// Without tilt there is no level to hold, so nothing stands between the pause and play
+			return event.tiltAvailable
+				? { state: { ...state, overPause: { kind: "getReady" } } }
+				: { state, act: RESUME };
 		case "covered":
 			return { state: { ...INITIAL_FLOW, phase: state.phase } };
 	}

@@ -216,7 +216,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[store, watchAppActive],
 	);
 
-	const handleResume = useCallback(() => dispatch({ type: "resumePressed" }), [dispatch]);
+	// The pause's spirit level is still the hold until Get ready has an overlay of its own, so
+	// play resumes straight away rather than opening a screen with nothing drawn on it
+	const handleResume = useCallback(
+		() => dispatch({ type: "playPressed", tiltAvailable: false }),
+		[dispatch],
+	);
 
 	const handleStartPress = useCallback(
 		(at: PressPoint, color: string) =>
