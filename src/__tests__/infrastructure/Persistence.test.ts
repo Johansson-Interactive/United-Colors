@@ -4,7 +4,6 @@ import {
 	TILT_SENSITIVITY_MAX,
 	TILT_SENSITIVITY_MIN,
 } from "../../domain/constants";
-import { FLAT, gravityAt } from "../../domain/levelPose";
 import type { GameSettings } from "../../domain/types";
 import { AsyncStorageRepository } from "../../infrastructure/AsyncStorageRepository";
 
@@ -118,14 +117,14 @@ describe("Persisted settings are validated before use", () => {
 		expect(settings.tiltZero).toEqual({ x: 0, y: -0.6, z: -0.8 });
 	});
 
-	it("reads a pose saved as angles from flat as the pose they describe, on its side", async () => {
+	it("drops a pose saved as two angles, as poses were before they were gravity", async () => {
 		const settings = await loadStored({
 			...DEFAULT_SETTINGS,
 			tiltZero: { x: 0.25, y: -0.5 },
 			tiltZeroDown: { x: 0.1, y: 0.2 },
 		});
-		expect(settings.tiltZero).toEqual(gravityAt({ x: 0.25, y: -0.5 }, FLAT.up));
-		expect(settings.tiltZeroDown).toEqual(gravityAt({ x: 0.1, y: 0.2 }, FLAT.down));
+		expect(settings.tiltZero).toBeNull();
+		expect(settings.tiltZeroDown).toBeNull();
 	});
 
 	it("drops unknown keys instead of carrying them into the settings", async () => {

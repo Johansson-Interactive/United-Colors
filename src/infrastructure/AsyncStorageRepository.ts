@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StoragePort } from "../application/ports";
 import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
-import { FLAT, gravityAt, unitGravity } from "../domain/levelPose";
-import type { GameSettings, Gravity, TiltZero } from "../domain/types";
+import { unitGravity } from "../domain/levelPose";
+import type { GameSettings, TiltZero } from "../domain/types";
 
 const KEYS = {
 	highScore: "@tiltling/high_score",
@@ -31,16 +31,14 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * A pose is a gravity direction, three finite numbers not all zero, read back at unit length.
- * One saved before poses were gravity holds two angles, tilt from `flat`, and is read as the
- * pose they describe. Anything else (corrupt, hand-edited) reads as unset.
+ * A pose is a gravity direction, three finite numbers not all zero, read back at unit length;
+ * anything else (corrupt, hand-edited, an older shape) reads as unset
  */
-function readTiltZero(value: unknown, flat: Gravity): TiltZero | null {
+function readTiltZero(value: unknown): TiltZero | null {
 	if (!isRecord(value)) return null;
 	const { x, y, z } = value;
-	if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
-	if (z === undefined) return gravityAt({ x, y }, flat);
-	if (!isFiniteNumber(z) || Math.hypot(x, y, z) === 0) return null;
+	if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) return null;
+	if (Math.hypot(x, y, z) === 0) return null;
 	return unitGravity({ x, y, z });
 }
 
@@ -57,8 +55,8 @@ function sanitizeSettings(stored: unknown): GameSettings {
 		soundEnabled,
 		musicEnabled,
 		tiltSensitivity: readSensitivity(stored.tiltSensitivity),
-		tiltZero: readTiltZero(stored.tiltZero, FLAT.up),
-		tiltZeroDown: readTiltZero(stored.tiltZeroDown, FLAT.down),
+		tiltZero: readTiltZero(stored.tiltZero),
+		tiltZeroDown: readTiltZero(stored.tiltZeroDown),
 	};
 }
 
