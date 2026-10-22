@@ -1,5 +1,6 @@
 import { GAME_HERTZ, PLAYER_SPEED_PER_DEGREE } from "../domain/constants";
-import type { DotView, RenderFrame, ScreenSize } from "../domain/types";
+import { attitudeAt, FLAT_ATTITUDES } from "../domain/levelPose";
+import type { DotView, RenderFrame, ScreenSize, TiltAngles } from "../domain/types";
 import type { SensorSample } from "./ports";
 
 /**
@@ -32,7 +33,7 @@ const MIDDLE_PULL = 0.3;
 /** How much of the way to the wanted tilt a sample moves: a hand, not a switch */
 const EASE = 0.35;
 
-const LEVEL: SensorSample = { x: 0, y: 0, facingDown: false };
+const LEVEL: TiltAngles = { x: 0, y: 0 };
 
 /** A small dot that is loose on the field: not a drip forming on its wall, nor being refused */
 function loose(dot: DotView): boolean {
@@ -146,22 +147,22 @@ function wantedVelocity(frame: RenderFrame, screen: ScreenSize): { x: number; y:
 }
 
 /**
- * The next tilt sample: level off play, otherwise eased from `previous` towards the tilt that
- * rolls the player at the velocity the pilot wants on `screen`, at `sensitivity` (the speed
- * setting)
+ * The next tilt (from flat): level off play, otherwise eased from `previous` towards the tilt
+ * that rolls the player at the velocity the pilot wants on `screen`, at `sensitivity` (the
+ * speed setting)
  */
 export function pilotStep(
 	frame: RenderFrame,
 	screen: ScreenSize,
 	sensitivity: number,
-	previous: SensorSample,
-): SensorSample {
+	previous: TiltAngles,
+): TiltAngles {
 	if (frame.phase !== "RUNNING") return LEVEL;
 	const wanted = wantedVelocity(frame, screen);
 	const perRadian = SPEED_PER_RADIAN * sensitivity;
 	const x = previous.x + (wanted.x / perRadian - previous.x) * EASE;
 	const y = previous.y + (wanted.y / perRadian - previous.y) * EASE;
-	return { x, y, facingDown: false };
+	return { x, y };
 }
 
 /**
@@ -176,6 +177,6 @@ export function createPilot(
 	return () => {
 		const { frame, settings } = getState();
 		previous = pilotStep(frame, getScreen(), settings.tiltSensitivity, previous);
-		return previous;
+		return attitudeAt(previous, FLAT_ATTITUDES.up);
 	};
 }

@@ -1,7 +1,8 @@
 import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
-import type { ScreenSize, TiltZero } from "../domain/types";
+import { FLAT_ATTITUDES, type LevelAttitudes, levelTilt, type PoseSide } from "../domain/levelPose";
+import type { ScreenSize } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { Clock, ClockFactory, SensorSample } from "./ports";
 import { createSceneBuilder } from "./renderScene";
@@ -31,8 +32,9 @@ export class GameSession {
 	private engine: GameEngine | null = null;
 	private clock: Clock | null = null;
 	private screen = DEFAULT_SCREEN;
-	private tiltZero: TiltZero | null = null;
-	private tiltZeroDown: TiltZero | null = null;
+	private poses = FLAT_ATTITUDES;
+	/** The level pose the last tilt was measured from (see levelTilt) */
+	private side: PoseSide = "up";
 	private sensitivity = 1;
 	private readonly presenters = new Set<(scene: Float32Array) => void>();
 	private readonly buildScene = createSceneBuilder();
@@ -122,9 +124,11 @@ export class GameSession {
 		this.clock = null;
 	}
 
-	/** Raw device tilt; the player sees it relative to the level pose for that side */
+	/** The phone's attitude; the player feels it as the whole turn from the nearer level pose */
 	feedTilt(sample: SensorSample): void {
-		this.engine?.onSensorInput(sample.x, sample.y, sample.facingDown);
+		const tilt = levelTilt(sample, this.poses, this.side);
+		this.side = tilt.side;
+		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}
 
 	/** Move the player by pixels (touch control); no-op unless a game is running */
@@ -132,11 +136,12 @@ export class GameSession {
 		this.engine?.onMovementDelta(dx, dy);
 	}
 
-	/** The poses that count as level with the screen up and down; null reads flat */
-	setTiltZero(zero: TiltZero | null, zeroDown: TiltZero | null): void {
-		this.tiltZero = zero;
-		this.tiltZeroDown = zeroDown;
-		this.engine?.setTiltZero(zero, zeroDown);
+	/**
+	 * The poses that count as level, screen up and turned over, as attitudes with the swivel
+	 * zeroed (see bindTiltZero)
+	 */
+	setLevelPoses(poses: LevelAttitudes): void {
+		this.poses = poses;
 	}
 
 	/** How fast the player moves for a given tilt, as a multiple of the default speed */
@@ -154,7 +159,6 @@ export class GameSession {
 				spawner: this.options.spawner,
 				refusals: this.options.refusals,
 			});
-			this.engine.setTiltZero(this.tiltZero, this.tiltZeroDown);
 			this.engine.setSensitivity(this.sensitivity);
 		}
 		return this.engine;

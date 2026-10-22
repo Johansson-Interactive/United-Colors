@@ -10,8 +10,9 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
+import { FLAT_ATTITUDES, turnedToward } from "../../domain/levelPose";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM } from "../theme/theme";
-import { type SettleState, settleEase } from "../tilt/settle";
+import { bowlTilt, type SettleState, settleEase } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface SettleBowlProps {
@@ -24,7 +25,7 @@ interface SettleBowlProps {
 	dim: SharedValue<number>;
 }
 
-/** Pixels the dot rolls per radian of raw tilt */
+/** Pixels the dot rolls per radian of tilt */
 const GAIN = 110;
 /** Fraction of the remaining distance closed per frame at 60 Hz */
 const SMOOTHING = 0.25;
@@ -44,16 +45,13 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 	const travel = rim - dot - 6;
 	const closed = dot * 1.7;
 
-	// Smoothed raw tilt so the dot rolls rather than steps at the sensor rate
-	const shownX = useSharedValue(0);
-	const shownY = useSharedValue(0);
+	// Smoothed attitude so the dot rolls rather than steps at the sensor rate
+	const shown = useSharedValue(FLAT_ATTITUDES.up);
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		const raw = tilt.raw.get();
-		shownX.set(shownX.get() + (raw.x - shownX.get()) * k);
-		shownY.set(shownY.get() + (raw.y - shownY.get()) * k);
+		shown.set(turnedToward(shown.get(), tilt.raw.get(), k));
 	});
 
 	// Snap and pulse once the pose has settled
@@ -70,10 +68,9 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 
 	const level = useDerivedValue(() => settleEase(state.get().progress));
 	const position = useDerivedValue(() => {
-		// The bowl levels to the hand as the hold progresses: the mean is taken out gradually
-		const s = state.get();
-		let x = (shownX.get() - s.meanX * level.get()) * GAIN;
-		let y = (shownY.get() - s.meanY * level.get()) * GAIN;
+		const tilt = bowlTilt(state.get(), shown.get());
+		let x = tilt.x * GAIN;
+		let y = tilt.y * GAIN;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;

@@ -2,6 +2,7 @@ import { type BenchRun, benchSessionOptions, benchTilt } from "../../application
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { Clock } from "../../application/ports";
+import { FLAT_ATTITUDES, turnBetween, wholeTilt } from "../../domain/levelPose";
 
 /** A clock the test steps by hand: each step is one tick and one rendered frame */
 function manualClock() {
@@ -65,10 +66,21 @@ describe("bench run", () => {
 	});
 
 	it("steers the player round the screen, both ways on both axes", () => {
-		const samples = Array.from({ length: 300 }, (_, i) => benchTilt(i / 10));
+		const samples = Array.from({ length: 300 }, (_, i) =>
+			wholeTilt(benchTilt(i / 10), FLAT_ATTITUDES.up),
+		);
 		expect(Math.min(...samples.map((s) => s.x))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.x))).toBeGreaterThan(0.1);
 		expect(Math.min(...samples.map((s) => s.y))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.y))).toBeGreaterThan(0.1);
+	});
+
+	it("tilts from flat with no swivel: at rest on its path the phone lies flat", () => {
+		expect(turnBetween(benchTilt(0), FLAT_ATTITUDES.up)).toBeCloseTo(0, 9);
+		const tilt = wholeTilt(benchTilt(1.3), FLAT_ATTITUDES.up);
+		expect(turnBetween(benchTilt(1.3), FLAT_ATTITUDES.up)).toBeCloseTo(
+			Math.hypot(tilt.x, tilt.y),
+			9,
+		);
 	});
 });

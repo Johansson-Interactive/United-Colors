@@ -5,7 +5,7 @@ import type { GameFacts } from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const AT = { x: 10, y: 20 };
-const ZERO = { x: 0.3, y: -0.1 };
+const ZERO = { x: 0.3, y: -0.1, z: -0.9 };
 const PINK = "#E91E63";
 const BLUE = "#2196F3";
 
@@ -19,6 +19,7 @@ const IDLE: GameControls = {
 	runKiosk: () => {},
 	flood: () => {},
 	calibrate: () => {},
+	zeroSwivel: () => {},
 	facts: () => ({ levelPoseSet: true, tiltPresent: true, playerColor: PINK }),
 };
 
@@ -42,8 +43,9 @@ function setup() {
 			calls.push(`flood ${color} ${at.x},${at.y}`);
 			cover = onCovered;
 		},
-		calibrate: (zero, facingDown) =>
-			calls.push(`calibrate ${zero.x},${zero.y}${facingDown ? " down" : ""}`),
+		calibrate: (zero, side) =>
+			calls.push(`calibrate ${zero.x},${zero.y}${side === "down" ? " down" : ""}`),
+		zeroSwivel: () => calls.push("zeroSwivel"),
 		facts: () => ({ ...answers }),
 	});
 	const unfollow = follow();
@@ -106,12 +108,12 @@ describe("flow store", () => {
 		expect(calls).toEqual(["pause"]);
 	});
 
-	it("a finger on the frost of the pause opens Get ready when there is tilt", () => {
+	it("a finger on the frost of the pause opens Get ready when there is tilt, zeroing the swivel", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
 		flow.getState().dispatch({ type: "fieldTouched", at: AT });
 		expect(screen()).toEqual({ kind: "getReady" });
-		expect(calls).toEqual([]);
+		expect(calls).toEqual(["zeroSwivel"]);
 	});
 
 	it("a finger on the frost resumes at once on a device without tilt", () => {
@@ -128,13 +130,14 @@ describe("flow store", () => {
 		publish("PAUSED");
 		flow.getState().dispatch({ type: "fieldTouched", at: AT });
 		flow.getState().dispatch({ type: "readyHeld" });
-		expect(calls).toEqual(["resume"]);
+		expect(calls).toEqual(["zeroSwivel", "resume"]);
 	});
 
 	it("Get ready's window shutting brings the pause screen back, touching nothing", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
 		flow.getState().dispatch({ type: "fieldTouched", at: AT });
+		calls.length = 0;
 		flow.getState().dispatch({ type: "readyShut" });
 		expect(calls).toEqual([]);
 		expect(screen()).toEqual({ kind: "pause" });
@@ -202,12 +205,12 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "speed", color: BLUE });
 	});
 
-	it("PLAY with a level pose set floods, and plays only once the flood covers", () => {
+	it("PLAY with a level pose set floods, and zeroes the swivel and plays only once the flood covers", () => {
 		const { flow, calls, covers } = setup();
 		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
 		expect(calls).toEqual([`flood ${PINK} 10,20`]);
 		covers();
-		expect(calls).toEqual([`flood ${PINK} 10,20`, `play ${PINK}`]);
+		expect(calls).toEqual([`flood ${PINK} 10,20`, "zeroSwivel", `play ${PINK}`]);
 	});
 
 	it("the bench's auto-start floods into a run without the bowl, level pose or not", () => {
@@ -216,7 +219,7 @@ describe("flow store", () => {
 		flow.getState().dispatch({ type: "autoStarted", color: BLUE, at: AT });
 		expect(screen()).toEqual({ kind: "title" });
 		covers();
-		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
+		expect(calls).toEqual([`flood ${BLUE} 10,20`, "zeroSwivel", `play ${BLUE}`]);
 	});
 
 	it("PLAY with no level pose set opens the bowl; settling adopts the pose, then floods into play", () => {
@@ -224,12 +227,14 @@ describe("flow store", () => {
 		answers.levelPoseSet = false;
 		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
 		expect(screen()).toEqual({ kind: "settle", color: PINK });
-		flow.getState().dispatch({ type: "settled", zero: ZERO, facingDown: true, at: AT });
+		flow.getState().dispatch({ type: "settled", zero: ZERO, side: "down", at: AT });
 		covers();
 		expect(calls).toEqual([
 			"haltKiosk",
 			"calibrate 0.3,-0.1 down",
+			"zeroSwivel",
 			`flood ${PINK} 10,20`,
+			"zeroSwivel",
 			`play ${PINK}`,
 		]);
 	});
@@ -237,8 +242,8 @@ describe("flow store", () => {
 	it("a bowl settled from the title adopts the pose, then runs the kiosk again", () => {
 		const { flow, calls, screen } = setup();
 		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: PINK });
-		flow.getState().dispatch({ type: "settled", zero: ZERO, facingDown: false, at: AT });
-		expect(calls).toEqual(["haltKiosk", "calibrate 0.3,-0.1", "runKiosk"]);
+		flow.getState().dispatch({ type: "settled", zero: ZERO, side: "up", at: AT });
+		expect(calls).toEqual(["haltKiosk", "calibrate 0.3,-0.1", "zeroSwivel", "runKiosk"]);
 		expect(screen()).toEqual({ kind: "title" });
 	});
 

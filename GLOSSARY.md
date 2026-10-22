@@ -23,6 +23,18 @@ _Avoid_: "points" (when meaning the dot), bonus dot, switch-color dot
 
 ### Play
 
+**Level pose**:
+The way the player holds the phone for the dot to lie still. There are two, screen up and turned over.
+_Avoid_: calibration, zero, neutral
+
+**Tilt**:
+How far the phone has turned from the level pose, as the hand turns it: about its long axis and about its short axis.
+_Avoid_: angle, orientation, attitude
+
+**Swivel**:
+The part of the tilt that is a turn about the vertical, as in a swivel chair, which gravity cannot see. It has no zero but where the level pose was last taken or held.
+_Avoid_: heading, yaw, compass, azimuth
+
 **Run**:
 One game, from its start until the refusal that ends it.
 _Avoid_: round, session

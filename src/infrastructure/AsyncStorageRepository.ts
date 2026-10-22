@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StoragePort } from "../application/ports";
 import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
+import { unitGravity } from "../domain/levelPose";
 import type { GameSettings, TiltZero } from "../domain/types";
 
 const KEYS = {
@@ -25,13 +26,20 @@ function readSensitivity(value: unknown): number {
 	return value;
 }
 
-/** A pose is two finite radians; anything else (corrupt, hand-edited, old shape) reads as unset */
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * A pose is a gravity direction, three finite numbers not all zero, read back at unit length;
+ * anything else (corrupt, hand-edited, an older shape) reads as unset
+ */
 function readTiltZero(value: unknown): TiltZero | null {
 	if (!isRecord(value)) return null;
-	const { x, y } = value;
-	if (typeof x !== "number" || typeof y !== "number") return null;
-	if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-	return { x, y };
+	const { x, y, z } = value;
+	if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) return null;
+	if (Math.hypot(x, y, z) === 0) return null;
+	return unitGravity({ x, y, z });
 }
 
 /**

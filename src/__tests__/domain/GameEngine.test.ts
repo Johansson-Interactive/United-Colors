@@ -92,59 +92,16 @@ describe("GameEngine", () => {
 		});
 	});
 
-	describe("tilt zero", () => {
-		function playerAfter(engine: GameEngine, x: number, y: number) {
-			engine.onSensorInput(x, y);
-			engine.advancePlayer(100);
-			return engine.getPlayerPosition();
-		}
-
-		it("without a zero, raw tilt moves the player", () => {
+	describe("tilt", () => {
+		it("tilt from the level pose moves the player", () => {
 			const engine = createEngine();
 			engine.startGame();
 			const before = engine.getPlayerPosition();
-			const after = playerAfter(engine, 0.5, 0.3);
+			engine.onSensorInput(0.5, 0.3);
+			engine.advancePlayer(100);
+			const after = engine.getPlayerPosition();
 			expect(after.x).toBeGreaterThan(before.x);
 			expect(after.y).toBeGreaterThan(before.y);
-		});
-
-		it("the level pose reads as no tilt", () => {
-			const engine = createEngine();
-			engine.startGame();
-			engine.setTiltZero({ x: 0.5, y: 0.3 });
-			const before = engine.getPlayerPosition();
-			expect(playerAfter(engine, 0.5, 0.3)).toEqual(before);
-		});
-
-		it("screen down, tilt is measured from that side's pose, or from flat without one", () => {
-			const engine = createEngine();
-			engine.startGame();
-			engine.setTiltZero({ x: 0.5, y: 0.3 });
-			const before = engine.getPlayerPosition();
-			// The screen-up pose doesn't apply screen down: flat reads level there
-			engine.onSensorInput(0, 0, true);
-			engine.advancePlayer(100);
-			expect(engine.getPlayerPosition()).toEqual(before);
-			engine.setTiltZero({ x: 0.5, y: 0.3 }, { x: -0.2, y: 0.1 });
-			engine.onSensorInput(-0.2, 0.1, true);
-			engine.advancePlayer(100);
-			expect(engine.getPlayerPosition()).toEqual(before);
-		});
-
-		it("tilt is measured from the level pose, and clearing it restores raw tilt", () => {
-			const zeroed = createEngine();
-			zeroed.startGame();
-			zeroed.setTiltZero({ x: 0.5, y: 0.3 });
-			const raw = createEngine();
-			raw.startGame();
-			const fromZero = playerAfter(zeroed, 0.7, 0.1);
-			const fromRaw = playerAfter(raw, 0.2, -0.2);
-			expect(fromZero.x).toBeCloseTo(fromRaw.x);
-			expect(fromZero.y).toBeCloseTo(fromRaw.y);
-
-			zeroed.setTiltZero(null);
-			const before = zeroed.getPlayerPosition();
-			expect(playerAfter(zeroed, 0, 0)).toEqual(before);
 		});
 	});
 

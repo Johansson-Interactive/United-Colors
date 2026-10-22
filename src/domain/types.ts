@@ -5,13 +5,48 @@
 export type GamePhase = "KIOSK" | "RUNNING" | "REJECTING" | "PAUSED" | "GAME_OVER";
 
 /**
- * The device pose the player calls "level" (raw tilt in radians); tilt is measured from
- * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ * Which way gravity points, in the device's own axes: x to the right of the screen, y to its
+ * top, z out of its face. Any length; only the direction counts.
  */
-export interface TiltZero {
+export interface Gravity {
+	x: number;
+	y: number;
+	z: number;
+}
+
+/**
+ * Which way the phone faces in the room, as its own three axes (unit, at right angles) given in
+ * a frame fixed to the room with z pointing up: `xx, xy, xz` is the phone's x axis (to the right
+ * of the screen), `y*` its y axis (to the screen's top), `z*` its z axis (out of its face). The
+ * room frame's x and y lie level and have no meaningful zero, so only turns between attitudes
+ * count. Gravity, in the phone's axes, is `-(xz, yz, zz)`.
+ */
+export interface Attitude {
+	xx: number;
+	xy: number;
+	xz: number;
+	yx: number;
+	yy: number;
+	yz: number;
+	zx: number;
+	zy: number;
+	zz: number;
+}
+
+/**
+ * How far the phone is tipped from a level pose (radians): `x` turns its right edge away from
+ * the player's eyes, `y` its top edge towards them (see levelPose.ts)
+ */
+export interface TiltAngles {
 	x: number;
 	y: number;
 }
+
+/**
+ * The device pose the player calls "level", as the gravity it reads; tilt is measured from
+ * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ */
+export type TiltZero = Gravity;
 
 /** Persisted user settings */
 export interface GameSettings {
@@ -25,7 +60,10 @@ export interface GameSettings {
 	tiltSensitivity: number;
 	/** Null until the player has set a level pose */
 	tiltZero: TiltZero | null;
-	/** Level pose with the screen facing down (lying back, phone overhead); null reads flat */
+	/**
+	 * The second level pose, for playing turned over (lying back, phone overhead); null reads
+	 * flat screen down. Whichever pose the phone is nearer is the one in use (see levelTilt).
+	 */
 	tiltZeroDown: TiltZero | null;
 }
 
