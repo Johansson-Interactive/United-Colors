@@ -1,6 +1,13 @@
 import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { cornerExtent, holdInside } from "../../domain/arena";
+import {
+	attitudeAt,
+	FLAT,
+	FLAT_ATTITUDES,
+	levelWholeTilt,
+	zeroSwivel,
+} from "../../domain/levelPose";
 import type { Corners } from "../../domain/types";
 import { FROSTED_ALL, frostReach, type Point } from "../../presentation/effects/frost";
 import { BOWL_SIZE } from "../../presentation/theme/theme";
@@ -128,6 +135,26 @@ describe("get-ready stepper", () => {
 		const held = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS / 2);
 		expect(run(held, 0.12, 0, 100).progress).toBeLessThan(held.progress);
 		expect(run(held, 0, -0.12, 100).progress).toBeLessThan(held.progress);
+	});
+
+	it("upright, refuses to fill while the phone swivels about the vertical, and fills once still", () => {
+		const upright = attitudeAt({ x: 0, y: Math.PI / 2 }, FLAT_ATTITUDES.up);
+		const poses = zeroSwivel({ up: { x: 0, y: -1, z: 0 }, down: FLAT.down }, upright);
+		/** The level check as the game feeds it: the whole turn from the pose in use */
+		const swivelling = (s: GetReadyState, from: number, to: number, ms: number) => {
+			let state = s;
+			for (let t = 0; t < ms; t += 10) {
+				const swivel = from + ((to - from) * t) / ms;
+				const tilt = levelWholeTilt(attitudeAt({ x: swivel, y: 0 }, upright), poses, "up");
+				state = stepGetReady(state, tilt.x, tilt.y, 10, true);
+			}
+			return state;
+		};
+		// Gravity never moves, yet the phone turns well past level and back
+		const turning = swivelling(INITIAL_GET_READY, 0.3, 0.6, PLENTY);
+		expect(turning.progress).toBe(0);
+		expect(turning.fired).toBe(false);
+		expect(swivelling(turning, 0, 0, PLENTY).fired).toBe(true);
 	});
 
 	it("fires once only", () => {
