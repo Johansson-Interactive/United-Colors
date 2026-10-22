@@ -69,7 +69,21 @@ const fillsTheStage = (tag: string, styles: string[]) =>
 	/StyleSheet\.absoluteFill/.test(tag) ||
 	styles.some((s) => new RegExp(`styles\\.${s}\\b`).test(tag));
 
-const letsTouchesThrough = (tag: string) => /pointerEvents=\{?["'](none|box-none)["']\}?/.test(tag);
+/** The pointerEvents prop's value as written: a literal, or the expression in its braces */
+const pointerEventsOf = (tag: string) =>
+	tag
+		.match(/pointerEvents=(?:["']([^"']*)["']|\{([^}]*)\})/)
+		?.slice(1)
+		.find((v) => v !== undefined);
+
+/** Every value the prop can take is "none" or "box-none", literal or picked by a condition */
+const letsTouchesThrough = (tag: string) => {
+	const value = pointerEventsOf(tag);
+	if (value === undefined) return false;
+	const literals = [...value.matchAll(/["']([^"']*)["']/g)].map((m) => m[1]);
+	const options = literals.length > 0 ? literals : [value];
+	return options.every((v) => v === "none" || v === "box-none");
+};
 
 describe("the layers over the field", () => {
 	it.each(OVER_THE_FIELD)(
@@ -87,6 +101,20 @@ describe("the layers over the field", () => {
 			expect(swallowing).toEqual([]);
 		},
 	);
+});
+
+describe("a layer over the field hidden by its opacity", () => {
+	// On Android a box-none view at opacity 0 still caught the finger meant for the field: the
+	// HUD, hidden over the pause screen, left the frost unable to open Get ready
+	it("takes no touch at all while hidden", () => {
+		const source = SOURCES["presentation/components/HUD.tsx"];
+		expect(source).toBeDefined();
+		const root = rootTag(source, openingTags(source));
+		expect(root).toMatch(/styles\.hidden/);
+		expect(pointerEventsOf(root ?? "")).toMatch(
+			/visible\s*\?\s*["']box-none["']\s*:\s*["']none["']/,
+		);
+	});
 });
 
 describe("the field's touch layer", () => {
