@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useStore } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import type { GameStore } from "../../application/GameStore";
 import { PAUSE_HINT, pauseHintLook } from "../flow/pauseHint";
 import type { Screen } from "../flow/screenFlow";
@@ -24,11 +25,11 @@ const HINT_BOTTOM = 28;
  * stays mounted and only its opacity moves, so a finger landing can take it away at once.
  */
 export const PauseHint: React.FC<PauseHintProps> = ({ store, screen, fieldPauses }) => {
-	const opacity = useStore(
+	// One look a tick, compared by its fields, so only a change in how the hint shows re-renders
+	const { opacity, over } = useStore(
 		store,
-		(s) => pauseHintLook(screen, s.frame.runTicks, fieldPauses).opacity,
+		useShallow((s) => pauseHintLook(screen, s.frame.runTicks, fieldPauses)),
 	);
-	const over = useStore(store, (s) => pauseHintLook(screen, s.frame.runTicks, fieldPauses).over);
 	const shown = useSharedValue(0);
 	useEffect(() => {
 		shown.set(over > 0 ? withTiming(opacity, { duration: over }) : opacity);
