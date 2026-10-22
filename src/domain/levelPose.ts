@@ -136,6 +136,47 @@ function turnedBy(attitude: Attitude, kx: number, ky: number, kz: number): Attit
 	};
 }
 
+/** A turn of the phone, as an axis in its own axes scaled by the angle (radians) */
+interface Turn {
+	x: number;
+	y: number;
+	z: number;
+	/** The angle (0..pi), whole even at a half turn, where the axis is lost */
+	angle: number;
+}
+
+/**
+ * The shortest turn from the phone held in `from` to it held in `to`, about an axis in `from`'s
+ * axes, swivel included
+ */
+function turnFrom(from: Attitude, to: Attitude): Turn {
+	"worklet";
+	const p = from;
+	const a = to;
+	// The axis scaled by the turn's sine, and the cosine of its angle
+	const sx =
+		(p.zx * a.yx + p.zy * a.yy + p.zz * a.yz - (p.yx * a.zx + p.yy * a.zy + p.yz * a.zz)) / 2;
+	const sy =
+		(p.xx * a.zx + p.xy * a.zy + p.xz * a.zz - (p.zx * a.xx + p.zy * a.xy + p.zz * a.xz)) / 2;
+	const sz =
+		(p.yx * a.xx + p.yy * a.xy + p.yz * a.xz - (p.xx * a.yx + p.xy * a.yy + p.xz * a.yz)) / 2;
+	const trace =
+		p.xx * a.xx +
+		p.xy * a.xy +
+		p.xz * a.xz +
+		p.yx * a.yx +
+		p.yy * a.yy +
+		p.yz * a.yz +
+		p.zx * a.zx +
+		p.zy * a.zy +
+		p.zz * a.zz;
+	const sine = Math.hypot(sx, sy, sz);
+	const angle = Math.atan2(sine, (trace - 1) / 2);
+	// A turn too small to have an axis is its own sine
+	const scale = sine > NO_TURN ? angle / sine : 1;
+	return { x: sx * scale, y: sy * scale, z: sz * scale, angle };
+}
+
 /**
  * Tilt of the phone held in `attitude`, from the level pose held in `pose`: the whole turn from
  * one to the other, swivel included, read along the phone's own long and short axes at the
@@ -148,30 +189,9 @@ function turnedBy(attitude: Attitude, kx: number, ky: number, kz: number): Attit
  */
 export function wholeTilt(attitude: Attitude, pose: Attitude): TiltAngles {
 	"worklet";
-	const a = attitude;
-	const p = pose;
-	// The turn as an axis in the pose's axes, scaled by its sine, and the cosine of its angle
-	const sx =
-		(p.zx * a.yx + p.zy * a.yy + p.zz * a.yz - (p.yx * a.zx + p.yy * a.zy + p.yz * a.zz)) / 2;
-	const sy =
-		(p.xx * a.zx + p.xy * a.zy + p.xz * a.zz - (p.zx * a.xx + p.zy * a.xy + p.zz * a.xz)) / 2;
-	const sz =
-		(p.yx * a.xx + p.yy * a.xy + p.yz * a.xz - (p.xx * a.yx + p.xy * a.yy + p.xz * a.yz)) / 2;
-	const trace =
-		p.xx * a.xx +
-		p.xy * a.xy +
-		p.xz * a.xz +
-		p.yx * a.yx +
-		p.yy * a.yy +
-		p.yz * a.yz +
-		p.zx * a.zx +
-		p.zy * a.zy +
-		p.zz * a.zz;
-	const sine = Math.hypot(sx, sy, sz);
-	// A turn too small to have an axis is its own sine
-	const scale = sine > NO_TURN ? Math.atan2(sine, (trace - 1) / 2) / sine : 1;
+	const turn = turnFrom(pose, attitude);
 	// About the long axis is x, about the short axis is y; about the screen's axis is dropped
-	return { x: sy * scale, y: sx * scale };
+	return { x: turn.y, y: turn.x };
 }
 
 /**
@@ -181,21 +201,7 @@ export function wholeTilt(attitude: Attitude, pose: Attitude): TiltAngles {
  */
 export function turnBetween(a: Attitude, b: Attitude): number {
 	"worklet";
-	const sx = b.zx * a.yx + b.zy * a.yy + b.zz * a.yz - (b.yx * a.zx + b.yy * a.zy + b.yz * a.zz);
-	const sy = b.xx * a.zx + b.xy * a.zy + b.xz * a.zz - (b.zx * a.xx + b.zy * a.xy + b.zz * a.xz);
-	const sz = b.yx * a.xx + b.yy * a.xy + b.yz * a.xz - (b.xx * a.yx + b.xy * a.yy + b.xz * a.yz);
-	const trace =
-		b.xx * a.xx +
-		b.xy * a.xy +
-		b.xz * a.xz +
-		b.yx * a.yx +
-		b.yy * a.yy +
-		b.yz * a.yz +
-		b.zx * a.zx +
-		b.zy * a.zy +
-		b.zz * a.zz;
-	// Twice the turn's sine and twice its cosine
-	return Math.atan2(Math.hypot(sx, sy, sz), trace - 1);
+	return turnFrom(b, a).angle;
 }
 
 /**
@@ -207,28 +213,8 @@ export function turnBetween(a: Attitude, b: Attitude): number {
 export function turnedToward(from: Attitude, to: Attitude, share: number): Attitude {
 	"worklet";
 	if (share >= 1) return to;
-	const p = from;
-	const a = to;
-	// The turn as an axis in `from`'s axes, scaled by its sine, and the cosine of its angle
-	const sx =
-		(p.zx * a.yx + p.zy * a.yy + p.zz * a.yz - (p.yx * a.zx + p.yy * a.zy + p.yz * a.zz)) / 2;
-	const sy =
-		(p.xx * a.zx + p.xy * a.zy + p.xz * a.zz - (p.zx * a.xx + p.zy * a.xy + p.zz * a.xz)) / 2;
-	const sz =
-		(p.yx * a.xx + p.yy * a.xy + p.yz * a.xz - (p.xx * a.yx + p.xy * a.yy + p.xz * a.yz)) / 2;
-	const trace =
-		p.xx * a.xx +
-		p.xy * a.xy +
-		p.xz * a.xz +
-		p.yx * a.yx +
-		p.yy * a.yy +
-		p.yz * a.yz +
-		p.zx * a.zx +
-		p.zy * a.zy +
-		p.zz * a.zz;
-	const sine = Math.hypot(sx, sy, sz);
-	const scale = (sine > NO_TURN ? Math.atan2(sine, (trace - 1) / 2) / sine : 1) * share;
-	return turnedBy(from, sx * scale, sy * scale, sz * scale);
+	const turn = turnFrom(from, to);
+	return turnedBy(from, turn.x * share, turn.y * share, turn.z * share);
 }
 
 /**
