@@ -40,7 +40,7 @@ import { useSessionScene } from "./hooks/useSessionScene";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { useStageLook } from "./hooks/useStageLook";
 import { StageFrame } from "./layout/StageFrame";
-import { FrostBloomOverlay } from "./overlays/FrostBloomOverlay";
+import { BloomOverlay } from "./overlays/BloomOverlay";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
@@ -253,7 +253,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={fieldTouchEnabled} />
 
 				{screen.kind === "frosting" && (
-					<FrostBloomOverlay
+					<BloomOverlay
 						scene={scene}
 						color={restingColor}
 						start={screen.start}

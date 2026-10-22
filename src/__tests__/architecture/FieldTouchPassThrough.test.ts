@@ -14,7 +14,7 @@
 const OVER_THE_FIELD = [
 	"presentation/components/HUD.tsx",
 	"presentation/components/PausedScore.tsx",
-	"presentation/overlays/FrostBloomOverlay.tsx",
+	"presentation/overlays/BloomOverlay.tsx",
 	"presentation/overlays/GetReadyOverlay.tsx",
 	"presentation/overlays/PauseOverlay.tsx",
 ];

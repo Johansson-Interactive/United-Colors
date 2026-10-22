@@ -25,7 +25,7 @@ import {
 } from "../touch/bloom";
 import type { FieldTouchState } from "../touch/fieldTouch";
 
-interface FrostBloomOverlayProps {
+interface BloomOverlayProps {
 	/** The frozen scene, for the seat: the portal opens around the player dot where it froze */
 	scene: SharedValue<Float32Array>;
 	/** The player's colour, which the rim wears */
@@ -59,7 +59,7 @@ const BEFORE_FIRST_FRAME: BloomFrame = {
  * `portal`; the edge it leaves behind is the stepper's last word, covered or clear, so the
  * frost coming on or lifting behind it goes unseen.
  */
-export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
+export const BloomOverlay: React.FC<BloomOverlayProps> = ({
 	scene,
 	color,
 	start,
