@@ -274,6 +274,39 @@ export function turnBetween(a: Attitude, b: Attitude): number {
 }
 
 /**
+ * The phone held in `from`, turned `share` (0..1) of the way to `to` along the shortest turn,
+ * swivel included. Each step is a real turn of the phone, so a running mean or a smoothing built
+ * from it stays an attitude the phone can be held in, where averaging the axes would shrink and
+ * skew them.
+ */
+export function turnedToward(from: Attitude, to: Attitude, share: number): Attitude {
+	"worklet";
+	if (share >= 1) return to;
+	const p = from;
+	const a = to;
+	// The turn as an axis in `from`'s axes, scaled by its sine, and the cosine of its angle
+	const sx =
+		(p.zx * a.yx + p.zy * a.yy + p.zz * a.yz - (p.yx * a.zx + p.yy * a.zy + p.yz * a.zz)) / 2;
+	const sy =
+		(p.xx * a.zx + p.xy * a.zy + p.xz * a.zz - (p.zx * a.xx + p.zy * a.xy + p.zz * a.xz)) / 2;
+	const sz =
+		(p.yx * a.xx + p.yy * a.xy + p.yz * a.xz - (p.xx * a.yx + p.xy * a.yy + p.xz * a.yz)) / 2;
+	const trace =
+		p.xx * a.xx +
+		p.xy * a.xy +
+		p.xz * a.xz +
+		p.yx * a.yx +
+		p.yy * a.yy +
+		p.yz * a.yz +
+		p.zx * a.zx +
+		p.zy * a.zy +
+		p.zz * a.zz;
+	const sine = Math.hypot(sx, sy, sz);
+	const scale = (sine > NO_TURN ? Math.atan2(sine, (trace - 1) / 2) / sine : 1) * share;
+	return turnedBy(from, sx * scale, sy * scale, sz * scale);
+}
+
+/**
  * Tilt of the phone held in `attitude`, from whichever of the level `poses` is in use. Which
  * one is decided by gravity alone, with TURN_OVER_MARGIN, so a swivel never turns the phone
  * over to the other pose.

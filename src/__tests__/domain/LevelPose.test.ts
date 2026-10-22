@@ -8,6 +8,7 @@ import {
 	levelWholeTilt,
 	tiltFrom,
 	turnBetween,
+	turnedToward,
 	unitGravity,
 	wholeTilt,
 	zeroSwivel,
@@ -394,6 +395,27 @@ describe("turnBetween", () => {
 			}
 			expect(turnBetween(held, held), pose).toBeCloseTo(0, 9);
 		}
+	});
+});
+
+describe("turnedToward", () => {
+	it("takes the given share of the whole turn, the shortest way, in every pose", () => {
+		for (const [pose, held] of Object.entries(HELD)) {
+			const to = swivelled(attitudeAt({ x: 0.3, y: -0.2 }, held), 0.4);
+			const whole = turnBetween(held, to);
+			for (const share of [0, 0.25, 0.5, 1]) {
+				const part = turnedToward(held, to, share);
+				expect(turnBetween(held, part), pose).toBeCloseTo(whole * share, 9);
+				expect(turnBetween(part, to), pose).toBeCloseTo(whole * (1 - share), 9);
+			}
+		}
+	});
+
+	it("upright, follows a swivel though gravity doesn't move", () => {
+		const to = swivelled(HELD.upright, 0.2);
+		const half = turnedToward(HELD.upright, to, 0.5);
+		expect(turnBetween(half, HELD.upright)).toBeCloseTo(0.1);
+		expect(wholeTilt(half, HELD.upright).x).toBeCloseTo(0.1);
 	});
 });
 
