@@ -12,6 +12,7 @@
  */
 
 import {
+	EDGE_GROW_MS,
 	edgeRadius,
 	type FieldSize,
 	type FrostEdge,
@@ -33,8 +34,8 @@ export interface BloomState {
 
 export const OPEN_BLOOM: BloomState = { progress: 0, open: 0, outcome: null };
 
-/** How long the finger must be held for the frost to pass the walls */
-export const BLOOM_MS = 450;
+/** How long the finger must be held for the frost to pass the walls: as long as Get ready's thaw */
+export const BLOOM_MS = EDGE_GROW_MS;
 /** A lifted finger drains the frost faster than it grew */
 const DRAIN_MS = BLOOM_MS * 0.4;
 /** The edge opens to its rest size under the finger in this long */

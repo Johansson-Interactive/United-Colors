@@ -26,4 +26,4 @@ The two frosts are one edge going two ways: the bloom frosts inside the edge, Ge
 - The frost window became the frost edge: a circle with a frosted side. The canvas draws a frosted disc over a sharp field for the bloom (a blurred copy clipped to the disc) and a sharp window in the frost for Get ready, each a second scene draw only while the edge is on the field.
 - Get ready's hold keeps its arming delay against the jolt of the finger landing. A finger that slips and lands again before the cup has shut reopens it, which is the grace for slips.
 - Leaving the app under the bloom keeps the pause the run already has and lands on the pause screen; leaving in Get ready closes it, as before.
-- Open to tuning on a device: the bloom's hold (450 ms), the cup's breath with the pulse, and whether a resting thumb at the screen's edge pauses more often than it should.
+- Open to tuning on a device: the bloom's hold (900 ms, the same as Get ready's thaw), the cup's breath with the pulse, and whether a resting thumb at the screen's edge pauses more often than it should.

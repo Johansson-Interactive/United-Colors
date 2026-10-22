@@ -1,4 +1,5 @@
 import { frostReach, restRadius } from "../../presentation/effects/frost";
+import { HOLD_MS, INITIAL_GET_READY, stepGetReady } from "../../presentation/tilt/getReady";
 import {
 	BLOOM_MS,
 	type BloomState,
@@ -37,6 +38,18 @@ describe("the bloom's hold", () => {
 		expect(almost.outcome).toBeNull();
 		expect(almost.progress).toBeCloseTo(1 - 10 / BLOOM_MS, 9);
 		expect(run(almost, true, 10, 10)).toEqual({ progress: 1, open: 1, outcome: "covered" });
+	});
+
+	it("grows its edge as fast as Get ready thaws the window, so the pause and the resume match", () => {
+		let bloom = OPEN_BLOOM;
+		// Past the arming delay, so the hold grows from its first frame as the bloom does
+		let thaw = { ...INITIAL_GET_READY, elapsedMs: 1000 };
+		for (let t = 0; t < HOLD_MS - FRAME_DT; t += FRAME_DT) {
+			bloom = stepBloom(bloom, true, FRAME_DT);
+			thaw = stepGetReady(thaw, 0, 0, FRAME_DT, true);
+			expect(bloom.progress).toBeCloseTo(thaw.progress, 9);
+		}
+		expect(bloom.outcome).toBeNull();
 	});
 
 	it("covers once only, and is inert after", () => {

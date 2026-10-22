@@ -17,6 +17,7 @@ import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
 import {
+	EDGE_GROW_MS,
 	edgeRadius,
 	type FieldSize,
 	FROSTED_ALL,
@@ -40,8 +41,8 @@ export interface GetReadyState {
 const LEVEL_RAD = 0.11;
 /** Samples this early are ignored, so the jolt of the finger landing can't count */
 export const ARMING_MS = 200;
-/** How long the device must stay level */
-export const HOLD_MS = 900;
+/** How long the device must stay level: the thaw grows at the bloom's pace */
+export const HOLD_MS = EDGE_GROW_MS;
 /** A broken hold drains faster than it fills */
 const DRAIN_MS = HOLD_MS * 0.4;
 /** Progress this close to full counts as full, so frame-sized steps can't fall short by rounding */

@@ -52,6 +52,12 @@ export function frostShape(edge: FrostEdge): FrostShape {
 /** How dark the frosted scene is dimmed at full frost (the ink laid over it) */
 export const FROST_MAX_DIM = 0.5;
 
+/**
+ * How long the edge takes to grow from its rest size past the walls: the bloom's frost
+ * covering the field and Get ready's thaw clearing it go at the same pace
+ */
+export const EDGE_GROW_MS = 900;
+
 /** The edge at rest reaches this far beyond the dot it opens around, as dot radii */
 const REST_REACH = 1.7;
 /** The rim is gone once the edge has grown this far: it has reached the walls */
