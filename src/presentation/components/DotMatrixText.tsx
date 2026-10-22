@@ -23,14 +23,12 @@ import {
 } from "react-native-reanimated";
 import {
 	type ColorBy,
-	dotReveal,
 	GLOW_CORE_ALPHA,
 	GLOW_SCALE,
 	layoutDotMatrix,
 	matrixBox,
 	PARALLAX_GAIN,
 	paletteIndex,
-	revealOrder,
 } from "../dotmatrix/layout";
 import { recordPicture } from "../recordPicture";
 import { WHITE } from "../theme/theme";
@@ -56,8 +54,6 @@ interface DotMatrixTextProps {
 	parallax?: boolean;
 	/** Dots swell in a slow travelling wave */
 	wave?: boolean;
-	/** How far the text has popped in, 0..1 (see dotReveal): its dots appear left to right */
-	reveal?: SharedValue<number>;
 	opacity?: number;
 	style?: StyleProp<ViewStyle>;
 }
@@ -110,22 +106,21 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 	glow = false,
 	parallax = false,
 	wave = false,
-	reveal,
 	opacity = 1,
 	style,
 }) => {
 	const tilt = useTilt();
 	const layout = useMemo(() => layoutDotMatrix(text), [text]);
 	// Plain data for the UI-thread worklet: position in cells plus a palette index per dot
-	const dots = useMemo(() => {
-		const ranks = revealOrder(layout);
-		return layout.dots.map((d) => ({
-			col: d.col,
-			row: d.row,
-			ci: colors ? paletteIndex(d, colors.length, colorBy) : 0,
-			rank: ranks[d.index],
-		}));
-	}, [layout, colors, colorBy]);
+	const dots = useMemo(
+		() =>
+			layout.dots.map((d) => ({
+				col: d.col,
+				row: d.row,
+				ci: colors ? paletteIndex(d, colors.length, colorBy) : 0,
+			})),
+		[layout, colors, colorBy],
+	);
 	const { width, height, pad } = useMemo(
 		() => matrixBox(layout, pitch, glow, parallax),
 		[layout, pitch, glow, parallax],
@@ -169,10 +164,10 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 		animatedColor && glow ? glowShader(animatedColor.get(), opacity) : null,
 	);
 
-	// A picture that changes every frame (a wave, parallax with the tilt, or a reveal) is recorded
-	// into one recorder kept for the text's life (see recordPicture.ts); any other is recorded
-	// afresh only when it changes
-	const [recorder] = useState(() => (wave || parallax || reveal ? Skia.PictureRecorder() : null));
+	// A picture that changes every frame (a wave, or parallax with the tilt) is recorded into one
+	// recorder kept for the text's life (see recordPicture.ts); any other is recorded afresh only
+	// when it changes
+	const [recorder] = useState(() => (wave || parallax ? Skia.PictureRecorder() : null));
 	const picture = useDerivedValue(() => {
 		const draw = (canvas: SkCanvas) => {
 			const { fills, glows } = paints;
@@ -182,8 +177,6 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 			if (glowFill) glows?.[0].setShader(glowFill);
 
 			const r = pitch * dotScale;
-			const revealed = reveal ? reveal.get() : 1;
-			const count = dots.length;
 			const ph = phase.get();
 			const tx = tiltX.get() * PARALLAX_GAIN;
 			const ty = tiltY.get() * PARALLAX_GAIN;
@@ -201,9 +194,7 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
 					const swell = wave
 						? 1 + WAVE_AMPLITUDE * Math.sin(ph + dot.col * 0.45 - dot.row * 0.25)
 						: 1;
-					const pop = revealed >= 1 ? 1 : dotReveal(dot.rank, count, revealed);
-					if (pop <= 0) continue;
-					const radius = r * swell * pop;
+					const radius = r * swell;
 					if (pass === 0 && glows) {
 						canvas.save();
 						canvas.translate(cx, cy);
