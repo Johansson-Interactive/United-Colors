@@ -61,12 +61,14 @@ export interface FlowState {
 	sliversInAir: boolean;
 }
 
+/** The flow's own screen state, which a flood's cover clears; the rest it follows from outside */
+type ScreenState = Pick<FlowState, "settle" | "over" | "flooding" | "bloom">;
+
+const NO_SCREEN: ScreenState = { settle: null, over: null, flooding: false, bloom: null };
+
 export const INITIAL_FLOW: FlowState = {
+	...NO_SCREEN,
 	phase: "KIOSK",
-	settle: null,
-	over: null,
-	flooding: false,
-	bloom: null,
 	kioskStarted: false,
 	sliversInAir: false,
 };
@@ -394,14 +396,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "readyShut":
 			return closeOver(state);
 		case "covered":
-			// Covering clears the screen back to the title, but the kiosk stays started
-			return {
-				state: {
-					...INITIAL_FLOW,
-					phase: state.phase,
-					kioskStarted: state.kioskStarted,
-					sliversInAir: state.sliversInAir,
-				},
-			};
+			// Covering clears the screen back to the title; what the flow follows from outside stays
+			return { state: { ...state, ...NO_SCREEN } };
 	}
 }
