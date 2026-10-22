@@ -18,6 +18,8 @@
 		"prebuild": "expo prebuild --clean",
 		"build:android": "npx eas-cli@25.3.0 build --platform android --profile production",
 		"submit:android": "npx eas-cli@25.3.0 submit --platform android --latest",
+		"build:ios": "npx eas-cli@25.3.0 build --platform ios --profile production",
+		"submit:ios": "npx eas-cli@25.3.0 submit --platform ios --latest",
 		"typecheck": "tsc --noEmit",
 		"lint": "biome lint .",
 		"lint:fix": "biome lint --write .",
