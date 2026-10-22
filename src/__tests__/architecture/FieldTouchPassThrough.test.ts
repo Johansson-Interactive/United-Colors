@@ -88,3 +88,12 @@ describe("the layers over the field", () => {
 		},
 	);
 });
+
+describe("the field's touch layer", () => {
+	// Filling the stage would take the grip band back: its frame is FIELD_TOUCH_FRAME
+	it("does not fill the stage", () => {
+		const source = SOURCES["presentation/components/FieldTouch.tsx"];
+		expect(source).toBeDefined();
+		expect(source).not.toMatch(/StyleSheet\.absoluteFill/);
+	});
+});

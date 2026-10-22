@@ -1,9 +1,9 @@
 import type React from "react";
 import { useCallback } from "react";
-import { type GestureResponderEvent, StyleSheet, View } from "react-native";
+import { type GestureResponderEvent, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import type { Point } from "../effects/frost";
-import type { FieldTouchState } from "../touch/fieldTouch";
+import { FIELD_TOUCH_FRAME, type FieldTouchState, onStage } from "../touch/fieldTouch";
 
 interface FieldTouchProps {
 	/** Written as the finger lands and lifts, for the steppers on the UI thread to read each frame */
@@ -20,14 +20,15 @@ interface FieldTouchProps {
  * alike. It stays mounted from play through the pause and Get ready, so the finger that opens
  * Get ready on the pause screen is the same touch whose lift is seen there, and the flow sees
  * one event per landing: where it went is the steppers' to follow through `touch`, which they
- * read on the UI thread without a render.
+ * read on the UI thread without a render. It stops short of the grip band down each side, so a
+ * finger landing there never reaches it.
  */
 export const FieldTouch: React.FC<FieldTouchProps> = ({ touch, onTouch, enabled }) => {
 	const handleGrant = useCallback(
 		(event: GestureResponderEvent) => {
-			const { locationX, locationY } = event.nativeEvent;
-			touch.set({ down: true, x: locationX, y: locationY });
-			onTouch({ x: locationX, y: locationY });
+			const at = onStage({ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY });
+			touch.set({ down: true, ...at });
+			onTouch(at);
 		},
 		[touch, onTouch],
 	);
@@ -36,7 +37,7 @@ export const FieldTouch: React.FC<FieldTouchProps> = ({ touch, onTouch, enabled 
 	}, [touch]);
 	return (
 		<View
-			style={StyleSheet.absoluteFill}
+			style={FIELD_TOUCH_FRAME}
 			pointerEvents={enabled ? "auto" : "none"}
 			onStartShouldSetResponder={() => enabled}
 			onResponderGrant={handleGrant}

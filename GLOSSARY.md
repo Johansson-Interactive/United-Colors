@@ -55,8 +55,11 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button, freezes the run at once and frosts the field from under the finger outward, the frost's edge wearing the rim. It covers the field in about half a second and the pause opens; a finger lifted before then drains the frost back into the fingertip, faster than it grew, and play goes on from the frozen frame. The bloom is the Get ready window run the other way. In code it is `frostBloom.ts`, screen `frosting`.
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and frosts the field from under the finger outward, the frost's edge wearing the rim. It covers the field in about half a second and the pause opens; a finger lifted before then drains the frost back into the fingertip, faster than it grew, and play goes on from the frozen frame. The bloom is the Get ready window run the other way. In code it is `frostBloom.ts`, screen `frosting`.
 _Avoid_: long press, hold to pause, pause gesture
+
+**Grip band**:
+The strip 24 dp wide down the field's left and right edges where a finger is taken for the hand holding the phone, not the player: a phone whose glass curves round its sides is gripped there. A finger landing in it does nothing, on any screen, until it lifts. It is not drawn. In code it is `GRIP_BAND`; see ADR 0008.
 
 **Frost edge**:
 The circle where the frost stops, with one side frosted and the other clear, and the rim on it: frosted inside for the bloom, clear inside for Get ready's cup. Both grow through the same ease, and the rim fades the same way once the edge is past sixty percent of the way to the walls. In code it is `FrostEdge` in `frost.ts`, drawn by the game canvas.
