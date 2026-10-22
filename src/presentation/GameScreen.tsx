@@ -26,6 +26,7 @@ import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { pauseContent, pauseEntryFades } from "./flow/pauseContent";
+import { pauseDotShown } from "./flow/pauseHint";
 import type { MenuOpening, Screen } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -190,7 +191,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// Dev only: with touch steering the dot, the field cannot pause it, so a corner dot does
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
-	const inPlay = screen.kind === "hud" || screen.kind === "frosting";
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
@@ -302,7 +302,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						color={playerColor}
 						visible={hudScore}
 						cut={pauseWorld ? cut : null}
-						onPause={devTouch && inPlay ? handlePause : undefined}
+						onPause={pauseDotShown(screen.kind, !devTouch) ? handlePause : undefined}
 						corners={corners}
 					/>
 

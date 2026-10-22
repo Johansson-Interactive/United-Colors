@@ -25,7 +25,7 @@ interface HUDProps {
 	/**
 	 * Dev only: a pause dot in the top-right corner, for the control mode where touch steers
 	 * the dot and so cannot pause it (see useDevControlMode), given only while the run is in
-	 * play. Play pauses on any touch otherwise.
+	 * play, not while the bloom grows (see pauseDotShown). Play pauses on any touch otherwise.
 	 */
 	onPause?: () => void;
 	/** How the frame rounds its corners; the corner dot keeps clear of the curve (null: square) */
