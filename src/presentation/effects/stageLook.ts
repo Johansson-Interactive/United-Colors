@@ -3,7 +3,7 @@
  * gets there. The frozen game is frosted for the whole of the pause and everything that opens
  * over it, Get ready included, where the seat is the one clear window in the frost until the
  * hold thaws it (see getReady.ts). The bloom that pauses a run frosts in full from the first
- * frame: its edge, not the frost's strength, is what grows (see frostBloom.ts). A moment after
+ * frame: its edge, not the frost's strength, is what grows (see bloom.ts). A moment after
  * a run ends the field dims for the game over, and otherwise it clears quickly. The edges are
  * washed in ink on the title and in the player's colour everywhere else. The stage fades out
  * under the bowl and the speed view opened from the title, so only their one dot moves, and

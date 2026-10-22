@@ -13,27 +13,34 @@ import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { PortalRim } from "../components/PortalRim";
-import type { Point, Portal } from "../effects/portal";
+import type { Portal } from "../effects/portal";
 import { useStageBox } from "../layout/StageFrame";
+import {
+	type BloomFrame,
+	type BloomStart,
+	bloomFrame,
+	bloomHeld,
+	OPEN_BLOOM,
+	stepBloom,
+} from "../touch/bloom";
 import type { FieldTouchState } from "../touch/fieldTouch";
-import { type BloomFrame, bloomFrame, OPEN_BLOOM, stepBloom } from "../touch/frostBloom";
 
 interface FrostBloomOverlayProps {
-	/** The frozen scene, for the player dot's size: the edge opens at the rest size around it */
+	/** The frozen scene, for the seat: the portal opens around the player dot where it froze */
 	scene: SharedValue<Float32Array>;
 	/** The player's colour, which the rim wears */
 	color: string;
-	/** Where the finger landed (stage px): the frost grows from here */
-	origin: Point;
+	/** What started the bloom: a finger, whose hold it follows, or the dev pause dot */
+	start: BloomStart;
 	/** Whether the finger is still down, as the field touch layer keeps it */
 	touch: SharedValue<FieldTouchState>;
 	/** How the stage's corners are rounded (null: square) */
 	corners: Corners | null;
-	/** The frost's edge, which this drives while the bloom runs */
+	/** The portal, which this drives while the bloom runs */
 	portal: SharedValue<Portal>;
-	/** Fired once, the moment the frost has covered the field */
+	/** Fired once, the moment the portal has covered the field */
 	onCovered: () => void;
-	/** Fired once, when a lifted finger's frost has drained away */
+	/** Fired once, when a lifted finger's portal has drained back into the dot */
 	onCleared: () => void;
 }
 
@@ -44,9 +51,9 @@ const BEFORE_FIRST_FRAME: BloomFrame = {
 };
 
 /**
- * The bloom (see frostBloom.ts): the frost growing out from under the finger that paused the
- * run, its edge wearing the rim in the player's colour. The run is already frozen; this only
- * shows the frost covering it, or draining back if the finger lifts first. The rules live in
+ * The bloom (see bloom.ts): the portal into the pause opening at the seat, where the player
+ * dot froze, its edge wearing the rim in the player's colour. The run is already frozen; this
+ * only shows the portal covering it, or draining back into the dot if the finger lifts first. The rules live in
  * the bloom stepper: each frame, on the UI thread, this takes one step of it and copies what
  * it says to draw. The frost itself is cut by the game canvas, which this drives through
  * `portal`; the edge it leaves behind is the stepper's last word, covered or clear, so the
@@ -55,7 +62,7 @@ const BEFORE_FIRST_FRAME: BloomFrame = {
 export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
 	scene,
 	color,
-	origin,
+	start,
 	touch,
 	corners,
 	portal,
@@ -76,11 +83,12 @@ export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
 
 	useFrameCallback((info) => {
 		const prev = state.get();
-		const next = stepBloom(prev, touch.get().down, info.timeSincePreviousFrame ?? 16);
+		const held = bloomHeld(start, touch.get().down);
+		const next = stepBloom(prev, held, info.timeSincePreviousFrame ?? 16);
 		// Once over the stepper answers with the same state, and there is nothing new to copy
 		if (next === prev) return;
 		state.set(next);
-		const now = bloomFrame(next, origin, playerDisc(scene.get())?.radius ?? 0, field);
+		const now = bloomFrame(next, playerDisc(scene.get()), field);
 		frame.set(now);
 		portal.set(now.edge);
 		if (next.outcome === "covered") scheduleOnRN(onCovered);

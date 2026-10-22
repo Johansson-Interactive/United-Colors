@@ -25,7 +25,6 @@ import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import type { Point } from "./effects/portal";
 import type { MenuOpening } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -180,10 +179,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// The field is the way into and out of the pause: a finger landing on it is the flow's to
 	// place, and whether it is still down is the bloom's and Get ready's to follow each frame
 	const touch = useSharedValue(FIELD_UNTOUCHED);
-	const handleFieldTouch = useCallback(
-		(at: Point) => dispatch({ type: "fieldTouched", at }),
-		[dispatch],
-	);
+	const handleFieldTouch = useCallback(() => dispatch({ type: "fieldTouched" }), [dispatch]);
 	const handleBloomCovered = useCallback(() => dispatch({ type: "bloomCovered" }), [dispatch]);
 	const handleBloomCleared = useCallback(() => dispatch({ type: "bloomCleared" }), [dispatch]);
 	const handleReadyShut = useCallback(() => dispatch({ type: "readyShut" }), [dispatch]);
@@ -257,7 +253,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					<FrostBloomOverlay
 						scene={scene}
 						color={restingColor}
-						origin={screen.at}
+						start={screen.start}
 						touch={touch}
 						corners={corners}
 						portal={portal}

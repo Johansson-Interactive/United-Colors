@@ -59,7 +59,7 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause at the seat, swallowing the player dot on the first frame. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the dot, faster than it grew, and play goes on from the frozen frame. In code it is `frostBloom.ts`, screen `frosting`; see ADR 0011.
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause at the seat, swallowing the player dot on the first frame. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the dot, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0011.
 _Avoid_: long press, hold to pause, pause gesture
 
 **Grip band**:
