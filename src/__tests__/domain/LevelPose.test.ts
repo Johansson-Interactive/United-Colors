@@ -3,10 +3,8 @@ import {
 	attitudeAt,
 	FLAT,
 	FLAT_ATTITUDES,
-	gravityAt,
 	gravityOf,
 	type LevelPoses,
-	levelTilt,
 	levelWholeTilt,
 	tiltFrom,
 	turnBetween,
@@ -20,7 +18,7 @@ const DEG = Math.PI / 180;
 
 /** Gravity with the phone's top edge tipped `pitch` towards you and its right edge `roll` down, from flat */
 function heldUp(pitch: number, roll: number): Gravity {
-	return gravityAt({ x: roll, y: pitch }, FLAT.up);
+	return gravityOf(attitudeAt({ x: roll, y: pitch }, FLAT_ATTITUDES.up));
 }
 
 /** Level poses players hold: at a desk, propped in bed, upright, on their side, overhead */
@@ -159,63 +157,6 @@ describe("tiltFrom", () => {
 		const unit = tiltFrom(g, unitGravity({ x: 0, y: -1, z: -1 }));
 		expect(scaled.x).toBeCloseTo(unit.x);
 		expect(scaled.y).toBeCloseTo(unit.y);
-	});
-});
-
-describe("gravityAt", () => {
-	it("undoes tiltFrom, in any pose", () => {
-		for (const [pose, level] of Object.entries(POSES)) {
-			for (const tilt of [
-				{ x: 0.3, y: 0 },
-				{ x: 0, y: -0.5 },
-				{ x: -0.4, y: 0.25 },
-			]) {
-				const back = tiltFrom(gravityAt(tilt, level), level);
-				expect(back.x, pose).toBeCloseTo(tilt.x);
-				expect(back.y, pose).toBeCloseTo(tilt.y);
-			}
-		}
-	});
-
-	it("no tilt is the level pose, at unit length", () => {
-		expect(gravityAt({ x: 0, y: 0 }, { x: 0, y: 0, z: -3 })).toEqual({ x: 0, y: 0, z: -1 });
-	});
-});
-
-describe("levelTilt", () => {
-	it("lying screen down turns over to the screen-down pose straight away", () => {
-		expect(levelTilt(FLAT.down, FLAT, "up").side).toBe("down");
-		expect(levelTilt(FLAT.up, FLAT, "down").side).toBe("up");
-	});
-
-	it("held near upright, the pose in use doesn't flip back and forth", () => {
-		// Upright, leaning 10 degrees either way
-		for (const lean of [-10 * DEG, 10 * DEG]) {
-			const g = heldUp(90 * DEG + lean, 0);
-			expect(levelTilt(g, FLAT, "up").side).toBe("up");
-			expect(levelTilt(g, FLAT, "down").side).toBe("down");
-		}
-	});
-
-	it("a pose set on your side holds while you play, whichever way the screen leans", () => {
-		const onSide = POSES["on your side, screen a little down"];
-		for (const lean of [-30 * DEG, 30 * DEG]) {
-			const g = turned(onSide, { x: 0, y: 1, z: 0 }, lean);
-			const tilt = levelTilt(g, { up: onSide, down: FLAT.down }, "up");
-			expect(tilt.side).toBe("up");
-			// Not quite all of the turn: the pose's y axis leans a little out of level
-			expect(Math.abs(tilt.x)).toBeGreaterThan(29 * DEG);
-		}
-	});
-
-	it("measures from the pose in use", () => {
-		const up = POSES["at a desk"];
-		const down = POSES["overhead, tipped"];
-		expect(levelTilt(up, { up, down }, "up").x).toBeCloseTo(0);
-		const overhead = levelTilt(down, { up, down }, "up");
-		expect(overhead.side).toBe("down");
-		expect(overhead.x).toBeCloseTo(0);
-		expect(overhead.y).toBeCloseTo(0);
 	});
 });
 
@@ -471,13 +412,15 @@ describe("attitudeAt", () => {
 		}
 	});
 
-	it("from flat, tips the phone the way gravityAt does", () => {
+	it("from flat, tips the phone so its gravity reads the same tilt", () => {
 		for (const tilt of [
 			{ x: 0.4, y: 0 },
 			{ x: 0, y: 0.7 },
 			{ x: -0.3, y: 0.5 },
 		]) {
-			expectGravity(gravityOf(attitudeAt(tilt, FLAT_ATTITUDES.up)), gravityAt(tilt, FLAT.up));
+			const read = tiltFrom(gravityOf(attitudeAt(tilt, FLAT_ATTITUDES.up)), FLAT.up);
+			expect(read.x).toBeCloseTo(tilt.x);
+			expect(read.y).toBeCloseTo(tilt.y);
 		}
 	});
 

@@ -1,4 +1,11 @@
-import { FLAT, gravityAt, type PoseSide, tiltFrom } from "../../domain/levelPose";
+import {
+	attitudeAt,
+	FLAT,
+	FLAT_ATTITUDES,
+	gravityOf,
+	type PoseSide,
+	tiltFrom,
+} from "../../domain/levelPose";
 import type { Gravity } from "../../domain/types";
 import {
 	bowlTilt,
@@ -16,7 +23,7 @@ import {
 
 /** Gravity with the phone tipped `x`, `y` from flat, screen up */
 function at(x: number, y: number): Gravity {
-	return gravityAt({ x, y }, FLAT.up);
+	return gravityOf(attitudeAt({ x, y }, FLAT_ATTITUDES.up));
 }
 
 /** The tilt from flat of a pose */
@@ -222,7 +229,7 @@ describe("settle", () => {
 
 		it("turned over, the dot rolls from flat screen down", () => {
 			const s = { ...INITIAL_SETTLE, side: "down" as const };
-			const g = gravityAt({ x: 0.3, y: 0 }, FLAT.down);
+			const g = gravityOf(attitudeAt({ x: 0.3, y: 0 }, FLAT_ATTITUDES.down));
 			expect(bowlTilt(s, g).x).toBeCloseTo(0.3);
 		});
 

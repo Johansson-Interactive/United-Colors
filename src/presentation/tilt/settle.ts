@@ -85,7 +85,7 @@ export function bowlTilt(state: SettleState, gravity: Gravity): TiltAngles {
 	};
 }
 
-/** Advance one frame with the latest gravity sample and the level pose in use (see levelTilt) */
+/** Advance one frame with the latest gravity sample and the level pose in use (see levelWholeTilt) */
 export function stepSettle(
 	state: SettleState,
 	gravity: Gravity,

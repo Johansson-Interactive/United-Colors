@@ -36,7 +36,7 @@ interface SettleOverlayProps {
 	/** Colour of the dot that settles, and of the flood it swells into */
 	color: string;
 	/**
-	 * The pose is set; `side`: the level pose it replaces (see levelTilt);
+	 * The pose is set; `side`: the level pose it replaces (see levelWholeTilt);
 	 * `point`: where the dot rests on screen, for the flood to grow from
 	 */
 	onSettled: (zero: TiltZero, side: PoseSide, point: PressPoint) => void;

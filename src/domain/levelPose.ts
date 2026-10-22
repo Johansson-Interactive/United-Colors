@@ -10,10 +10,9 @@ import type { Attitude, Gravity, TiltAngles } from "./types";
  * every pose. The level pose is then an attitude, made from a saved gravity where the swivel is
  * zeroed (zeroSwivel).
  *
- * The gravity functions below them (tiltFrom, gravityAt, levelTilt) are ADR 0009's reading,
- * which gravity alone can give: the shortest turn from the level gravity to the current one,
- * read along the phone's x and y axes laid level. Upright or on your side that loses one axis,
- * and the turn in the screen's own plane (as if turning a steering wheel) stands in for it.
+ * tiltFrom is ADR 0009's reading, which gravity alone can give: the shortest turn from the
+ * level gravity to the current one, read along the phone's x and y axes laid level. Upright or
+ * on your side that loses one axis. Only the settle bowl still reads it.
  *
  * Screen down, a turn that tips an edge away from the eyes still reads the way it does screen
  * up. To the hand that is the same tilt, though gravity sees it mirrored.
@@ -141,27 +140,6 @@ export function tiltFrom(gravity: Gravity, level: Gravity): TiltAngles {
 	};
 }
 
-/** The gravity (unit) the phone reads when tilted by `tilt` from `level`; undoes tiltFrom */
-export function gravityAt(tilt: TiltAngles, level: Gravity): Gravity {
-	"worklet";
-	const axes = levelAxes(level);
-	const l = unitGravity(level);
-	// The turn as an axis scaled by its angle; gravity turns the other way in the phone's axes
-	const kx = tilt.x * axes.uyX + tilt.y * axes.uxX;
-	const ky = tilt.x * axes.uyY + tilt.y * axes.uxY;
-	const kz = tilt.x * axes.uyZ + tilt.y * axes.uxZ;
-	const angle = Math.hypot(kx, ky, kz);
-	if (angle < NO_TURN) return l;
-	const sin = Math.sin(angle) / angle;
-	const cos = Math.cos(angle);
-	// The axis is level, so at right angles to `l`
-	return {
-		x: l.x * cos - (ky * l.z - kz * l.y) * sin,
-		y: l.y * cos - (kz * l.x - kx * l.z) * sin,
-		z: l.z * cos - (kx * l.y - ky * l.x) * sin,
-	};
-}
-
 /**
  * Which level pose is in use for the phone reading `gravity`, from the gravities the two poses
  * read: the one in use at the last sample, `was`, stays until the other is nearer by
@@ -174,18 +152,6 @@ function sideInUse(gravity: Gravity, up: Gravity, down: Gravity, was: PoseSide):
 	const turnOver =
 		was === "down" ? fromUp + TURN_OVER_MARGIN >= fromDown : fromDown + TURN_OVER_MARGIN < fromUp;
 	return turnOver ? "down" : "up";
-}
-
-/**
- * Tilt from whichever of the level `poses` the phone is nearer. The one in use at the last
- * sample, `was`, stays until the other is nearer by TURN_OVER_MARGIN, so a phone held between
- * them doesn't flip back and forth.
- */
-export function levelTilt(gravity: Gravity, poses: LevelPoses, was: PoseSide): LevelTilt {
-	"worklet";
-	const side = sideInUse(gravity, poses.up, poses.down, was);
-	const tilt = tiltFrom(gravity, poses[side]);
-	return { x: tilt.x, y: tilt.y, side };
 }
 
 /** The two level poses, as the attitude each is held in */
@@ -309,8 +275,8 @@ export function turnBetween(a: Attitude, b: Attitude): number {
 
 /**
  * Tilt of the phone held in `attitude`, from whichever of the level `poses` is in use. Which
- * one is still decided by gravity alone, as levelTilt decides it, so a swivel never turns the
- * phone over to the other pose.
+ * one is decided by gravity alone, with TURN_OVER_MARGIN, so a swivel never turns the phone
+ * over to the other pose.
  */
 export function levelWholeTilt(
 	attitude: Attitude,
