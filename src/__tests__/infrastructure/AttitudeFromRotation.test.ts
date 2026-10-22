@@ -1,4 +1,4 @@
-import type { Attitude } from "../../domain/types";
+import { gravityOf, wholeTilt } from "../../domain/levelPose";
 import { attitudeFromRotation } from "../../infrastructure/attitudeFromRotation";
 
 /** The gravity formula the adapter used before it kept the swivel: the oracle for beta, gamma */
@@ -10,22 +10,12 @@ function oldGravity(beta: number, gamma: number) {
 	};
 }
 
-/** Gravity in the phone's axes, as the Attitude doc defines it */
-function gravityOf(a: Attitude) {
-	return { x: -a.xz, y: -a.yz, z: -a.zz };
+/** `angle` wrapped into [-pi, pi], as the sensor reports it */
+function wrapped(angle: number): number {
+	return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
-type Vec = readonly [number, number, number];
-
-function dot(a: Vec, b: Vec) {
-	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-const axes = (a: Attitude) => ({
-	x: [a.xx, a.xy, a.xz] as const,
-	y: [a.yx, a.yy, a.yz] as const,
-	z: [a.zx, a.zy, a.zz] as const,
-});
+const DEG = Math.PI / 180;
 
 const angles = [-Math.PI, -2.5, -Math.PI / 2, -0.7, -0.1, 0, 0.3, 1, Math.PI / 2, 2.2, Math.PI];
 
@@ -44,43 +34,39 @@ describe("attitudeFromRotation", () => {
 		}
 	});
 
-	it("flat and unturned, the phone's axes are the room's", () => {
-		const { x, y, z } = axes(attitudeFromRotation(0, 0, 0));
-		expect(dot(x, [1, 0, 0])).toBeCloseTo(1);
-		expect(dot(y, [0, 1, 0])).toBeCloseTo(1);
-		expect(dot(z, [0, 0, 1])).toBeCloseTo(1);
+	it("lying flat, a growing alpha alone reads as no tilt: the flat spin on a tabletop", () => {
+		const pose = attitudeFromRotation(0.4, 0, 0);
+		const tilt = wholeTilt(attitudeFromRotation(1.4, 0, 0), pose);
+		expect(tilt.x).toBeCloseTo(0);
+		expect(tilt.y).toBeCloseTo(0);
 	});
 
-	it("lying flat, a growing alpha swivels the top edge counterclockwise seen from above", () => {
-		const { x, y, z } = axes(attitudeFromRotation(Math.PI / 2, 0, 0));
-		// The top edge, which pointed along the room's y, now points along its -x
-		expect(dot(y, [-1, 0, 0])).toBeCloseTo(1);
-		expect(dot(x, [0, 1, 0])).toBeCloseTo(1);
-		expect(dot(z, [0, 0, 1])).toBeCloseTo(1);
+	it("held upright, a growing alpha reads as a roll with the right edge turning away", () => {
+		// Counterclockwise seen from above, the right edge of a phone facing the player swings
+		// away from them, which is a positive roll
+		const pose = attitudeFromRotation(0, Math.PI / 2, 0);
+		const tilt = wholeTilt(attitudeFromRotation(0.3, Math.PI / 2, 0), pose);
+		expect(tilt.x).toBeCloseTo(0.3);
+		expect(tilt.y).toBeCloseTo(0);
 	});
 
-	it("held upright, alpha still swivels the phone though gravity cannot see it", () => {
-		const a = attitudeFromRotation(0, Math.PI / 2, 0);
-		const b = attitudeFromRotation(0.5, Math.PI / 2, 0);
-		expect(gravityOf(b).y).toBeCloseTo(gravityOf(a).y);
-		// The screen's normal turned half a radian about the vertical
-		expect(dot(axes(a).z, axes(b).z)).toBeCloseTo(Math.cos(0.5));
-	});
-
-	it("is a rotation: unit axes at right angles, right-handed", () => {
-		for (const [alpha, beta, gamma] of [
-			[0.4, -1.1, 2.9],
-			[-2, 0.6, -0.3],
-			[3, 1.5, 1],
-		]) {
-			const { x, y, z } = axes(attitudeFromRotation(alpha, beta, gamma));
-			expect(dot(x, x)).toBeCloseTo(1);
-			expect(dot(y, y)).toBeCloseTo(1);
-			expect(dot(x, y)).toBeCloseTo(0);
-			// x cross y = z
-			expect(x[1] * y[2] - x[2] * y[1]).toBeCloseTo(z[0]);
-			expect(x[2] * y[0] - x[0] * y[2]).toBeCloseTo(z[1]);
-			expect(x[0] * y[1] - x[1] * y[0]).toBeCloseTo(z[2]);
+	it("tipped back through upright, the tilt reads on smoothly where the angles jump", () => {
+		// Past upright beta turns back from pi/2 and alpha and gamma flip by pi, as Android
+		// reports a phone leaning back beyond the vertical, though the phone has barely moved
+		const alpha = 2.5;
+		const gamma = 0.1;
+		const samples: [number, number, number][] = [];
+		for (let beta = 80; beta <= 90; beta++) samples.push([alpha, beta * DEG, gamma]);
+		for (let beta = 89; beta >= 80; beta--) {
+			samples.push([wrapped(alpha + Math.PI), beta * DEG, wrapped(gamma + Math.PI)]);
 		}
+		const pose = attitudeFromRotation(...samples[0]);
+		const tilts = samples.map((s) => wholeTilt(attitudeFromRotation(...s), pose));
+		for (let i = 1; i < tilts.length; i++) {
+			const step = Math.hypot(tilts[i].x - tilts[i - 1].x, tilts[i].y - tilts[i - 1].y);
+			expect(step).toBeLessThan(1.5 * DEG);
+		}
+		// Ten degrees up to the vertical and ten beyond it: twenty degrees of the top edge leaning in
+		expect(tilts[tilts.length - 1].y).toBeCloseTo(20 * DEG, 2);
 	});
 });
