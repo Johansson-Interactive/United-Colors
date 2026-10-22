@@ -94,7 +94,7 @@ export function bowlTilt(state: SettleState, attitude: Attitude): TiltAngles {
 	};
 }
 
-/** Advance one frame with the latest attitude and the level pose in use (see levelWholeTilt) */
+/** Advance one frame with the latest attitude and the level pose in use (see levelTilt) */
 export function stepSettle(
 	state: SettleState,
 	attitude: Attitude,

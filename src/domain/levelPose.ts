@@ -222,11 +222,7 @@ export function turnedToward(from: Attitude, to: Attitude, share: number): Attit
  * one is decided by gravity alone, with TURN_OVER_MARGIN, so a swivel never turns the phone
  * over to the other pose.
  */
-export function levelWholeTilt(
-	attitude: Attitude,
-	poses: LevelAttitudes,
-	was: PoseSide,
-): LevelTilt {
+export function levelTilt(attitude: Attitude, poses: LevelAttitudes, was: PoseSide): LevelTilt {
 	"worklet";
 	const side = sideInUse(gravityOf(attitude), gravityOf(poses.up), gravityOf(poses.down), was);
 	const tilt = wholeTilt(attitude, poses[side]);

@@ -1,12 +1,7 @@
 import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
-import {
-	FLAT_ATTITUDES,
-	type LevelAttitudes,
-	levelWholeTilt,
-	type PoseSide,
-} from "../domain/levelPose";
+import { FLAT_ATTITUDES, type LevelAttitudes, levelTilt, type PoseSide } from "../domain/levelPose";
 import type { ScreenSize } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { Clock, ClockFactory, SensorSample } from "./ports";
@@ -38,7 +33,7 @@ export class GameSession {
 	private clock: Clock | null = null;
 	private screen = DEFAULT_SCREEN;
 	private poses = FLAT_ATTITUDES;
-	/** The level pose the last tilt was measured from (see levelWholeTilt) */
+	/** The level pose the last tilt was measured from (see levelTilt) */
 	private side: PoseSide = "up";
 	private sensitivity = 1;
 	private readonly presenters = new Set<(scene: Float32Array) => void>();
@@ -131,7 +126,7 @@ export class GameSession {
 
 	/** The phone's attitude; the player feels it as the whole turn from the nearer level pose */
 	feedTilt(sample: SensorSample): void {
-		const tilt = levelWholeTilt(sample, this.poses, this.side);
+		const tilt = levelTilt(sample, this.poses, this.side);
 		this.side = tilt.side;
 		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}

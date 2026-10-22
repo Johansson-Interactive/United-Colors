@@ -5,7 +5,7 @@ import type { SensorPort, SensorSample } from "../../application/ports";
 import {
 	FLAT_ATTITUDES,
 	type LevelAttitudes,
-	levelWholeTilt,
+	levelTilt,
 	type PoseSide,
 } from "../../domain/levelPose";
 import { smoothTowards } from "./smoothTilt";
@@ -13,7 +13,7 @@ import { smoothTowards } from "./smoothTilt";
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
  * anything that rolls on screen rolls the way the player dot would). `x`/`y` are the whole
- * turn from the nearer level pose, as the game measures them (see levelWholeTilt), and smoothed
+ * turn from the nearer level pose, as the game measures them (see levelTilt), and smoothed
  * on the UI thread every frame; `raw` is the latest sample as the sensor gave it, the attitude,
  * for setting that pose (one shared value, so a sample is one write to the UI thread). `available`
  * flips once the first real sample arrives (false on simulators without motion sensors, so
@@ -65,7 +65,7 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const tilt = levelWholeTilt(rawSample.get(), poses.get(), side.get());
+		const tilt = levelTilt(rawSample.get(), poses.get(), side.get());
 		side.set(tilt.side);
 		x.set(smoothTowards(x.get(), tilt.x, dt));
 		y.set(smoothTowards(y.get(), tilt.y, dt));

@@ -1,13 +1,7 @@
 import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { cornerExtent, holdInside } from "../../domain/arena";
-import {
-	attitudeAt,
-	FLAT,
-	FLAT_ATTITUDES,
-	levelWholeTilt,
-	zeroSwivel,
-} from "../../domain/levelPose";
+import { attitudeAt, FLAT, FLAT_ATTITUDES, levelTilt, zeroSwivel } from "../../domain/levelPose";
 import type { Corners } from "../../domain/types";
 import { FROSTED_ALL, frostReach, type Point } from "../../presentation/effects/frost";
 import { BOWL_SIZE } from "../../presentation/theme/theme";
@@ -145,7 +139,7 @@ describe("get-ready stepper", () => {
 			let state = s;
 			for (let t = 0; t < ms; t += 10) {
 				const swivel = from + ((to - from) * t) / ms;
-				const tilt = levelWholeTilt(attitudeAt({ x: swivel, y: 0 }, upright), poses, "up");
+				const tilt = levelTilt(attitudeAt({ x: swivel, y: 0 }, upright), poses, "up");
 				state = stepGetReady(state, tilt.x, tilt.y, 10, true);
 			}
 			return state;

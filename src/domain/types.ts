@@ -62,7 +62,7 @@ export interface GameSettings {
 	tiltZero: TiltZero | null;
 	/**
 	 * The second level pose, for playing turned over (lying back, phone overhead); null reads
-	 * flat screen down. Whichever pose the phone is nearer is the one in use (see levelWholeTilt).
+	 * flat screen down. Whichever pose the phone is nearer is the one in use (see levelTilt).
 	 */
 	tiltZeroDown: TiltZero | null;
 }

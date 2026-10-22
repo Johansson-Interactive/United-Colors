@@ -5,7 +5,7 @@ import {
 	FLAT_ATTITUDES,
 	gravityOf,
 	type LevelPoses,
-	levelWholeTilt,
+	levelTilt,
 	tiltFromFlat,
 	turnBetween,
 	turnedToward,
@@ -274,33 +274,33 @@ describe("zeroSwivel", () => {
 	});
 });
 
-describe("levelWholeTilt", () => {
+describe("levelTilt", () => {
 	it("lying screen down turns over to the screen-down pose straight away", () => {
-		expect(levelWholeTilt(FLAT_ATTITUDES.down, FLAT_ATTITUDES, "up").side).toBe("down");
-		expect(levelWholeTilt(FLAT_ATTITUDES.up, FLAT_ATTITUDES, "down").side).toBe("up");
+		expect(levelTilt(FLAT_ATTITUDES.down, FLAT_ATTITUDES, "up").side).toBe("down");
+		expect(levelTilt(FLAT_ATTITUDES.up, FLAT_ATTITUDES, "down").side).toBe("up");
 	});
 
 	it("held near upright, the pose in use doesn't flip back and forth", () => {
 		for (const lean of [-10 * DEG, 10 * DEG]) {
 			const held = attitudeAt({ x: 0, y: 90 * DEG + lean }, FLAT_ATTITUDES.up);
-			expect(levelWholeTilt(held, FLAT_ATTITUDES, "up").side).toBe("up");
-			expect(levelWholeTilt(held, FLAT_ATTITUDES, "down").side).toBe("down");
+			expect(levelTilt(held, FLAT_ATTITUDES, "up").side).toBe("up");
+			expect(levelTilt(held, FLAT_ATTITUDES, "down").side).toBe("down");
 		}
 	});
 
 	it("a swivel never changes the pose in use", () => {
 		const held = attitudeAt({ x: 0, y: 100 * DEG }, FLAT_ATTITUDES.up);
 		for (const heading of [0.5, 1.5, 3]) {
-			expect(levelWholeTilt(swivelled(held, heading), FLAT_ATTITUDES, "up").side).toBe("up");
+			expect(levelTilt(swivelled(held, heading), FLAT_ATTITUDES, "up").side).toBe("up");
 		}
 	});
 
 	it("measures the whole turn from the pose in use", () => {
 		const poses = zeroSwivel({ up: POSES.upright, down: FLAT.down }, HELD.upright);
-		const up = levelWholeTilt(swivelled(HELD.upright, 0.2), poses, "up");
+		const up = levelTilt(swivelled(HELD.upright, 0.2), poses, "up");
 		expect(up.side).toBe("up");
 		expect(up.x).toBeCloseTo(0.2);
-		const overhead = levelWholeTilt(turnedAbout(FLAT_ATTITUDES.down, "y", 0.3), poses, "up");
+		const overhead = levelTilt(turnedAbout(FLAT_ATTITUDES.down, "y", 0.3), poses, "up");
 		expect(overhead.side).toBe("down");
 		expect(overhead.x).toBeCloseTo(0.3);
 		expect(overhead.y).toBeCloseTo(0);

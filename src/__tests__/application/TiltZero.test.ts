@@ -9,7 +9,7 @@ import {
 	FLAT_ATTITUDES,
 	gravityOf,
 	type LevelAttitudes,
-	levelWholeTilt,
+	levelTilt,
 } from "../../domain/levelPose";
 import type { Attitude, GameSettings, Gravity } from "../../domain/types";
 import { swivelled } from "../domain/attitudes";
@@ -56,7 +56,7 @@ const RECLINED = attitudeAt({ x: 0, y: 45 * DEG }, FLAT_ATTITUDES.up);
 /** How far the phone held in `attitude` reads from level, from `poses` */
 function tiltOf(attitude: Attitude, poses: LevelAttitudes | undefined): number {
 	if (!poses) throw new Error("no poses applied");
-	const tilt = levelWholeTilt(attitude, poses, "up");
+	const tilt = levelTilt(attitude, poses, "up");
 	return Math.hypot(tilt.x, tilt.y);
 }
 
