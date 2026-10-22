@@ -64,6 +64,12 @@ export const EDGE_GROW_MS = 900;
 /** Let go, the edge drains back along the way it grew, faster than it grew */
 export const EDGE_DRAIN_MS = EDGE_GROW_MS * 0.4;
 
+/**
+ * The rim's strength in full: while the bloom grows and while Get ready's cup opens, so the two
+ * portals wear the same rim
+ */
+export const RIM = 0.9;
+
 /** The edge at rest reaches this far beyond the dot it opens around, as dot radii */
 const REST_REACH = 1.7;
 /** The rim is gone once the edge has grown this far: it has reached the walls */

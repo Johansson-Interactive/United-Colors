@@ -19,6 +19,7 @@ import {
 	type Point,
 	type Portal,
 	portalReach,
+	RIM,
 	restRadius,
 	rimFade,
 } from "../effects/portal";
@@ -80,9 +81,6 @@ export interface BloomFrame {
 	/** How strongly the rim on the edge shows, 0..1 */
 	rim: number;
 }
-
-/** The rim's strength while the edge is on its way to the walls */
-const RIM = 0.9;
 
 /**
  * What `state` draws around `seat`: the portal grows from the rest size around the dot to the

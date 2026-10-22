@@ -27,6 +27,7 @@ import {
 	type Point,
 	type Portal,
 	portalReach,
+	RIM,
 	restRadius,
 	rimFade,
 } from "../effects/portal";
@@ -317,15 +318,25 @@ export function windowRadius(progress: number, reach: number, breath: number): n
 }
 
 /**
- * How strongly the rim on the window's edge shows: beating with `pulse` while the dot is away,
- * steady once `seated`, and fading out as the thaw passes the walls so nothing is left drawn
- * over a clear field
+ * How strongly the rim on the open cup's edge shows: beating with `pulse` while the dot is away,
+ * steady at the bloom's strength once `seated`, and fading out as the portal passes the walls so
+ * nothing is left drawn over a clear field
  */
 export function rimOpacity(progress: number, seated: number, pulse: number): number {
 	"worklet";
 	const away = (0.35 + 0.5 * pulse) * (1 - seated);
-	const home = 0.75 * seated;
+	const home = RIM * seated;
 	return (away + home) * rimFade(progress);
+}
+
+/**
+ * The rim on the cup's edge: the bloom's, steady and in full, from the cup's first opening and
+ * as it drains, and the pulse (see rimOpacity) only once it is fully open; none once shut
+ */
+function cupRim(progress: number, seated: number, pulse: number, opened: number): number {
+	"worklet";
+	if (opened >= 1) return rimOpacity(progress, seated, pulse);
+	return opened > 0 ? RIM * rimFade(progress) : 0;
 }
 
 // ---- The frame: one step of all of the above, as the overlay runs it each frame ----
@@ -446,7 +457,7 @@ function drawFrame(
 			radius: windowRadius(hold.progress, portalReach(player, field), pulse * (1 - home)) * opened,
 			inside: "play",
 		},
-		rim: rimOpacity(hold.progress, home, pulse) * opened,
+		rim: cupRim(hold.progress, home, pulse, opened),
 		opened,
 		glass: opened > 0 ? rimFade(hold.progress) : 0,
 		fired: firedNow,

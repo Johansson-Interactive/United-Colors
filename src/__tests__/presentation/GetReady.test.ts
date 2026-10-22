@@ -8,6 +8,7 @@ import {
 	PAUSE_ALL,
 	type Point,
 	portalReach,
+	RIM,
 	restRadius,
 } from "../../presentation/effects/portal";
 import { BOWL_SIZE } from "../../presentation/theme/theme";
@@ -456,11 +457,14 @@ describe("get-ready cup", () => {
 		expect((at - OPEN_FRAMES) * FRAME_DT).toBeLessThan(HOLD_MS);
 	});
 
-	it("wears a steady rim while opening, and pulses it only once open", () => {
+	it("wears the bloom's rim, steady and in full, from its first frame while opening", () => {
+		const { frames } = play(OPEN_GET_READY, TIPPED, OPENING_MS);
+		for (const f of frames) expect(f.rim).toBe(RIM);
+	});
+
+	it("pulses the rim only once open, taking over from the opening's rim with no jump", () => {
 		const { frames } = play(OPEN_GET_READY, TIPPED, OPENING_MS + 2000);
 		const opening = frames.slice(0, OPEN_FRAMES).map((f) => f.rim);
-		expect(opening[0]).toBeGreaterThan(0);
-		for (let i = 1; i < opening.length; i++) expect(opening[i]).toBeGreaterThan(opening[i - 1]);
 		const open = frames.slice(OPEN_FRAMES).map((f) => f.rim);
 		expect(Math.max(...open) - Math.min(...open)).toBeGreaterThan(0.3);
 		// The pulse takes over where the opening left off: no jump
