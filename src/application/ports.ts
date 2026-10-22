@@ -1,7 +1,10 @@
-import type { GameSettings, Gravity } from "../domain/types";
+import type { Attitude, GameSettings } from "../domain/types";
 
-/** A reading from the device: which way gravity points in its axes; tilt is measured from it */
-export type SensorSample = Gravity;
+/**
+ * A reading from the device: the phone's whole attitude, swivel included, so tilt can be
+ * measured as the whole turn from a level pose (ADR 0010); its gravity follows from it
+ */
+export type SensorSample = Attitude;
 
 /**
  * Device tilt. One source can feed several listeners; whoever owns it starts and stops it,

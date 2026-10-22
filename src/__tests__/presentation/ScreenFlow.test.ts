@@ -28,6 +28,9 @@ const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
 const FROSTING: FlowState = { ...PAUSED, bloom: AT };
 const GET_READY: FlowState = { ...PAUSED, over: { kind: "getReady" } };
 
+/** The flood into a blue game from AT */
+const PLAY_BLUE = { color: BLUE, at: AT, action: { kind: "play", color: BLUE } } as const;
+
 /** A step that only leaves the flow in `state`, showing its screen */
 const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
 
@@ -80,13 +83,14 @@ describe("screen flow", () => {
 		expect(step.calibrate).toBeUndefined();
 	});
 
-	it("with a level pose set, PLAY floods straight into a game in that colour", () => {
+	it("with a level pose set, PLAY floods straight into a game in that colour, zeroing the swivel as it starts", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "startPressed", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
-		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
+		expect(step.zeroSwivel).toBeUndefined();
+		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
 	});
 
-	it("the bench's auto-start floods into a game in that colour, with no level pose asked for", () => {
+	it("the bench's auto-start floods into a game in that colour, with no level pose asked for, zeroing the swivel like PLAY", () => {
 		const step = stepFlow(
 			INITIAL_FLOW,
 			{ type: "autoStarted", color: BLUE, at: AT },
@@ -94,14 +98,14 @@ describe("screen flow", () => {
 		);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.act).toBeUndefined();
-		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
+		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
 	});
 
 	it("the bench's auto-start also floods straight into a game with a level pose set", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "autoStarted", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.act).toBeUndefined();
-		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
+		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
 	});
 
 	it("the level button opens the bowl from the title in the play dot's colour, from the pause in the player's", () => {
@@ -129,7 +133,12 @@ describe("screen flow", () => {
 			GAME,
 		);
 		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
-		expect(step.flood).toEqual({ color: PINK, at: AT, action: { kind: "play", color: PINK } });
+		expect(step.flood).toEqual({
+			color: PINK,
+			at: AT,
+			action: { kind: "play", color: PINK },
+			zeroSwivel: true,
+		});
 		// The bowl stays under the flood until it has covered the screen
 		expect(step.state.settle).toEqual({ from: "start", color: PINK });
 		expect(step.state.flooding).toBe(true);
@@ -356,10 +365,11 @@ describe("screen flow", () => {
 		expect(over.screen).toEqual({ kind: "gameOver" });
 	});
 
-	it("a finger on the frost of the pause screen opens Get ready, held", () => {
+	it("a finger on the frost of the pause screen opens Get ready, held, zeroing the swivel as the cup opens", () => {
 		expect(stepFlow(PAUSED, { type: "fieldTouched", at: AT }, GAME)).toEqual({
 			state: GET_READY,
 			screen: { kind: "getReady" },
+			zeroSwivel: true,
 		});
 	});
 

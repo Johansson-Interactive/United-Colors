@@ -15,6 +15,25 @@ export interface Gravity {
 }
 
 /**
+ * Which way the phone faces in the room, as its own three axes (unit, at right angles) given in
+ * a frame fixed to the room with z pointing up: `xx, xy, xz` is the phone's x axis (to the right
+ * of the screen), `y*` its y axis (to the screen's top), `z*` its z axis (out of its face). The
+ * room frame's x and y lie level and have no meaningful zero, so only turns between attitudes
+ * count. Gravity, in the phone's axes, is `-(xz, yz, zz)`.
+ */
+export interface Attitude {
+	xx: number;
+	xy: number;
+	xz: number;
+	yx: number;
+	yy: number;
+	yz: number;
+	zx: number;
+	zy: number;
+	zz: number;
+}
+
+/**
  * How far the phone is tipped from a level pose (radians): `x` turns its right edge away from
  * the player's eyes, `y` its top edge towards them (see levelPose.ts)
  */

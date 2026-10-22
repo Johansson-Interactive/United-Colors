@@ -1,9 +1,12 @@
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
-import type { ClockFactory } from "../../application/ports";
+import type { ClockFactory, SensorSample } from "../../application/ports";
 import { dotCount, findPlayer, readDot, sceneDot } from "../../application/sceneRecord";
+import { bindTiltZero } from "../../application/useCases/BindTiltZero";
 import { GAME_COLORS } from "../../domain/constants";
-import { FLAT, gravityAt } from "../../domain/levelPose";
+import { attitudeAt, FLAT_ATTITUDES, gravityOf } from "../../domain/levelPose";
+import type { Attitude } from "../../domain/types";
+import { swivelled } from "../domain/attitudes";
 import { scriptedSpawner, smallDotAt } from "../domain/stage";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -39,9 +42,9 @@ function manualClock() {
 
 const SCREEN = { width: 300, height: 600 };
 
-/** The gravity the phone reads tilted by `x`, `y` from flat, screen up */
+/** The phone tilted by `x`, `y` from flat, screen up */
 function tilted(x: number, y: number) {
-	return gravityAt({ x, y }, FLAT.up);
+	return attitudeAt({ x, y }, FLAT_ATTITUDES.up);
 }
 
 /** A session on a hand-cranked clock; `staged` spawns only the dots a test queues on `small` */
@@ -146,7 +149,7 @@ describe("GameSession", () => {
 
 	it("tilt is measured from the level pose, even one set before the game exists", () => {
 		const { session, clock, player } = setup();
-		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT.down });
+		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT_ATTITUDES.down });
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
 		const before = player()?.x ?? 0;
@@ -160,19 +163,58 @@ describe("GameSession", () => {
 		const { session, clock, player } = setup();
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
-		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT.down });
+		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT_ATTITUDES.down });
 		const before = player()?.x ?? 0;
-		session.feedTilt(FLAT.down);
+		session.feedTilt(FLAT_ATTITUDES.down);
 		clock.frame(100, 0);
 		clock.tick();
 		expect(player()?.x).toBe(before);
 
-		const overhead = gravityAt({ x: 0.5, y: 0 }, FLAT.down);
+		const overhead = attitudeAt({ x: 0.5, y: 0 }, FLAT_ATTITUDES.down);
 		session.setLevelPoses({ up: tilted(0.5, 0), down: overhead });
 		session.feedTilt(overhead);
 		clock.frame(100, 0);
 		clock.tick();
 		expect(player()?.x).toBe(before);
+	});
+
+	it("held upright, a swivel without a zeroing pushes the player, and a zeroing removes the push", () => {
+		const { session, clock, player, store } = setup();
+		const upright = tilted(0, Math.PI / 2);
+		store.getState().updateSettings({ tiltZero: gravityOf(upright) });
+		const samples = new Set<(sample: SensorSample) => void>();
+		const hold = (attitude: Attitude) => {
+			for (const listener of samples) listener(attitude);
+		};
+		const binding = bindTiltZero(
+			store,
+			{
+				start() {},
+				stop() {},
+				onSample: (listener) => {
+					samples.add(listener);
+					return () => samples.delete(listener);
+				},
+			},
+			(poses) => session.setLevelPoses(poses),
+		);
+		samples.add((sample) => session.feedTilt(sample));
+		session.startKiosk();
+		session.start(GAME_COLORS[0]);
+		hold(swivelled(upright, 1));
+
+		const before = player()?.x ?? 0;
+		hold(swivelled(upright, 1.3));
+		clock.frame(100, 0);
+		clock.tick();
+		const pushed = player()?.x ?? 0;
+		expect(pushed).not.toBeCloseTo(before);
+
+		binding.zero();
+		hold(swivelled(upright, 1.3));
+		clock.frame(100, 0);
+		clock.tick();
+		expect(player()?.x).toBeCloseTo(pushed);
 	});
 
 	it("the sensitivity scales the player's speed, even one set before the game exists", () => {

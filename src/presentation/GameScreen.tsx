@@ -15,7 +15,7 @@ import type {
 	WatchAppActive,
 } from "../application/ports";
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
-import { bindTiltZero } from "../application/useCases/BindTiltZero";
+import { bindTiltZero, type LevelPoseBinding } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
 import type { PoseSide } from "../domain/levelPose";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
@@ -97,16 +97,21 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	useGameBindings(store, audio, haptics, storage);
 
-	// The level pose reaches the game and the interface together, so the dot in the game and
-	// the dots on the menus rest in the same hand position
-	useEffect(
-		() =>
-			bindTiltZero(store, (poses) => {
-				session.setLevelPoses(poses);
-				tilt.poses.set(poses);
-			}),
-		[session, tilt, store],
-	);
+	// The level poses reach the game and the interface together, so the dot in the game and
+	// the dots on the menus rest in the same hand position; the flow says when the swivel is
+	// zeroed (see screenFlow.ts), through the binding of the moment
+	const levelPoses = useRef<LevelPoseBinding | null>(null);
+	useEffect(() => {
+		const binding = bindTiltZero(store, sensor, (poses) => {
+			session.setLevelPoses(poses);
+			tilt.poses.set(poses);
+		});
+		levelPoses.current = binding;
+		return () => {
+			binding.unbind();
+			levelPoses.current = null;
+		};
+	}, [session, tilt, store, sensor]);
 
 	// Reads the latest control mode without resubscribing the sensor when it changes
 	const handleSensorSample = useEffectEvent((sample: SensorSample) => {
@@ -140,6 +145,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
 		calibrate: (zero, side) => void calibrateTilt(zero, side, store, storage),
+		zeroSwivel: () => levelPoses.current?.zero(),
 		facts: () => ({
 			levelPoseSet: store.getState().settings.tiltZero !== null,
 			tiltPresent: tilt.available.get(),

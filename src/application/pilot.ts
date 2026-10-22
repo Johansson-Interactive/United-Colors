@@ -1,5 +1,5 @@
 import { GAME_HERTZ, PLAYER_SPEED_PER_DEGREE } from "../domain/constants";
-import { FLAT, gravityAt } from "../domain/levelPose";
+import { attitudeAt, FLAT_ATTITUDES } from "../domain/levelPose";
 import type { DotView, RenderFrame, ScreenSize, TiltAngles } from "../domain/types";
 import type { SensorSample } from "./ports";
 
@@ -177,6 +177,6 @@ export function createPilot(
 	return () => {
 		const { frame, settings } = getState();
 		previous = pilotStep(frame, getScreen(), settings.tiltSensitivity, previous);
-		return gravityAt(previous, FLAT.up);
+		return attitudeAt(previous, FLAT_ATTITUDES.up);
 	};
 }
