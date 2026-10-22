@@ -40,6 +40,8 @@ export interface GameControls {
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
 	/** Adopt `zero` as the level pose for the side the screen faced */
 	calibrate: (zero: TiltZero, side: PoseSide) => void;
+	/** Zero the swivel where the phone is held now, for every level pose (see bindTiltZero) */
+	zeroSwivel: () => void;
 	/** The game's answers to what the flow asks, as they stand at this moment */
 	facts: () => GameFacts;
 }
@@ -53,7 +55,7 @@ function perform(controls: GameControls, action: FlowAction) {
 export interface FlowStoreState {
 	/** The screen to show */
 	screen: Screen;
-	/** Step a tap, then carry out what the step asks: calibrate, act, flood */
+	/** Step a tap, then carry out what the step asks: calibrate, zero the swivel, act, flood */
 	dispatch: (event: FlowEvent) => void;
 }
 
@@ -79,11 +81,13 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
 		if (step.calibrate) controls.calibrate(step.calibrate.zero, step.calibrate.side);
+		if (step.zeroSwivel) controls.zeroSwivel();
 		if (step.act) perform(controls, step.act);
 		if (step.flood) {
-			const { color, at, action } = step.flood;
+			const { color, at, action, zeroSwivel } = step.flood;
 			controls.flood(color, at, () => {
 				apply({ type: "covered" });
+				if (zeroSwivel) controls.zeroSwivel();
 				perform(controls, action);
 			});
 		}

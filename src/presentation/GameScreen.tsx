@@ -145,6 +145,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
 		calibrate: (zero, side) => void calibrateTilt(zero, side, store, storage),
+		zeroSwivel: () => levelPoses.current?.zero(),
 		facts: () => ({
 			levelPoseSet: store.getState().settings.tiltZero !== null,
 			tiltPresent: tilt.available.get(),
