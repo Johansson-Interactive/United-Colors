@@ -12,11 +12,12 @@
  * copies what a frame says to draw.
  */
 
+import type { Disc } from "../../application/sceneRecord";
 import {
+	EDGE_DRAIN_MS,
 	EDGE_GROW_MS,
 	edgeRadius,
 	type FieldSize,
-	type Point,
 	type Portal,
 	portalReach,
 	RIM,
@@ -33,10 +34,13 @@ export interface BloomState {
 
 export const OPEN_BLOOM: BloomState = { progress: 0, outcome: null };
 
-/** How long the bloom must be held for the portal to pass the walls: as long as Get ready's portal takes to widen to the walls */
+/**
+ * How long the bloom must be held for the portal to pass the walls: as long as Get ready's
+ * portal takes to widen to them
+ */
 export const BLOOM_MS = EDGE_GROW_MS;
 /** A lifted finger drains the portal faster than it grew */
-const DRAIN_MS = BLOOM_MS * 0.4;
+const DRAIN_MS = EDGE_DRAIN_MS;
 /** Progress this close to full counts as full, so frame-sized steps can't fall short by rounding */
 const FULL_EPSILON = 1e-9;
 
@@ -69,11 +73,6 @@ export function stepBloom(state: BloomState, held: boolean, dt: number): BloomSt
 	return { progress, outcome: null };
 }
 
-/** Where the player dot froze, and its radius: the portal opens around it */
-export interface Seat extends Point {
-	radius: number;
-}
-
 /** What the bloom draws this frame */
 export interface BloomFrame {
 	/** The portal, the pause inside it; a zero radius is a clear field */
@@ -83,12 +82,12 @@ export interface BloomFrame {
 }
 
 /**
- * What `state` draws around `seat`: the portal grows from the rest size around the dot to the
- * field's farthest corner from it, and the rim fades as it passes the walls. Drained, the field
- * is clear again and the dot shows. With no player dot to open at (null), it opens from the
+ * What `state` draws around `seat`, where the player dot froze, at its radius: the portal grows
+ * from the rest size around the dot to the field's farthest corner from it, and the rim fades as
+ * it passes the walls. Drained, the field is clear again and the dot shows. With no player dot to open at (null), it opens from the
  * middle of the field.
  */
-export function bloomFrame(state: BloomState, seat: Seat | null, field: FieldSize): BloomFrame {
+export function bloomFrame(state: BloomState, seat: Disc | null, field: FieldSize): BloomFrame {
 	"worklet";
 	const centre = seat ?? { x: field.width / 2, y: field.height / 2, radius: 0 };
 	const radius =
