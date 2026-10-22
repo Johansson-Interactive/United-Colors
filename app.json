@@ -56,6 +56,7 @@
 			"./plugins/withDevLauncherStripPhaseAlwaysRuns.js",
 			"./plugins/withDevVariant.js",
 			"./plugins/withGameCategory.js",
+			"./plugins/withRequiredGyroscope.js",
 			[
 				"expo-splash-screen",
 				{
