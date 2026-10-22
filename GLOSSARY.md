@@ -23,6 +23,10 @@ _Avoid_: "points" (when meaning the dot), bonus dot, switch-color dot
 
 ### Play
 
+**Playing field**:
+The 9:16 box the whole game is played and shown in, eight player widths across and the same on every phone, so no device gives a player more room or a different view. It sits at the bottom of the screen, as wide as fits, with any height left over black above it; its four corners follow the curve of the phone's glass. "Field" on its own means the playing field.
+_Avoid_: arena, stage, playfield, board, screen
+
 **Level pose**:
 The way the player holds the phone for the dot to lie still. There are two, screen up and turned over.
 _Avoid_: calibration, zero, neutral
