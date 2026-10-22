@@ -45,14 +45,14 @@ describe("the bloom's hold", () => {
 		expect(BLOOM_MS).toBe(900);
 	});
 
-	it("grows its edge as fast as Get ready thaws the window, so the pause and the resume match", () => {
+	it("grows its edge as fast as Get ready's portal widens, so the pause and the resume match", () => {
 		let bloom = OPEN_BLOOM;
 		// Armed, so the hold grows from its first frame as the bloom does
-		let thaw = INITIAL_GET_READY;
+		let widening = INITIAL_GET_READY;
 		for (let t = 0; t < HOLD_MS - FRAME_DT; t += FRAME_DT) {
 			bloom = stepBloom(bloom, true, FRAME_DT);
-			thaw = stepGetReady(thaw, 0, 0, FRAME_DT, true);
-			expect(bloom.progress).toBeCloseTo(thaw.progress, 9);
+			widening = stepGetReady(widening, 0, 0, FRAME_DT, true);
+			expect(bloom.progress).toBeCloseTo(widening.progress, 9);
 		}
 		expect(bloom.outcome).toBeNull();
 	});

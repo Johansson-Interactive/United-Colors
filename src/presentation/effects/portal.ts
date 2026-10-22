@@ -4,8 +4,8 @@
  * frosted, lies under the play side, and the portal decides which part of the play side shows
  * over it (see playShows, stageLook.ts). Two steps open the portal, in opposite
  * directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
- * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the window
- * at the seat that thaws outward with the hold (see getReady.ts). Both grow from the same rest
+ * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the cup
+ * at the seat that widens to the walls with the hold (see getReady.ts). Both grow from the same rest
  * size through the same ease, wear the same rim and fade it at the same point, so here are
  * the pieces they share. No React, so the canvas and the steppers can use it.
  */
@@ -57,8 +57,8 @@ export function playShows(portal: Portal): PlayShows {
 export const FROST_MAX_DIM = 0.5;
 
 /**
- * How long the edge takes to grow from its rest size past the walls: the bloom's frost
- * covering the field and Get ready's thaw clearing it go at the same pace
+ * How long the edge takes to grow from its rest size past the walls: the bloom's portal
+ * covering the field and Get ready's widening to clear it go at the same pace
  */
 export const EDGE_GROW_MS = 900;
 /** Let go, the edge drains back along the way it grew, faster than it grew */

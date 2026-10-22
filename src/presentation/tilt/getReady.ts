@@ -41,7 +41,7 @@ export interface GetReadyState {
 
 /** Tilt (radians, either axis) that still counts as level */
 const LEVEL_RAD = 0.11;
-/** How long the device must stay level: the thaw grows at the bloom's pace */
+/** How long the device must stay level: the portal widens at the bloom's pace */
 export const HOLD_MS = EDGE_GROW_MS;
 /** A broken hold drains faster than it fills, as the bloom does */
 const DRAIN_MS = EDGE_DRAIN_MS;
@@ -272,9 +272,9 @@ export function seated(roll: Point, seat: Disc): number {
 	return clamp(1 - distance / (seat.radius * HOME_REACH), 0, 1);
 }
 
-// ---- The window: the portal into play, the cup at rest, and the rim that marks it ----
+// ---- The portal into play: the cup at rest, widening with the hold, and the rim that marks it ----
 
-/** How much the window breathes at the top of a pulse, as a fraction of the cup's size */
+/** How much the cup breathes at the top of a pulse, as a fraction of the cup's size */
 const BREATH = 0.03;
 /** A pulse's period: the point dot's own rhythm, a shrink and a grow at the game's rate */
 export const PULSE_MS = (2 * POINT_DOT_PULSE_SPEED * 1000) / GAME_HERTZ;
@@ -308,11 +308,11 @@ export function seatPulse(openMs: number): number {
 }
 
 /**
- * The window's radius: the cup at rest, breathing by `breath` (0..1, see seatPulse and
- * seated), and thawing outward with the hold to `reach` at full progress, where the whole
+ * The portal's radius: the cup at rest, breathing by `breath` (0..1, see seatPulse and
+ * seated), and widening with the hold to `reach` at full progress, where the whole
  * field is clear whatever the breath
  */
-export function windowRadius(progress: number, reach: number, breath: number): number {
+export function portalRadius(progress: number, reach: number, breath: number): number {
 	"worklet";
 	return edgeRadius(progress, CUP_RADIUS * (1 + BREATH * clamp(breath, 0, 1)), reach);
 }
@@ -368,7 +368,7 @@ export const OPEN_GET_READY: GetReadyFrameState = {
 
 /**
  * The seat with no player in the frozen scene (it should always have one here): Get ready still
- * runs, on a seat of no size in the corner, but nothing is drawn and the window stays shut
+ * runs, on a seat of no size in the corner, but nothing is drawn and the cup stays shut
  */
 export const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
 
@@ -396,28 +396,28 @@ export interface GetReadyFrame {
 	/** The rolling dot as drawn, pressed into a wall the way the player is in play (see rollBody) */
 	body: RollBody;
 	/** The portal into play, the cup at rest: the pause all over without a player */
-	window: Portal;
-	/** How strongly the rim on the window's edge shows, 0..1 */
+	portal: Portal;
+	/** How strongly the rim on the portal's edge shows, 0..1 */
 	rim: number;
 	/** How open the cup is, 0..1 of its size: the portal grows by it, and drains with it */
 	opened: number;
 	/**
 	 * How strongly the bowl's glass shows at the portal's edge, 0..1: in full from the cup's
 	 * first opening, so it shows at the edge as the cup grows, and fading as the rim does as the
-	 * thaw passes the walls
+	 * portal passes the walls
 	 */
 	glass: number;
 	/** True on the one frame Get ready fired on: play resumes */
 	fired: boolean;
-	/** True on the one frame the window shut on: the pause screen comes back */
+	/** True on the one frame the cup shut on: the pause screen comes back */
 	shut: boolean;
 }
 
 /**
- * What a state draws at the seat. The window breathes by the state's roll, which is this
- * frame's stepped roll, the same one the dot and the rim are drawn from, so the window, its rim
+ * What a state draws at the seat. The portal breathes by the state's roll, which is this
+ * frame's stepped roll, the same one the dot and the rim are drawn from, so the portal, its rim
  * and the dot agree on how far from home the dot is. Without a player nothing is drawn and the
- * window stays shut, so nothing thaws open in the corner.
+ * cup stays shut, so nothing opens in the corner.
  */
 function drawFrame(
 	state: GetReadyFrameState & { roll: Roll },
@@ -435,7 +435,7 @@ function drawFrame(
 			seat: NO_SEAT,
 			dot,
 			body: rollBody(dot, 0, field),
-			window: PAUSE_ALL,
+			portal: PAUSE_ALL,
 			rim: 0,
 			opened: 0,
 			glass: 0,
@@ -451,10 +451,10 @@ function drawFrame(
 		seat: player,
 		dot,
 		body: rollBody(dot, player.radius, field),
-		window: {
+		portal: {
 			x: player.x,
 			y: player.y,
-			radius: windowRadius(hold.progress, portalReach(player, field), pulse * (1 - home)) * opened,
+			radius: portalRadius(hold.progress, portalReach(player, field), pulse * (1 - home)) * opened,
 			inside: "play",
 		},
 		rim: cupRim(hold.progress, home, pulse, opened),
@@ -469,8 +469,8 @@ function drawFrame(
  * Advance Get ready one frame: the cup's opening, then the roll, then the hold. The roll and the
  * hold go by whether the cup was fully open as the frame began: until then the dot is kept on
  * the seat and the hold isn't armed, so the hold counts from the frame after. Once fired or
- * shut it is inert: the state comes back unchanged and the frame leaves the window where it
- * was, so the pause world can go behind an open window unseen, and it never fires again.
+ * shut it is inert: the state comes back unchanged and the frame leaves the portal where it
+ * was, so the pause world can go behind an open portal unseen, and it never fires again.
  */
 export function advanceGetReady(
 	state: GetReadyFrameState,
@@ -502,9 +502,9 @@ export function advanceGetReady(
 }
 
 /**
- * The portal Get ready leaves behind when it closes, given its last state and the window
- * it had open: unchanged once fired, so the pause world goes behind the open window unseen; the
- * pause all over otherwise (the window shut, leaving the app), so the pause screen is whole.
+ * The portal Get ready leaves behind when it closes, given its last state and the portal
+ * it had open: unchanged once fired, so the pause world goes behind the open portal unseen; the
+ * pause all over otherwise (the cup shut, or the app left), so the pause screen is whole.
  */
 export function closeGetReady(state: GetReadyFrameState, portal: Portal): Portal {
 	return state.hold.fired ? portal : PAUSE_ALL;

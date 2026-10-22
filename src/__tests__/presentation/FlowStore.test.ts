@@ -133,7 +133,7 @@ describe("flow store", () => {
 		expect(calls).toEqual(["resume"]);
 	});
 
-	it("Get ready's window shutting brings the pause screen back, touching nothing", () => {
+	it("Get ready's cup shutting brings the pause screen back, touching nothing", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
 		flow.getState().dispatch({ type: "fieldTouched" });

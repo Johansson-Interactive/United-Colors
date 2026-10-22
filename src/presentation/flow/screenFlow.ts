@@ -140,9 +140,9 @@ export type FlowEvent =
 	| { type: "pausePressed" }
 	/** The player left the app (home, app switcher, an incoming call) */
 	| { type: "appLeft" }
-	/** Get ready's hold completed: the thaw cleared the field */
+	/** Get ready's hold completed: its portal cleared the field */
 	| { type: "readyHeld" }
-	/** The finger lifted before the field was clear, and Get ready's window has shut */
+	/** The finger lifted before the field was clear, and Get ready's cup has shut */
 	| { type: "readyShut" }
 	/** The flood covers the screen; whatever was under it can go */
 	| { type: "covered" }
@@ -222,7 +222,7 @@ export function screenOf(state: FlowState): Screen {
 }
 
 /**
- * What can still step the flow in Get ready: leaving the app, the hold and the window shutting.
+ * What can still step the flow in Get ready: leaving the app, the hold and the cup shutting.
  * Its finger is already down, so no tap can land, and no flood can start from it.
  */
 const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
@@ -395,7 +395,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			if (blooming) return { state: endBloom(state) };
 			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
-			// The hold is the countdown; play picks up the moment the thaw clears the field, no flood
+			// The hold is the countdown; play picks up the moment the portal clears the field, no flood
 			return { ...closeOver(state), act: RESUME };
 		case "readyShut":
 			return closeOver(state);

@@ -4,7 +4,7 @@
  * froze. It starts at the rest size around the dot, so the dot is gone on the first frame,
  * wears the rim and grows with the hold; once it has passed the walls the pause screen opens
  * (covered). A finger lifted before then drains the portal back into the dot, faster than it
- * grew, and play goes on from the frozen frame (cleared). The bloom is the Get ready window
+ * grew, and play goes on from the frozen frame (cleared). The bloom is Get ready's portal
  * run the other way (see getReady.ts): the same rest size, ease, rim and fade, with the pause
  * inside the portal instead of the play.
  *
@@ -33,7 +33,7 @@ export interface BloomState {
 
 export const OPEN_BLOOM: BloomState = { progress: 0, outcome: null };
 
-/** How long the bloom must be held for the portal to pass the walls: as long as Get ready's thaw */
+/** How long the bloom must be held for the portal to pass the walls: as long as Get ready's portal takes to widen to the walls */
 export const BLOOM_MS = EDGE_GROW_MS;
 /** A lifted finger drains the portal faster than it grew */
 const DRAIN_MS = BLOOM_MS * 0.4;

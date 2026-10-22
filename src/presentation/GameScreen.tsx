@@ -211,7 +211,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
 	const handleSnap = useCallback(() => audio.playCollect(0), [audio]);
-	// The thaw cleared the field: a snap, and play picks up at once
+	// Get ready's portal cleared the field: a snap, and play picks up at once
 	const handleReady = useCallback(() => {
 		handleSnap();
 		dispatch({ type: "readyHeld" });

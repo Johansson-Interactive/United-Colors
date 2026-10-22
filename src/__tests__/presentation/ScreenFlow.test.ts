@@ -379,7 +379,7 @@ describe("screen flow", () => {
 		});
 	});
 
-	it("the window shutting after the finger lifts closes Get ready back to the pause screen", () => {
+	it("the cup shutting after the finger lifts closes Get ready back to the pause screen", () => {
 		expect(stepFlow(GET_READY, { type: "readyShut" }, GAME)).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },

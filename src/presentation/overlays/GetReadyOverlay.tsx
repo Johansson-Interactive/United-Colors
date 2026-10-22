@@ -56,9 +56,9 @@ interface GetReadyOverlayProps {
 	portal: SharedValue<Portal>;
 	/** How the play side is cut to the portal: all drawn here is on the play side (see PlaySide) */
 	cut: PortalCut;
-	/** Fired once, the moment the thaw clears the field */
+	/** Fired once, the moment the portal has widened past the walls */
 	onReady: () => void;
-	/** Fired once, when the window has shut after the finger lifted */
+	/** Fired once, when the cup has shut after the finger lifted */
 	onShut: () => void;
 }
 
@@ -78,7 +78,7 @@ const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	seat: NO_SEAT,
 	dot: { x: 0, y: 0 },
 	body: { x: 0, y: 0, radius: 0, wallX: 0, wallY: 0, wallC: 0, neck: 0 },
-	window: PAUSE_ALL,
+	portal: PAUSE_ALL,
 	rim: 0,
 	opened: 0,
 	glass: 0,
@@ -96,7 +96,7 @@ const COVER_MARGIN = 0.5;
  * waits on the seat until then, and then rolls around inside the cup with the tilt, with a
  * little weight to it, and presses into a wall as the player does in play. Rolling it home and
  * holding level widens the portal to the walls, and the moment the field is clear play resumes;
- * the window is left open, so the pause world goes behind it unseen. Lift the finger first and the
+ * the portal is left open, so the pause world goes behind it unseen. Lift the finger first and the
  * portal drains back into the seat, and Get ready is over. Nothing here fades in; on resume all
  * that is left drawn is the dot copy on the seat, which fades into the real dot. Touches go
  * through to the field touch layer.
@@ -153,12 +153,12 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		if (next === prev) return;
 		state.set(next);
 		frame.set(now);
-		portal.set(now.window);
+		portal.set(now.portal);
 		if (now.fired) scheduleOnRN(onReady);
 		if (now.shut) scheduleOnRN(onShut);
 	});
 
-	// Leaves the portal the stepper says on close: the window open once fired, the pause all over otherwise
+	// Leaves the portal the stepper says on close: open once fired, the pause all over otherwise
 	useEffect(
 		() => () => {
 			portal.set(closeGetReady(state.get(), portal.get()));
@@ -178,11 +178,11 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		const angle = Math.atan2(stretchY, stretchX);
 		return [{ rotate: angle }, { scaleX: k }, { scaleY: 1 / k }, { rotate: -angle }];
 	});
-	const windowCentre = useDerivedValue(() => vec(frame.get().window.x, frame.get().window.y));
-	const windowRadius = useDerivedValue(() => frame.get().window.radius);
+	const portalCentre = useDerivedValue(() => vec(frame.get().portal.x, frame.get().portal.y));
+	const portalRadius = useDerivedValue(() => frame.get().portal.radius);
 	const rim = useDerivedValue(() => frame.get().rim);
 	const glassShows = useDerivedValue(() => frame.get().glass);
-	const glassRimRadius = useDerivedValue(() => Math.max(0, frame.get().window.radius - 1));
+	const glassRimRadius = useDerivedValue(() => Math.max(0, frame.get().portal.radius - 1));
 
 	const shadeCentre = useDerivedValue(() => {
 		const { dot } = frame.get();
@@ -231,16 +231,16 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 						</Group>
 						{/* The bowl's glass at the portal's edge, as the cup grows and while it is open */}
 						<Group opacity={glassShows}>
-							<Circle c={windowCentre} r={windowRadius}>
+							<Circle c={portalCentre} r={portalRadius}>
 								<RadialGradient
-									c={windowCentre}
-									r={windowRadius}
+									c={portalCentre}
+									r={portalRadius}
 									colors={BOWL_GLAZE}
 									positions={BOWL_GLAZE_STOPS}
 								/>
 							</Circle>
 							<Circle
-								c={windowCentre}
+								c={portalCentre}
 								r={glassRimRadius}
 								color={BOWL_RIM}
 								style="stroke"
@@ -261,7 +261,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 				</PlaySide>
 				{/* The rim on the portal's edge, over both worlds and never cut, as the bloom's is */}
 				<Group opacity={shown}>
-					<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
+					<PortalRim centre={portalCentre} radius={portalRadius} opacity={rim} color={color} />
 				</Group>
 			</Canvas>
 		</Animated.View>
