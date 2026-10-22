@@ -1,5 +1,5 @@
 import { rect, rrect } from "@shopify/react-native-skia";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
 	type SharedValue,
 	useDerivedValue,
@@ -21,9 +21,10 @@ import { INK_LIFT } from "../theme/theme";
  * colour follows `playerColor` on the UI thread, so a colour switch in play renders nothing.
  *
  * Every canvas on the play side cuts itself to the same portal while the pause world is under
- * it: `portalClip` is the portal's circle and `clipsOut` whether the play side shows outside
- * it rather than inside (see playShows). Both are worked out once a frame for all of the
- * canvases, and only while the portal moves.
+ * it: `cut` holds the portal's circle and whether the play side shows outside it rather than
+ * inside (see playShows), worked out once a frame for all of the canvases and only while the
+ * portal moves. It is null in play, which is cut nowhere, and the same object otherwise, so no
+ * canvas sees a new cut each render.
  */
 export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
@@ -44,12 +45,17 @@ export function useStageLook(place: StagePlace, playerColor: SharedValue<string>
 	const washInPlayer = look.accent === "player";
 	const accent = useDerivedValue(() => (washInPlayer ? playerColor.get() : INK_LIFT));
 	const stageOpacity = useStageValue(1, look.opacity);
+	// One cut for every canvas, and only while the pause world is under them: play pays for no clip
+	const cut = useMemo<PortalCut | null>(
+		() => (look.pauseWorld ? { clip: portalClip, out: clipsOut } : null),
+		[look.pauseWorld, portalClip, clipsOut],
+	);
 	return {
 		pauseWorld: look.pauseWorld,
 		hudScore: look.hudScore,
 		frost,
 		portal,
-		cut: { clip: portalClip, out: clipsOut } satisfies PortalCut,
+		cut,
 		accent,
 		stageOpacity,
 	};

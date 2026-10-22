@@ -59,7 +59,8 @@ interface GameCanvasProps {
 	 * over it is cut to the portal by `cut` (see stageLook.ts)
 	 */
 	pauseWorld: boolean;
-	cut: PortalCut;
+	/** The portal the play side is cut to, while the pause world is under it; null in play */
+	cut: PortalCut | null;
 	/** What lies on the pause world, under the play side: the field's touch layer, the pause's content */
 	pauseSide: React.ReactNode;
 	/** Colour washed into the room's edges (the player's colour while playing) */
@@ -352,7 +353,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 					opaque={OPAQUE_CANVAS && !pauseWorld}
 					pointerEvents="none"
 				>
-					<PlaySide cut={pauseWorld ? cut : null}>
+					<PlaySide cut={cut}>
 						<Room uniforms={room} />
 						<Group transform={shakeTransform}>
 							<Group layer={scenePaint}>

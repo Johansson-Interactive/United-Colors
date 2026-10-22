@@ -55,7 +55,7 @@ interface GetReadyOverlayProps {
 	/** The portal, which this opens at the seat and widens with the hold */
 	portal: SharedValue<Portal>;
 	/** How the play side is cut to the portal: all drawn here is on the play side (see PlaySide) */
-	cut: PortalCut;
+	cut: PortalCut | null;
 	/** Fired once, the moment the portal has widened past the walls */
 	onReady: () => void;
 	/** Fired once, when the cup has shut after the finger lifted */

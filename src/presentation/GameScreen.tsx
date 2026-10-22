@@ -301,7 +301,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						score={score}
 						color={playerColor}
 						visible={hudScore}
-						cut={pauseWorld ? cut : null}
+						cut={cut}
 						onPause={pauseDotShown(screen.kind, !devTouch) ? handlePause : undefined}
 						corners={corners}
 					/>
