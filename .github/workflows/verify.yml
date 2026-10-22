@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  # A cancelled run on main could leave a release tagged but never built
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -25,12 +26,29 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
 
-  # Ships each green push to main: TestFlight on iOS, the internal track on Android.
+  # Keeps a release PR open that bumps the version and CHANGELOG from the Conventional Commits.
+  # Merging it tags vX.Y.Z on main, and the store job below ships that commit.
+  release-please:
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+
+  # Ships each other green push to main: TestFlight on iOS, the internal track on Android.
   # Builds run on EAS (--no-wait), which bumps the build numbers and submits them.
   # Put [skip build] in the head commit message to skip a push.
-  release:
-    needs: verify
-    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip build]')
+  testers:
+    needs: release-please
+    if: needs.release-please.outputs.release_created != 'true' && !contains(github.event.head_commit.message, '[skip build]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,8 +60,46 @@ jobs:
           cache: pnpm
       # eas-cli resolves the config plugins in app.json from node_modules
       - run: pnpm install --frozen-lockfile
+      # TestFlight closes a version once it's released, so builds after a release run one patch
+      # ahead. EAS uploads the working tree, so this edit is built without being committed.
+      - name: Run ahead of the released version
+        run: |
+          version=$(node -p "require('./app.json').expo.version")
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            node -e '
+              const fs = require("node:fs");
+              const app = JSON.parse(fs.readFileSync("app.json", "utf8"));
+              const [major, minor, patch] = app.expo.version.split(".").map(Number);
+              app.expo.version = `${major}.${minor}.${patch + 1}`;
+              fs.writeFileSync("app.json", `${JSON.stringify(app, null, "\t")}\n`);
+              console.log(`v${major}.${minor}.${patch} is released, testers get ${app.expo.version}`);
+            '
+          fi
       - uses: expo/expo-github-action@v8
         with:
           eas-version: 25.3.0
           token: ${{ secrets.EXPO_TOKEN }}
       - run: eas build --platform all --profile production --auto-submit --non-interactive --no-wait
+
+  # Ships the commit release-please just tagged: a draft on Play's production track, and an
+  # App Store Connect upload that you submit for review by hand.
+  store:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: 25.3.0
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: eas build --platform all --profile production --auto-submit-with-profile store --non-interactive --no-wait

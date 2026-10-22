@@ -1,0 +1,12 @@
+{
+	"$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+	"bootstrap-sha": "ea6777f0753f10e8c2785ee0a2c7d31c3b6c716c",
+	"packages": {
+		".": {
+			"release-type": "node",
+			"package-name": "tiltling",
+			"include-component-in-tag": false,
+			"extra-files": [{ "type": "json", "path": "app.json", "jsonpath": "$.expo.version" }]
+		}
+	}
+}
