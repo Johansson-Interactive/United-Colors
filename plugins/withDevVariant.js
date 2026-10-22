@@ -1,8 +1,9 @@
-// Debug builds (`pnpm ios --device`) load JS from Metro, Release builds embed it. Give the
-// Debug build its own bundle identifier so both can be installed side by side, and its own
-// home-screen name so they can be told apart. The name comes from a per-configuration build
-// setting that Info.plist reads.
-const { withInfoPlist, withXcodeProject } = require("expo/config-plugins");
+// Debug builds (`pnpm ios --device`, `pnpm android`) load JS from Metro, Release builds embed
+// it. Give the Debug build its own app id so both can be installed side by side, and its own
+// home-screen name so they can be told apart. On iOS the name comes from a per-configuration
+// build setting that Info.plist reads. On Android the debug build type gets an id suffix and
+// its own app_name; React Native's debugOptimized build type copies debug, so it follows.
+const { withAppBuildGradle, withInfoPlist, withXcodeProject } = require("expo/config-plugins");
 
 const SETTING = "APP_DISPLAY_NAME";
 const DEV_SUFFIX = " Dev";
@@ -21,6 +22,21 @@ function setDevVariant(configurations, { name, bundleIdentifier }) {
 	return configurations;
 }
 
+/** Point the app's debug build type at a separate dev app */
+function setAndroidDevVariant(buildGradle, { name }) {
+	if (buildGradle.includes(`applicationIdSuffix "${DEV_BUNDLE_SUFFIX}"`)) return buildGradle;
+	const debugBlock = /(buildTypes\s*\{\s*debug\s*\{)/;
+	if (!debugBlock.test(buildGradle)) {
+		throw new Error("withDevVariant: no debug build type in android/app/build.gradle");
+	}
+	return buildGradle.replace(
+		debugBlock,
+		`$1
+            applicationIdSuffix "${DEV_BUNDLE_SUFFIX}"
+            resValue "string", "app_name", ${JSON.stringify(`${name}${DEV_SUFFIX}`)}`,
+	);
+}
+
 const withDevSettings = (config) =>
 	withXcodeProject(config, (config) => {
 		setDevVariant(config.modResults.pbxXCBuildConfigurationSection(), {
@@ -36,5 +52,15 @@ const withDisplayNameFromSetting = (config) =>
 		return config;
 	});
 
-module.exports = (config) => withDisplayNameFromSetting(withDevSettings(config));
+const withAndroidDevBuildType = (config) =>
+	withAppBuildGradle(config, (config) => {
+		config.modResults.contents = setAndroidDevVariant(config.modResults.contents, {
+			name: config.name,
+		});
+		return config;
+	});
+
+module.exports = (config) =>
+	withAndroidDevBuildType(withDisplayNameFromSetting(withDevSettings(config)));
 module.exports.setDevVariant = setDevVariant;
+module.exports.setAndroidDevVariant = setAndroidDevVariant;
