@@ -11,7 +11,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
-import { gravityOf, type PoseSide } from "../../domain/levelPose";
+import type { PoseSide } from "../../domain/levelPose";
 import type { TiltZero } from "../../domain/types";
 import { BowlStage } from "../components/BowlStage";
 import type { PressPoint } from "../components/DotButton";
@@ -131,7 +131,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		advance(stepSettle(state.get(), gravityOf(tilt.raw.get()), tilt.side.get(), dt));
+		advance(stepSettle(state.get(), tilt.raw.get(), tilt.side.get(), dt));
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it

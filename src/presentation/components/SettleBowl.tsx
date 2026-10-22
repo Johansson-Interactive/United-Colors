@@ -10,7 +10,7 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
-import { FLAT, gravityOf } from "../../domain/levelPose";
+import { FLAT_ATTITUDES, turnedToward } from "../../domain/levelPose";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM } from "../theme/theme";
 import { bowlTilt, type SettleState, settleEase } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
@@ -45,19 +45,13 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 	const travel = rim - dot - 6;
 	const closed = dot * 1.7;
 
-	// Smoothed gravity so the dot rolls rather than steps at the sensor rate
-	const shown = useSharedValue(FLAT.up);
+	// Smoothed attitude so the dot rolls rather than steps at the sensor rate
+	const shown = useSharedValue(FLAT_ATTITUDES.up);
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		const raw = gravityOf(tilt.raw.get());
-		const was = shown.get();
-		shown.set({
-			x: was.x + (raw.x - was.x) * k,
-			y: was.y + (raw.y - was.y) * k,
-			z: was.z + (raw.z - was.z) * k,
-		});
+		shown.set(turnedToward(shown.get(), tilt.raw.get(), k));
 	});
 
 	// Snap and pulse once the pose has settled
