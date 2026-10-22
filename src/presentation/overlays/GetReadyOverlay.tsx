@@ -77,6 +77,7 @@ const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	window: PAUSE_ALL,
 	rim: 0,
 	opened: 0,
+	glass: 0,
 	fired: false,
 	shut: false,
 };

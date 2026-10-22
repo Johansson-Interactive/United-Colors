@@ -423,7 +423,7 @@ describe("get-ready cup", () => {
 		expect(framesToOpen({ x: 30, y: 30, radius: 20 })).toBeLessThan(OPEN_FRAMES);
 	});
 
-	it("shows the seat, the dot and its shade by how far it has opened", () => {
+	it("opens the cup steadily, from nothing to its full size", () => {
 		const { frames } = play(OPEN_GET_READY, LEVEL, OPENING_MS);
 		expect(frames[0].opened).toBeLessThan(0.05);
 		for (let i = 1; i < frames.length; i++) {
@@ -569,6 +569,26 @@ describe("get-ready frame step", () => {
 		expect(rims[Math.floor(rims.length / 2)]).toBe(rims[0]);
 		expect(rims[rims.length - 1]).toBe(0);
 		expect(frames.slice(at).every((f) => f.rim === 0)).toBe(true);
+	});
+
+	it("shows the bowl's glass in full at the portal's edge from the first frame it opens", () => {
+		const { frames } = play(OPEN_GET_READY, TIPPED, OPENING_MS + 1000);
+		for (const f of frames) expect(f.glass).toBe(1);
+	});
+
+	it("fades the glass out as the thaw passes the walls, gone by the firing frame", () => {
+		const { frames } = play(OPEN_GET_READY, LEVEL, PLENTY);
+		const at = frames.findIndex((f) => f.fired);
+		const glass = frames.slice(OPEN_FRAMES - 1, at + 1).map((f) => f.glass);
+		for (let i = 1; i < glass.length; i++) expect(glass[i]).toBeLessThanOrEqual(glass[i - 1]);
+		expect(glass[Math.floor(glass.length / 2)]).toBe(1);
+		expect(glass[glass.length - 1]).toBe(0);
+	});
+
+	it("takes the glass away with the cup when it shuts, and shows none without a player", () => {
+		const { frames } = play(halfHeld(), LEVEL, 400, seat, false);
+		expect(frames.find((f) => f.shut)?.glass).toBe(0);
+		expect(play(OPEN_GET_READY, LEVEL, PLENTY, null).frames.every((f) => f.glass === 0)).toBe(true);
 	});
 
 	it("beats the rim with the pulse while the dot is away from home", () => {
