@@ -57,6 +57,8 @@ export interface FlowState {
 	bloom: Point | null;
 	/** The kiosk has been started, by the stage's first layout; later layouts leave it be */
 	kioskStarted: boolean;
+	/** Score slivers are still on their way into the score; the game over waits for the last */
+	sliversInAir: boolean;
 }
 
 export const INITIAL_FLOW: FlowState = {
@@ -66,6 +68,7 @@ export const INITIAL_FLOW: FlowState = {
 	flooding: false,
 	bloom: null,
 	kioskStarted: false,
+	sliversInAir: false,
 };
 
 /**
@@ -141,6 +144,8 @@ export type FlowEvent =
 	| { type: "covered" }
 	/** The game moved to another phase */
 	| { type: "phaseChanged"; phase: GamePhase }
+	/** Score slivers came into the air, or the last of them arrived at the score */
+	| { type: "sliversChanged"; inAir: boolean }
 	/** The stage was laid out; only the first one starts the kiosk */
 	| { type: "stageLaidOut" };
 
@@ -185,10 +190,11 @@ const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
  * screen they were opened from, and Get ready over the pause; anywhere else they cannot be
  * open, and the phase's own screen shows. A flood leaves the screen under it as it is until it
  * covers. The bloom keeps the HUD up over the run it is freezing, so the pause screen opens
- * only once the frost has covered the field.
+ * only once the frost has covered the field, and a run's end keeps it up until the last of
+ * its score slivers has arrived, so the game over opens on the score complete.
  */
 export function screenOf(state: FlowState): Screen {
-	const { phase, settle, over, bloom } = state;
+	const { phase, settle, over, bloom, sliversInAir } = state;
 	if (bloom && (phase === "RUNNING" || phase === "PAUSED")) return { kind: "frosting", at: bloom };
 	switch (phase) {
 		case "KIOSK":
@@ -206,7 +212,7 @@ export function screenOf(state: FlowState): Screen {
 		case "REJECTING":
 			return { kind: "hud" };
 		case "GAME_OVER":
-			return { kind: "gameOver" };
+			return sliversInAir ? { kind: "hud" } : { kind: "gameOver" };
 	}
 }
 
@@ -279,6 +285,10 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	if (event.type === "phaseChanged") {
 		const bloom = bloomable(event.phase) ? state.bloom : null;
 		return { state: { ...state, phase: event.phase, bloom } };
+	}
+	// So are the slivers, which only the score meter sees land
+	if (event.type === "sliversChanged") {
+		return { state: { ...state, sliversInAir: event.inAir } };
 	}
 	// The kiosk is the title's, so the first layout starts it even while a flood runs
 	if (event.type === "stageLaidOut") {
@@ -386,7 +396,12 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "covered":
 			// Covering clears the screen back to the title, but the kiosk stays started
 			return {
-				state: { ...INITIAL_FLOW, phase: state.phase, kioskStarted: state.kioskStarted },
+				state: {
+					...INITIAL_FLOW,
+					phase: state.phase,
+					kioskStarted: state.kioskStarted,
+					sliversInAir: state.sliversInAir,
+				},
 			};
 	}
 }
