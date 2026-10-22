@@ -104,8 +104,10 @@ const COVER_MARGIN = 0.5;
  * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt and the
  * touch are, this takes one step of it and copies what it says to draw. It drives `portal`,
  * which every canvas on the play side is cut to (see PlaySide), this one too: the field, the
- * HUD's score and what is drawn here (the bowl's glass at the edge, the seat, the dot and the
- * rim) show only inside the portal, over the pause world, and grow into view with it.
+ * HUD's score and what is drawn here (the bowl's glass at the edge, the seat and the dot) show
+ * only inside the portal, over the pause world, and grow into view with it. The rim on the
+ * portal's edge is drawn uncut, over both worlds, as the bloom's is (see BloomOverlay), so the
+ * two rims look the same.
  */
 export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	scene,
@@ -255,10 +257,12 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 						<Circle c={glareCentre} r={glareRadius} color={glass(0.5)}>
 							<BlurMask blur={glareBlur} style="normal" />
 						</Circle>
-						{/* The rim on the portal's edge: the cup's as it opens, and outward with the thaw */}
-						<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
 					</Group>
 				</PlaySide>
+				{/* The rim on the portal's edge, over both worlds and never cut, as the bloom's is */}
+				<Group opacity={shown}>
+					<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
+				</Group>
 			</Canvas>
 		</Animated.View>
 	);
