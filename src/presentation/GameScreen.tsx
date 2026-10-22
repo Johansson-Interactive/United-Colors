@@ -50,7 +50,7 @@ import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
-import { FIELD_UNTOUCHED, type FieldTouchState } from "./touch/fieldTouch";
+import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
 
 interface GameScreenProps {
 	session: GameSession;
@@ -129,7 +129,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The flow's controls on the game, with the gyro check that goes with play, and the facts it
 	// steps on. The stage fade that goes with them is the stage look's
-	const { screen, dispatch } = useScreenFlow(store, {
+	const { screen, cameFrom, dispatch } = useScreenFlow(store, {
 		play: (color) => {
 			session.start(color);
 			detectGyro();
@@ -267,17 +267,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						onLayout={handleLayout}
 						onDragDelta={dragSteers ? handleDrag : undefined}
 						pauseSide={
-							<PauseSide
-								touch={touch}
-								onTouch={handleFieldTouch}
-								fieldTouchEnabled={fieldTouchEnabled}
-								insetStyle={insetStyle}
-								screen={screen.kind}
-								store={store}
-								color={playerColor}
-								score={score}
-								onQuit={handleLeavePress}
-							/>
+							<>
+								<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={fieldTouchEnabled} />
+								<PauseSide
+									insetStyle={insetStyle}
+									screen={screen.kind}
+									cameFrom={cameFrom}
+									store={store}
+									color={playerColor}
+									score={score}
+									onQuit={handleLeavePress}
+								/>
+							</>
 						}
 					/>
 
@@ -369,11 +370,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 };
 
 interface PauseSideProps {
-	touch: SharedValue<FieldTouchState>;
-	onTouch: () => void;
-	fieldTouchEnabled: boolean;
 	insetStyle: StyleProp<ViewStyle>;
 	screen: Screen["kind"];
+	/** The kind of screen before this one, which decides whether the content fades in */
+	cameFrom: Screen["kind"] | null;
 	store: GameStore;
 	color: SharedValue<string>;
 	score: ScoreTally;
@@ -381,16 +381,14 @@ interface PauseSideProps {
 }
 
 /**
- * What lies on the pause world, under the play side (see GameCanvas): the field's touch layer,
- * and the pause's content, plain views that are never cut by the portal. The content is in
- * place under the bloom and around Get ready, pressable only on the pause (see pauseContent.ts).
+ * The pause's content on the pause world, over the field's touch layer and under the play side
+ * (see GameCanvas): plain views that are never cut by the portal. It is in place under the
+ * bloom and around Get ready, pressable only on the pause (see pauseContent.ts).
  */
 const PauseSide: React.FC<PauseSideProps> = ({
-	touch,
-	onTouch,
-	fieldTouchEnabled,
 	insetStyle,
 	screen,
+	cameFrom,
 	store,
 	color,
 	score,
@@ -398,22 +396,19 @@ const PauseSide: React.FC<PauseSideProps> = ({
 }) => {
 	const shows = pauseContent(screen);
 	return (
-		<>
-			<FieldTouch touch={touch} onTouch={onTouch} enabled={fieldTouchEnabled} />
-			<View style={insetStyle} pointerEvents="box-none">
-				<View style={styles.stage} pointerEvents="box-none">
-					{shows && (
-						<PauseOverlay
-							pressable={shows.pressable}
-							fadesIn={pauseEntryFades(screen)}
-							onQuit={onQuit}
-						/>
-					)}
-					{/* The paused score and run time, still in the middle, with the pause's content */}
-					{shows && <PausedScore store={store} color={color} score={score} />}
-				</View>
+		<View style={insetStyle} pointerEvents="box-none">
+			<View style={styles.stage} pointerEvents="box-none">
+				{shows && (
+					<PauseOverlay
+						pressable={shows.pressable}
+						fadesIn={pauseEntryFades(cameFrom, screen)}
+						onQuit={onQuit}
+					/>
+				)}
+				{/* The paused score and run time, still in the middle, with the pause's content */}
+				{shows && <PausedScore store={store} color={color} score={score} />}
 			</View>
-		</>
+		</View>
 	);
 };
 

@@ -22,10 +22,15 @@ describe("pause content", () => {
 
 describe("pause content's entry", () => {
 	it("doesn't fade in when the bloom's portal reveals it, as it is simply there", () => {
-		expect(pauseEntryFades("frosting")).toBe(false);
+		expect(pauseEntryFades("hud", "frosting")).toBe(false);
+	});
+
+	it("doesn't fade in when the player comes back from leaving the app mid-run", () => {
+		expect(pauseEntryFades("hud", "pause")).toBe(false);
 	});
 
 	it("fades in as today when it first shows on the pause itself, back from the bowl or the speed view", () => {
-		expect(pauseEntryFades("pause")).toBe(true);
+		expect(pauseEntryFades("settle", "pause")).toBe(true);
+		expect(pauseEntryFades("speed", "pause")).toBe(true);
 	});
 });

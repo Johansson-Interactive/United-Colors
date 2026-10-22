@@ -28,10 +28,11 @@ export function pauseContent(screen: Screen["kind"]): PauseContent | null {
 }
 
 /**
- * Whether the content fades in, given the screen it first showed on: never through the
- * bloom, where the portal reveals it already in place; on the pause itself (back from the
- * level bowl or the speed view) it fades in as those transitions always have
+ * Whether the content fades in as it first shows on `shownOn`, coming from the screen `from`:
+ * only on the pause itself, back from the level bowl or the speed view, as those transitions
+ * always have. Never through the bloom, where the portal reveals it already in place, and never
+ * back from leaving the app mid-run, where the pause is simply there.
  */
-export function pauseEntryFades(firstShownOn: Screen["kind"]): boolean {
-	return firstShownOn === "pause";
+export function pauseEntryFades(from: Screen["kind"] | null, shownOn: Screen["kind"]): boolean {
+	return shownOn === "pause" && (from === "settle" || from === "speed");
 }
