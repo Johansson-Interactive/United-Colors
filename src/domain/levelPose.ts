@@ -1,4 +1,4 @@
-import type { Attitude, Gravity, TiltAngles } from "./types";
+import type { Attitude, Gravity, PoseSide, SavedLevelPoses, TiltAngles } from "./types";
 
 /**
  * Tilt measured from a level pose, the way the hand turns the phone: `x` is how far it has
@@ -13,26 +13,16 @@ import type { Attitude, Gravity, TiltAngles } from "./types";
  * Screen down, a turn that tips an edge away from the eyes still reads the way it does screen
  * up. To the hand that is the same tilt, though gravity sees it mirrored.
  *
- * The functions are worklets because the interface measures tilt on the UI thread every frame,
- * with the same arithmetic as the game; the directive is inert outside Reanimated. For the same
- * reason the vector arithmetic is written out in scalars rather than built from small vector
- * helpers, so a frame's reading makes no throwaway vectors.
+ * The functions the interface calls every frame on the UI thread (the settle bowl's hold and
+ * smoothing) are worklets, with the same arithmetic as the game; the directive is inert outside
+ * Reanimated.
  */
-
-/**
- * Which of the two level poses: `up`, held screen up, or `down`, turned over (lying back, phone
- * overhead). Set on your side, a pose is still one of these two.
- */
-export type PoseSide = "up" | "down";
 
 /** The two level poses, as the gravity each reads */
 export type LevelPoses = Readonly<Record<PoseSide, Gravity>>;
 
-/** The level poses before any is set: flat on a table, and flat overhead */
-export const FLAT: LevelPoses = {
-	up: { x: 0, y: 0, z: -1 },
-	down: { x: 0, y: 0, z: 1 },
-};
+/** The two level poses, as the attitude each is held in */
+export type LevelAttitudes = Readonly<Record<PoseSide, Attitude>>;
 
 /**
  * How much nearer the other level pose must be before it takes over (60 degrees). Between flat
@@ -44,43 +34,103 @@ const TURN_OVER_MARGIN = Math.PI / 3;
 /** Turns smaller than this (radians) read as none, where the turn's axis is lost in rounding */
 const NO_TURN = 1e-9;
 
-/** The level tilt and the level pose it was measured from */
-export interface LevelTilt extends TiltAngles {
-	side: PoseSide;
+// Three-vector arithmetic. A gravity, a phone axis as it points in the room and a turn as an
+// axis scaled by its angle are all one of these.
+
+interface Vector {
+	x: number;
+	y: number;
+	z: number;
+}
+
+function dot(a: Vector, b: Vector): number {
+	"worklet";
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross(a: Vector, b: Vector): Vector {
+	"worklet";
+	return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+
+function lengthOf(v: Vector): number {
+	"worklet";
+	return Math.hypot(v.x, v.y, v.z);
+}
+
+function scaled(v: Vector, by: number): Vector {
+	"worklet";
+	return { x: v.x * by, y: v.y * by, z: v.z * by };
+}
+
+/** `v` turned by `angle` about the unit `axis`, right-handed (Rodrigues) */
+function rotated(v: Vector, axis: Vector, angle: number): Vector {
+	"worklet";
+	const c = Math.cos(angle);
+	const s = Math.sin(angle);
+	const k = cross(axis, v);
+	const along = dot(axis, v) * (1 - c);
+	return {
+		x: v.x * c + k.x * s + axis.x * along,
+		y: v.y * c + k.y * s + axis.y * along,
+		z: v.z * c + k.z * s + axis.z * along,
+	};
+}
+
+/**
+ * The shortest turn taking direction `from` to `to` (both unit), as an axis scaled by its angle;
+ * none when they already agree, and null when they point straight apart, where no turn is
+ * shortest
+ */
+function directionTurn(from: Vector, to: Vector): Vector | null {
+	"worklet";
+	const axis = cross(from, to);
+	const sine = lengthOf(axis);
+	const cosine = dot(from, to);
+	if (sine > NO_TURN) return scaled(axis, Math.atan2(sine, cosine) / sine);
+	return cosine > 0 ? { x: 0, y: 0, z: 0 } : null;
+}
+
+// The phone's own axes, as they point in the room while it is held in an attitude
+
+function axisX(a: Attitude): Vector {
+	"worklet";
+	return { x: a.xx, y: a.xy, z: a.xz };
+}
+
+function axisY(a: Attitude): Vector {
+	"worklet";
+	return { x: a.yx, y: a.yy, z: a.yz };
+}
+
+function axisZ(a: Attitude): Vector {
+	"worklet";
+	return { x: a.zx, y: a.zy, z: a.zz };
+}
+
+function attitudeOf(x: Vector, y: Vector, z: Vector): Attitude {
+	"worklet";
+	return { xx: x.x, xy: x.y, xz: x.z, yx: y.x, yy: y.y, yz: y.z, zx: z.x, zy: z.y, zz: z.z };
 }
 
 /** The same direction at unit length */
 export function unitGravity(g: Gravity): Gravity {
 	"worklet";
-	const length = Math.hypot(g.x, g.y, g.z);
+	const length = lengthOf(g);
 	return { x: g.x / length, y: g.y / length, z: g.z / length };
 }
 
 /** The angle between two gravity directions (radians, 0..pi) */
 export function angleBetween(a: Gravity, b: Gravity): number {
 	"worklet";
-	const cx = a.y * b.z - a.z * b.y;
-	const cy = a.z * b.x - a.x * b.z;
-	const cz = a.x * b.y - a.y * b.x;
-	return Math.atan2(Math.hypot(cx, cy, cz), a.x * b.x + a.y * b.y + a.z * b.z);
+	return Math.atan2(lengthOf(cross(a, b)), dot(a, b));
 }
 
-/**
- * Which level pose is in use for the phone reading `gravity`, from the gravities the two poses
- * read: the one in use at the last sample, `was`, stays until the other is nearer by
- * TURN_OVER_MARGIN
- */
-function sideInUse(gravity: Gravity, up: Gravity, down: Gravity, was: PoseSide): PoseSide {
+/** The gravity (unit) the phone reads, held in `attitude` */
+export function gravityOf(attitude: Attitude): Gravity {
 	"worklet";
-	const fromUp = angleBetween(gravity, up);
-	const fromDown = angleBetween(gravity, down);
-	const turnOver =
-		was === "down" ? fromUp + TURN_OVER_MARGIN >= fromDown : fromDown + TURN_OVER_MARGIN < fromUp;
-	return turnOver ? "down" : "up";
+	return { x: -attitude.xz, y: -attitude.yz, z: -attitude.zz };
 }
-
-/** The two level poses, as the attitude each is held in */
-export type LevelAttitudes = Readonly<Record<PoseSide, Attitude>>;
 
 /**
  * The level poses before any is set: flat on a table, and flat overhead, turned over about the
@@ -91,56 +141,40 @@ export const FLAT_ATTITUDES: LevelAttitudes = {
 	down: { xx: 1, xy: 0, xz: 0, yx: 0, yy: -1, yz: 0, zx: 0, zy: 0, zz: -1 },
 };
 
-/** The gravity (unit) the phone reads, held in `attitude` */
-export function gravityOf(attitude: Attitude): Gravity {
-	"worklet";
-	return { x: -attitude.xz, y: -attitude.yz, z: -attitude.zz };
+/** The level poses before any is set, as the gravity each reads */
+export const FLAT: LevelPoses = {
+	up: gravityOf(FLAT_ATTITUDES.up),
+	down: gravityOf(FLAT_ATTITUDES.down),
+};
+
+/** The level poses to measure from: each saved one, and flat where none is set */
+export function levelPosesOf(saved: SavedLevelPoses): LevelPoses {
+	return { up: saved.up ?? FLAT.up, down: saved.down ?? FLAT.down };
 }
 
 /**
- * `attitude` turned about an axis given in the phone's own axes, `(kx, ky, kz)` scaled by the
- * angle. The turn is right-handed: a positive turn about y lowers the right edge of a phone
- * lying flat.
+ * `attitude` turned by `turn`, an axis given in the phone's own axes scaled by the angle. The
+ * turn is right-handed: a positive turn about y lowers the right edge of a phone lying flat.
  */
-function turnedBy(attitude: Attitude, kx: number, ky: number, kz: number): Attitude {
+function turnedBy(attitude: Attitude, turn: Vector): Attitude {
 	"worklet";
-	const angle = Math.hypot(kx, ky, kz);
+	const angle = lengthOf(turn);
 	if (angle < NO_TURN) return attitude;
-	const ax = kx / angle;
-	const ay = ky / angle;
-	const az = kz / angle;
-	const c = Math.cos(angle);
-	const s = Math.sin(angle);
-	const t = 1 - c;
-	// Where the turn takes the phone's x, y and z axes, in the phone's axes as they were
-	const xToX = c + ax * ax * t;
-	const xToY = ay * ax * t + az * s;
-	const xToZ = az * ax * t - ay * s;
-	const yToX = ax * ay * t - az * s;
-	const yToY = c + ay * ay * t;
-	const yToZ = az * ay * t + ax * s;
-	const zToX = ax * az * t + ay * s;
-	const zToY = ay * az * t - ax * s;
-	const zToZ = c + az * az * t;
-	const a = attitude;
-	return {
-		xx: a.xx * xToX + a.yx * xToY + a.zx * xToZ,
-		xy: a.xy * xToX + a.yy * xToY + a.zy * xToZ,
-		xz: a.xz * xToX + a.yz * xToY + a.zz * xToZ,
-		yx: a.xx * yToX + a.yx * yToY + a.zx * yToZ,
-		yy: a.xy * yToX + a.yy * yToY + a.zy * yToZ,
-		yz: a.xz * yToX + a.yz * yToY + a.zz * yToZ,
-		zx: a.xx * zToX + a.yx * zToY + a.zx * zToZ,
-		zy: a.xy * zToX + a.yy * zToY + a.zy * zToZ,
-		zz: a.xz * zToX + a.yz * zToY + a.zz * zToZ,
+	const x = axisX(attitude);
+	const y = axisY(attitude);
+	const z = axisZ(attitude);
+	// The same axis as it points in the room; every phone axis turns about it alike
+	const k = scaled(turn, 1 / angle);
+	const axis: Vector = {
+		x: x.x * k.x + y.x * k.y + z.x * k.z,
+		y: x.y * k.x + y.y * k.y + z.y * k.z,
+		z: x.z * k.x + y.z * k.y + z.z * k.z,
 	};
+	return attitudeOf(rotated(x, axis, angle), rotated(y, axis, angle), rotated(z, axis, angle));
 }
 
 /** A turn of the phone, as an axis in its own axes scaled by the angle (radians) */
-interface Turn {
-	x: number;
-	y: number;
-	z: number;
+interface Turn extends Vector {
 	/** The angle (0..pi), whole even at a half turn, where the axis is lost */
 	angle: number;
 }
@@ -151,30 +185,36 @@ interface Turn {
  */
 function turnFrom(from: Attitude, to: Attitude): Turn {
 	"worklet";
-	const p = from;
-	const a = to;
+	const px = axisX(from);
+	const py = axisY(from);
+	const pz = axisZ(from);
+	const ax = axisX(to);
+	const ay = axisY(to);
+	const az = axisZ(to);
 	// The axis scaled by the turn's sine, and the cosine of its angle
-	const sx =
-		(p.zx * a.yx + p.zy * a.yy + p.zz * a.yz - (p.yx * a.zx + p.yy * a.zy + p.yz * a.zz)) / 2;
-	const sy =
-		(p.xx * a.zx + p.xy * a.zy + p.xz * a.zz - (p.zx * a.xx + p.zy * a.xy + p.zz * a.xz)) / 2;
-	const sz =
-		(p.yx * a.xx + p.yy * a.xy + p.yz * a.xz - (p.xx * a.yx + p.xy * a.yy + p.xz * a.yz)) / 2;
-	const trace =
-		p.xx * a.xx +
-		p.xy * a.xy +
-		p.xz * a.xz +
-		p.yx * a.yx +
-		p.yy * a.yy +
-		p.yz * a.yz +
-		p.zx * a.zx +
-		p.zy * a.zy +
-		p.zz * a.zz;
-	const sine = Math.hypot(sx, sy, sz);
+	const s: Vector = {
+		x: (dot(pz, ay) - dot(py, az)) / 2,
+		y: (dot(px, az) - dot(pz, ax)) / 2,
+		z: (dot(py, ax) - dot(px, ay)) / 2,
+	};
+	const trace = dot(px, ax) + dot(py, ay) + dot(pz, az);
+	const sine = lengthOf(s);
 	const angle = Math.atan2(sine, (trace - 1) / 2);
 	// A turn too small to have an axis is its own sine
-	const scale = sine > NO_TURN ? angle / sine : 1;
-	return { x: sx * scale, y: sy * scale, z: sz * scale, angle };
+	return { ...scaled(s, sine > NO_TURN ? angle / sine : 1), angle };
+}
+
+/**
+ * Which level pose is in use for the phone reading `gravity`, from the gravities the two poses
+ * read: the one in use at the last sample, `was`, stays until the other is nearer by
+ * TURN_OVER_MARGIN
+ */
+function sideInUse(gravity: Gravity, up: Gravity, down: Gravity, was: PoseSide): PoseSide {
+	const fromUp = angleBetween(gravity, up);
+	const fromDown = angleBetween(gravity, down);
+	const turnOver =
+		was === "down" ? fromUp + TURN_OVER_MARGIN >= fromDown : fromDown + TURN_OVER_MARGIN < fromUp;
+	return turnOver ? "down" : "up";
 }
 
 /**
@@ -213,17 +253,20 @@ export function turnBetween(a: Attitude, b: Attitude): number {
 export function turnedToward(from: Attitude, to: Attitude, share: number): Attitude {
 	"worklet";
 	if (share >= 1) return to;
-	const turn = turnFrom(from, to);
-	return turnedBy(from, turn.x * share, turn.y * share, turn.z * share);
+	return turnedBy(from, scaled(turnFrom(from, to), share));
+}
+
+/** The level tilt and the level pose it was measured from */
+export interface LevelTilt extends TiltAngles {
+	side: PoseSide;
 }
 
 /**
- * Tilt of the phone held in `attitude`, from whichever of the level `poses` is in use. Which
- * one is decided by gravity alone, with TURN_OVER_MARGIN, so a swivel never turns the phone
- * over to the other pose.
+ * Tilt of the phone held in `attitude`, from whichever of the level `poses` is in use, given
+ * the one in use at the last reading, `was`. Which one is decided by gravity alone, with
+ * TURN_OVER_MARGIN, so a swivel never turns the phone over to the other pose.
  */
 export function levelTilt(attitude: Attitude, poses: LevelAttitudes, was: PoseSide): LevelTilt {
-	"worklet";
 	const side = sideInUse(gravityOf(attitude), gravityOf(poses.up), gravityOf(poses.down), was);
 	const tilt = wholeTilt(attitude, poses[side]);
 	return { x: tilt.x, y: tilt.y, side };
@@ -236,21 +279,12 @@ export function levelTilt(attitude: Attitude, poses: LevelAttitudes, was: PoseSi
  */
 export function tiltFromFlat(attitude: Attitude, side: PoseSide): TiltAngles {
 	"worklet";
-	const flat = FLAT[side];
-	// Gravity, flat to now, in the phone's axes
-	const gx = -attitude.xz;
-	const gy = -attitude.yz;
-	const gz = -attitude.zz;
-	// The turn that takes gravity from now back to flat, as an axis scaled by its sine; the phone
-	// turned the other way about the same axis, from flat to now
-	const cx = gy * flat.z - gz * flat.y;
-	const cy = gz * flat.x - gx * flat.z;
-	const sine = Math.hypot(cx, cy, gx * flat.y - gy * flat.x);
-	const cosine = gx * flat.x + gy * flat.y + gz * flat.z;
-	if (sine <= NO_TURN) return { x: 0, y: cosine > 0 ? 0 : Math.PI };
-	const scale = Math.atan2(sine, cosine) / sine;
+	// The turn that takes gravity from now back to flat; the phone turned the other way about
+	// the same axis, from flat to now
+	const turn = directionTurn(gravityOf(attitude), FLAT[side]);
+	if (!turn) return { x: 0, y: Math.PI };
 	// About the long axis is x, about the short axis is y
-	return { x: cy * scale, y: cx * scale };
+	return { x: turn.y, y: turn.x };
 }
 
 /**
@@ -259,28 +293,15 @@ export function tiltFromFlat(attitude: Attitude, side: PoseSide): TiltAngles {
  * or its long axis if the short one points along gravity.
  */
 function swung(attitude: Attitude, gravity: Gravity): Attitude {
-	"worklet";
 	const from = gravityOf(attitude);
-	const to = unitGravity(gravity);
-	// The turn of gravity, as an axis scaled by its sine
-	const cx = from.y * to.z - from.z * to.y;
-	const cy = from.z * to.x - from.x * to.z;
-	const cz = from.x * to.y - from.y * to.x;
-	const sine = Math.hypot(cx, cy, cz);
-	const cosine = from.x * to.x + from.y * to.y + from.z * to.z;
-	if (sine > NO_TURN) {
-		// Gravity turns one way in the phone's axes as the phone turns the other
-		const scale = -Math.atan2(sine, cosine) / sine;
-		return turnedBy(attitude, cx * scale, cy * scale, cz * scale);
-	}
-	if (cosine > 0) return attitude;
+	const turn = directionTurn(from, unitGravity(gravity));
+	// Gravity turns one way in the phone's axes as the phone turns the other
+	if (turn) return turnedBy(attitude, scaled(turn, -1));
 	// The short axis, or failing that the long one, made level
-	const short = 1 - from.x * from.x > 0.5;
-	const ax = (short ? 1 : 0) - (short ? from.x : from.y) * from.x;
-	const ay = (short ? 0 : 1) - (short ? from.x : from.y) * from.y;
-	const az = -(short ? from.x : from.y) * from.z;
-	const scale = Math.PI / Math.hypot(ax, ay, az);
-	return turnedBy(attitude, ax * scale, ay * scale, az * scale);
+	const axis: Vector = 1 - from.x * from.x > 0.5 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+	const along = dot(axis, from);
+	const level = { x: axis.x - along * from.x, y: axis.y - along * from.y, z: -along * from.z };
+	return turnedBy(attitude, scaled(level, Math.PI / lengthOf(level)));
 }
 
 /**
@@ -295,11 +316,10 @@ function swung(attitude: Attitude, gravity: Gravity): Attitude {
  * phone's short axis, as lying back turns it, then turned the shortest way to its own gravity.
  */
 export function zeroSwivel(saved: LevelPoses, attitude: Attitude): LevelAttitudes {
-	"worklet";
 	const gravity = gravityOf(attitude);
 	const up = angleBetween(gravity, saved.up) <= angleBetween(gravity, saved.down);
 	const near = swung(attitude, up ? saved.up : saved.down);
-	const far = swung(turnedBy(near, Math.PI, 0, 0), up ? saved.down : saved.up);
+	const far = swung(turnedBy(near, { x: Math.PI, y: 0, z: 0 }), up ? saved.down : saved.up);
 	return up ? { up: near, down: far } : { up: far, down: near };
 }
 
@@ -309,5 +329,5 @@ export function zeroSwivel(saved: LevelPoses, attitude: Attitude): LevelAttitude
  */
 export function attitudeAt(tilt: TiltAngles, pose: Attitude): Attitude {
 	"worklet";
-	return turnedBy(pose, tilt.y, tilt.x, 0);
+	return turnedBy(pose, { x: tilt.y, y: tilt.x, z: 0 });
 }

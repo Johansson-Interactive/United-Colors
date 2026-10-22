@@ -18,11 +18,11 @@
  * The swivel, the turn about the vertical that tilt reads but gravity cannot see, has no true
  * zero, so the flow zeroes it wherever the player is by definition at their level pose: as a run
  * starts from the title (or the bench's auto-start), as Get ready's cup opens, and as the bowl
- * writes a pose (ADR 0010). A run from RETRY keeps the zero it had.
+ * writes a pose, after which the run it floods into keeps that zero (ADR 0010). A run from
+ * RETRY keeps the zero it had.
  */
 
-import type { PoseSide } from "../../domain/levelPose";
-import type { GamePhase, TiltZero } from "../../domain/types";
+import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import type { Point } from "../effects/frost";
 import { INK_LIFT } from "../theme/theme";
@@ -121,7 +121,7 @@ export type FlowEvent =
 	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
 	| ({ type: "levelPressed" } & MenuOpening)
 	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
-	| { type: "settled"; zero: TiltZero; side: PoseSide; at: PressPoint }
+	| { type: "settled"; pose: Gravity; side: PoseSide; at: PressPoint }
 	| { type: "settleBacked" }
 	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
 	| ({ type: "speedPressed" } & MenuOpening)
@@ -159,7 +159,8 @@ export type FlowEvent =
 
 /** What the game does: straight away, or once a flood covers the screen */
 export type FlowAction =
-	| { kind: "play"; color: string }
+	/** Start a run, zeroing the swivel first if asked */
+	| { kind: "play"; color: string; zeroSwivel: boolean }
 	| { kind: "pause" }
 	| { kind: "resume" }
 	/** Start the kiosk afresh */
@@ -173,31 +174,23 @@ export interface FlowStep {
 	state: FlowState;
 	/** The screen to show for `state` */
 	screen: Screen;
+	/** Adopt this pose as level for the side it was set on */
+	calibrate?: { pose: Gravity; side: PoseSide };
 	/**
-	 * Adopt this pose as level for the side the screen faced, then zero the swivel where the
-	 * phone is held now: the player is at their level pose as they write it
+	 * Zero the swivel where the phone is held now, after any pose is adopted: the bowl writing a
+	 * pose, Get ready's cup opening
 	 */
-	calibrate?: { zero: TiltZero; side: PoseSide };
-	/** Zero the swivel where the phone is held now, with no pose written (Get ready's cup opening) */
 	zeroSwivel?: true;
 	/** Do this to the game now */
 	act?: FlowAction;
-	/**
-	 * Grow a dot of `color` from `at`; once it covers the screen, zero the swivel if asked, then
-	 * run `action`
-	 */
-	flood?: { color: string; at: PressPoint; action: FlowAction; zeroSwivel?: true };
+	/** Grow a dot of `color` from `at`; run `action` once it covers the screen */
+	flood?: { color: string; at: PressPoint; action: FlowAction };
 }
 
-const play = (color: string): FlowAction => ({ kind: "play", color });
-
-/** The flood into a run started from the title: the run starts with the swivel zeroed */
-const startRun = (color: string, at: PressPoint): NonNullable<FlowStep["flood"]> => ({
-	color,
-	at,
-	action: play(color),
-	zeroSwivel: true,
-});
+/** A run from the title, where the player is at their level pose: it zeroes the swivel */
+const startRun = (color: string): FlowAction => ({ kind: "play", color, zeroSwivel: true });
+/** A run that keeps the swivel's zero: RETRY's, or one the bowl has just zeroed */
+const play = (color: string): FlowAction => ({ kind: "play", color, zeroSwivel: false });
 const RESUME: FlowAction = { kind: "resume" };
 const PAUSE: FlowAction = { kind: "pause" };
 
@@ -272,13 +265,8 @@ const HOLD_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
 type BareStep = Omit<FlowStep, "screen">;
 
 /** Start a flood; the state stays as it is underneath until the flood covers the screen */
-const startFlood = (
-	state: FlowState,
-	flood: NonNullable<FlowStep["flood"]>,
-	calibrate?: FlowStep["calibrate"],
-): BareStep => ({
+const startFlood = (state: FlowState, flood: NonNullable<FlowStep["flood"]>): BareStep => ({
 	state: { ...state, flooding: true },
-	...(calibrate && { calibrate }),
 	flood,
 });
 
@@ -332,10 +320,10 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	switch (event.type) {
 		case "startPressed":
 			return game.levelPoseSet
-				? startFlood(state, startRun(event.color, event.at))
+				? startFlood(state, { color: event.color, at: event.at, action: startRun(event.color) })
 				: { state: { ...state, settle: { from: "start", color: event.color } }, act: HALT_KIOSK };
 		case "autoStarted":
-			return startFlood(state, startRun(event.color, event.at));
+			return startFlood(state, { color: event.color, at: event.at, action: startRun(event.color) });
 		case "levelPressed":
 			return {
 				state: { ...state, settle: { from: event.from, color: openingColor(event, game) } },
@@ -344,18 +332,21 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "settled": {
 			const settle = state.settle;
 			if (!settle) return { state };
-			const calibrate = { zero: event.zero, side: event.side };
+			// The pose is written where the player holds it, so the swivel is zeroed there too
+			const written = {
+				calibrate: { pose: event.pose, side: event.side },
+				zeroSwivel: true,
+			} as const;
 			// From the title the pose is only saved; the title comes straight back
 			if (settle.from === "menu") {
-				return { state: { ...state, settle: null }, calibrate, act: RUN_KIOSK };
+				return { state: { ...state, settle: null }, ...written, act: RUN_KIOSK };
 			}
 			// From the pause too: the pause screen comes back, so play never picks up unannounced;
 			// the play dot then leads through Get ready as usual
-			if (settle.from === "pause") {
-				return { state: { ...state, settle: null }, calibrate };
-			}
+			if (settle.from === "pause") return { state: { ...state, settle: null }, ...written };
 			// The bowl stays under the flood until it has covered the screen
-			return startFlood(state, startRun(settle.color, event.at), calibrate);
+			const flood = { color: settle.color, at: event.at, action: play(settle.color) };
+			return { ...startFlood(state, flood), ...written };
 		}
 		case "settleBacked":
 			return {

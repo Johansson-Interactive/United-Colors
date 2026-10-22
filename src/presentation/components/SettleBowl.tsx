@@ -51,7 +51,7 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		shown.set(turnedToward(shown.get(), tilt.raw.get(), k));
+		shown.set(turnedToward(shown.get(), tilt.reading.get().attitude, k));
 	});
 
 	// Snap and pulse once the pose has settled

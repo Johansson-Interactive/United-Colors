@@ -2,6 +2,7 @@ import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import { createPilot, pilotStep } from "../../application/pilot";
 import type { Clock } from "../../application/ports";
+import { FLAT_ATTITUDES, wholeTilt } from "../../domain/levelPose";
 import { seededRandom } from "../../domain/random";
 import type { DotView, RenderFrame, TiltAngles } from "../../domain/types";
 
@@ -55,7 +56,7 @@ function pilotedRun(seconds: number, seed: number) {
 	session.start(PINK);
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(pilot());
+		session.feedTilt(wholeTilt(pilot(), FLAT_ATTITUDES.up));
 		clock.step();
 		const frame = store.getState().frame;
 		frames.push(frame);

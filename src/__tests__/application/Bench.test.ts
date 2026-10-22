@@ -34,7 +34,7 @@ function benchRun(seconds: number, run: BenchRun = "steady") {
 	session.start("#E91E63");
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(benchTilt(t / 30));
+		session.feedTilt(wholeTilt(benchTilt(t / 30), FLAT_ATTITUDES.up));
 		clock.step();
 		frames.push(store.getState().frame);
 	}

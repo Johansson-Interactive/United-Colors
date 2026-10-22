@@ -43,10 +43,18 @@ export interface TiltAngles {
 }
 
 /**
- * The device pose the player calls "level", as the gravity it reads; tilt is measured from
- * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ * Which of the two level poses: `up`, held screen up, or `down`, turned over (lying back, phone
+ * overhead). Set on your side, a pose is still one of these two.
  */
-export type TiltZero = Gravity;
+export type PoseSide = "up" | "down";
+
+/**
+ * The level poses the player has set, each as the gravity it reads; tilt is measured from
+ * them, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ * Null until set, which reads flat. Whichever pose the phone is nearer is the one in use (see
+ * levelTilt).
+ */
+export type SavedLevelPoses = Readonly<Record<PoseSide, Gravity | null>>;
 
 /** Persisted user settings */
 export interface GameSettings {
@@ -58,13 +66,7 @@ export interface GameSettings {
 	 * TILT_SENSITIVITY_MIN / MAX
 	 */
 	tiltSensitivity: number;
-	/** Null until the player has set a level pose */
-	tiltZero: TiltZero | null;
-	/**
-	 * The second level pose, for playing turned over (lying back, phone overhead); null reads
-	 * flat screen down. Whichever pose the phone is nearer is the one in use (see levelTilt).
-	 */
-	tiltZeroDown: TiltZero | null;
+	levelPoses: SavedLevelPoses;
 }
 
 /** The player's own dot, a small drifting dot, or a point dot to collect */

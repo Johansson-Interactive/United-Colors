@@ -28,8 +28,12 @@ const PAUSED: FlowState = { ...INITIAL_FLOW, phase: "PAUSED" };
 const FROSTING: FlowState = { ...PAUSED, bloom: AT };
 const GET_READY: FlowState = { ...PAUSED, over: { kind: "getReady" } };
 
-/** The flood into a blue game from AT */
-const PLAY_BLUE = { color: BLUE, at: AT, action: { kind: "play", color: BLUE } } as const;
+/** The flood into a blue game from AT, started from the title: it zeroes the swivel */
+const START_BLUE = {
+	color: BLUE,
+	at: AT,
+	action: { kind: "play", color: BLUE, zeroSwivel: true },
+} as const;
 
 /** A step that only leaves the flow in `state`, showing its screen */
 const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
@@ -87,7 +91,7 @@ describe("screen flow", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "startPressed", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.zeroSwivel).toBeUndefined();
-		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
+		expect(step.flood).toEqual(START_BLUE);
 	});
 
 	it("the bench's auto-start floods into a game in that colour, with no level pose asked for, zeroing the swivel like PLAY", () => {
@@ -98,14 +102,14 @@ describe("screen flow", () => {
 		);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.act).toBeUndefined();
-		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
+		expect(step.flood).toEqual(START_BLUE);
 	});
 
 	it("the bench's auto-start also floods straight into a game with a level pose set", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "autoStarted", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
 		expect(step.act).toBeUndefined();
-		expect(step.flood).toEqual({ ...PLAY_BLUE, zeroSwivel: true });
+		expect(step.flood).toEqual(START_BLUE);
 	});
 
 	it("the level button opens the bowl from the title in the play dot's colour, from the pause in the player's", () => {
@@ -121,23 +125,14 @@ describe("screen flow", () => {
 		).toEqual(open("pause", BLUE));
 	});
 
-	it("settling for a first game saves the pose and floods from the bowl into play", () => {
-		const step = stepFlow(
-			open("start"),
-			{
-				type: "settled",
-				zero: ZERO,
-				side: "up",
-				at: AT,
-			},
-			GAME,
-		);
-		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
+	it("settling for a first game saves the pose, zeroes the swivel there, and floods from the bowl into a run that keeps that zero", () => {
+		const step = stepFlow(open("start"), { type: "settled", pose: ZERO, side: "up", at: AT }, GAME);
+		expect(step.calibrate).toEqual({ pose: ZERO, side: "up" });
+		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toEqual({
 			color: PINK,
 			at: AT,
-			action: { kind: "play", color: PINK },
-			zeroSwivel: true,
+			action: { kind: "play", color: PINK, zeroSwivel: false },
 		});
 		// The bowl stays under the flood until it has covered the screen
 		expect(step.state.settle).toEqual({ from: "start", color: PINK });
@@ -145,28 +140,30 @@ describe("screen flow", () => {
 		expect(stepFlow(step.state, { type: "covered" }, GAME).state).toEqual(INITIAL_FLOW);
 	});
 
-	it("settling from the pause saves the pose for the side faced and returns to the pause screen", () => {
+	it("settling from the pause saves the pose for the side faced, zeroes the swivel, and returns to the pause screen", () => {
 		const step = stepFlow(
 			{ ...open("pause", BLUE), phase: "PAUSED" },
-			{ type: "settled", zero: ZERO, side: "down", at: AT },
+			{ type: "settled", pose: ZERO, side: "down", at: AT },
 			GAME,
 		);
-		expect(step.calibrate).toEqual({ zero: ZERO, side: "down" });
+		expect(step.calibrate).toEqual({ pose: ZERO, side: "down" });
+		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toBeUndefined();
 		expect(step.act).toBeUndefined();
 		expect(step.state).toEqual(PAUSED);
 		expect(step.screen).toEqual({ kind: "pause" });
 	});
 
-	it("settling from the title only saves the pose; the title comes straight back", () => {
-		const step = stepFlow(open("menu"), { type: "settled", zero: ZERO, side: "up", at: AT }, GAME);
-		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
+	it("settling from the title only saves the pose and zeroes the swivel; the title comes straight back", () => {
+		const step = stepFlow(open("menu"), { type: "settled", pose: ZERO, side: "up", at: AT }, GAME);
+		expect(step.calibrate).toEqual({ pose: ZERO, side: "up" });
+		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toBeUndefined();
 		expect(step.state).toEqual(INITIAL_FLOW);
 	});
 
 	it("a settle with no bowl open does nothing", () => {
-		const step = stepFlow(INITIAL_FLOW, { type: "settled", zero: ZERO, side: "up", at: AT }, GAME);
+		const step = stepFlow(INITIAL_FLOW, { type: "settled", pose: ZERO, side: "up", at: AT }, GAME);
 		expect(step).toEqual(rests(INITIAL_FLOW));
 	});
 
@@ -177,13 +174,17 @@ describe("screen flow", () => {
 		expect(step.flood).toBeUndefined();
 	});
 
-	it("RETRY floods into a new game in the player's colour", () => {
+	it("RETRY floods into a new game in the player's colour, keeping the swivel's zero", () => {
 		const step = stepFlow(
 			INITIAL_FLOW,
 			{ type: "retryPressed", at: AT },
 			{ ...GAME, playerColor: BLUE },
 		);
-		expect(step.flood).toEqual({ color: BLUE, at: AT, action: { kind: "play", color: BLUE } });
+		expect(step.flood).toEqual({
+			color: BLUE,
+			at: AT,
+			action: { kind: "play", color: BLUE, zeroSwivel: false },
+		});
 	});
 
 	it("QUIT and BACK flood in ink to the title", () => {
@@ -200,12 +201,7 @@ describe("screen flow", () => {
 		expect(opened.act).toEqual({ kind: "haltKiosk" });
 		const settled = stepFlow(
 			opened.state,
-			{
-				type: "settled",
-				zero: ZERO,
-				side: "up",
-				at: AT,
-			},
+			{ type: "settled", pose: ZERO, side: "up", at: AT },
 			GAME,
 		);
 		expect(settled.act).toEqual({ kind: "runKiosk" });
@@ -232,16 +228,11 @@ describe("screen flow", () => {
 	it("starting a game from the bowl does not restart the kiosk", () => {
 		const settled = stepFlow(
 			open("start"),
-			{
-				type: "settled",
-				zero: ZERO,
-				side: "up",
-				at: AT,
-			},
+			{ type: "settled", pose: ZERO, side: "up", at: AT },
 			GAME,
 		);
 		expect(settled.act).toBeUndefined();
-		expect(settled.flood?.action).toEqual({ kind: "play", color: PINK });
+		expect(settled.flood?.action).toEqual({ kind: "play", color: PINK, zeroSwivel: false });
 		expect(stepFlow(settled.state, { type: "covered" }, GAME).act).toBeUndefined();
 	});
 
@@ -256,12 +247,7 @@ describe("screen flow", () => {
 		expect(stepFlow(opened.state, { type: "settleBacked" }, GAME).act).toBeUndefined();
 		const settled = stepFlow(
 			opened.state,
-			{
-				type: "settled",
-				zero: ZERO,
-				side: "up",
-				at: AT,
-			},
+			{ type: "settled", pose: ZERO, side: "up", at: AT },
 			GAME,
 		);
 		expect(settled.act).toBeUndefined();

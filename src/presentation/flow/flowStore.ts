@@ -6,8 +6,7 @@
 
 import { createStore } from "zustand/vanilla";
 import type { GameStore } from "../../application/GameStore";
-import type { PoseSide } from "../../domain/levelPose";
-import type { GamePhase, TiltZero } from "../../domain/types";
+import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import {
 	type FlowAction,
@@ -38,9 +37,9 @@ export interface GameControls {
 	runKiosk: () => void;
 	/** Grow a dot of `color` from `at` until it covers the screen, then call `onCovered` */
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
-	/** Adopt `zero` as the level pose for the side the screen faced */
-	calibrate: (zero: TiltZero, side: PoseSide) => void;
-	/** Zero the swivel where the phone is held now, for every level pose (see bindTiltZero) */
+	/** Adopt `pose` as the level pose on `side` */
+	calibrate: (pose: Gravity, side: PoseSide) => void;
+	/** Zero the swivel where the phone is held now, for both level poses (see TiltSource) */
 	zeroSwivel: () => void;
 	/** The game's answers to what the flow asks, as they stand at this moment */
 	facts: () => GameFacts;
@@ -48,8 +47,10 @@ export interface GameControls {
 
 /** Carry out `action` on the game, through the control of the same name */
 function perform(controls: GameControls, action: FlowAction) {
-	if (action.kind === "play") controls.play(action.color);
-	else controls[action.kind]();
+	if (action.kind === "play") {
+		if (action.zeroSwivel) controls.zeroSwivel();
+		controls.play(action.color);
+	} else controls[action.kind]();
 }
 
 export interface FlowStoreState {
@@ -80,15 +81,13 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
-		// A written pose takes the swivel zeroed where the phone is held now, so zero after it
-		if (step.calibrate) controls.calibrate(step.calibrate.zero, step.calibrate.side);
-		if (step.calibrate || step.zeroSwivel) controls.zeroSwivel();
+		if (step.calibrate) controls.calibrate(step.calibrate.pose, step.calibrate.side);
+		if (step.zeroSwivel) controls.zeroSwivel();
 		if (step.act) perform(controls, step.act);
 		if (step.flood) {
-			const { color, at, action, zeroSwivel } = step.flood;
+			const { color, at, action } = step.flood;
 			controls.flood(color, at, () => {
 				apply({ type: "covered" });
-				if (zeroSwivel) controls.zeroSwivel();
 				perform(controls, action);
 			});
 		}

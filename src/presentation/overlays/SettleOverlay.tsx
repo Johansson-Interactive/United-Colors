@@ -11,8 +11,7 @@ import Animated, {
 	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
-import type { PoseSide } from "../../domain/levelPose";
-import type { TiltZero } from "../../domain/types";
+import type { Gravity, PoseSide } from "../../domain/types";
 import { BowlStage } from "../components/BowlStage";
 import type { PressPoint } from "../components/DotButton";
 import { DotButton } from "../components/DotButton";
@@ -39,7 +38,7 @@ interface SettleOverlayProps {
 	 * The pose is set; `side`: the level pose it replaces (see levelTilt);
 	 * `point`: where the dot rests on screen, for the flood to grow from
 	 */
-	onSettled: (zero: TiltZero, side: PoseSide, point: PressPoint) => void;
+	onSettled: (pose: Gravity, side: PoseSide, point: PressPoint) => void;
 	onBack: () => void;
 	/** The moment the dot comes to rest (a sound belongs here) */
 	onSnap?: () => void;
@@ -89,7 +88,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const finish = useCallback(
-		({ zero, side }: SettleOutcome) => {
+		({ pose, side }: SettleOutcome) => {
 			setPhase("settled");
 			onSnap?.();
 			snapTimerRef.current = setTimeout(() => {
@@ -97,7 +96,7 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 				const bowl = bowlRef.current;
 				if (!bowl) return;
 				bowl.measureInWindow((x, y, width, height) => {
-					onSettled(zero, side, { x: x + width / 2, y: y + height / 2 });
+					onSettled(pose, side, { x: x + width / 2, y: y + height / 2 });
 				});
 			}, SNAP_MS);
 		},
@@ -131,14 +130,15 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		advance(stepSettle(state.get(), tilt.raw.get(), tilt.side.get(), dt));
+		const { attitude, side } = tilt.reading.get();
+		advance(stepSettle(state.get(), attitude, side, dt));
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
 	const handleSetNow = useCallback(() => {
 		scheduleOnUI(() => {
 			"worklet";
-			advance(setSettleNow(state.get(), tilt.side.get()));
+			advance(setSettleNow(state.get(), tilt.reading.get().side));
 		});
 	}, [advance, state, tilt]);
 

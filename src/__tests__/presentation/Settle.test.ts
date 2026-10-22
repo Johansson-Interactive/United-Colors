@@ -1,5 +1,5 @@
-import { attitudeAt, FLAT, FLAT_ATTITUDES, gravityOf, type PoseSide } from "../../domain/levelPose";
-import type { Attitude, Gravity } from "../../domain/types";
+import { attitudeAt, FLAT, FLAT_ATTITUDES, gravityOf } from "../../domain/levelPose";
+import type { Attitude, Gravity, PoseSide } from "../../domain/types";
 import {
 	bowlTilt,
 	INITIAL_SETTLE,
@@ -30,8 +30,8 @@ function swivelledUpright(angle: number): Attitude {
 }
 
 /** The level pose a settle set, as the gravity it saves */
-function zeroOf(s: SettleState): Gravity | undefined {
-	return settleOutcome(s)?.zero;
+function poseOf(s: SettleState): Gravity | undefined {
+	return settleOutcome(s)?.pose;
 }
 
 function expectGravity(actual: Gravity | undefined, expected: Gravity): void {
@@ -65,11 +65,11 @@ function hold(
 }
 
 describe("settle", () => {
-	it("settles on a held pose and reports it as the zero", () => {
+	it("settles on a held pose and reports it as the pose", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
 		expect(s.phase).toBe("settled");
 		expect(s.progress).toBe(1);
-		expectGravity(zeroOf(s), gravityOf(at(0.6, -0.2)));
+		expectGravity(poseOf(s), gravityOf(at(0.6, -0.2)));
 	});
 
 	it("settles held upright or on your side, through a hand's tremor", () => {
@@ -81,7 +81,7 @@ describe("settle", () => {
 				sign = -sign;
 			}
 			expect(s.phase).toBe("settled");
-			expectGravity(zeroOf(s), gravityOf(pose));
+			expectGravity(poseOf(s), gravityOf(pose));
 		}
 	});
 
@@ -104,7 +104,7 @@ describe("settle", () => {
 		for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16)
 			s = stepSettle(s, swivelledUpright(0.5), "up", 16);
 		expect(s.phase).toBe("settled");
-		expectGravity(zeroOf(s), gravityOf(UPRIGHT));
+		expectGravity(poseOf(s), gravityOf(UPRIGHT));
 	});
 
 	it("does not settle before the hold time", () => {
@@ -136,7 +136,7 @@ describe("settle", () => {
 		expect(s.phase).toBe("settling");
 		s = run(s, moved, 0, SETTLE_HOLD_MS / 2);
 		expect(s.phase).toBe("settled");
-		expectGravity(zeroOf(s), gravityOf(at(moved, 0)));
+		expectGravity(poseOf(s), gravityOf(at(moved, 0)));
 	});
 
 	it("a slow drift adds up against the anchor and breaks the hold", () => {
@@ -150,7 +150,7 @@ describe("settle", () => {
 		let s = run(INITIAL_SETTLE, 0.1, 0.1, 200);
 		s = hold(s, 0.7, 0.3, SETTLE_HOLD_MS + 400);
 		expect(s.phase).toBe("settled");
-		expectGravity(zeroOf(s), gravityOf(at(0.7, 0.3)));
+		expectGravity(poseOf(s), gravityOf(at(0.7, 0.3)));
 	});
 
 	it("stays settled and ignores further samples", () => {
@@ -179,7 +179,7 @@ describe("settle", () => {
 			const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200, 0.01, "down");
 			const outcome = settleOutcome(s);
 			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.zero, gravityOf(at(0.6, -0.2)));
+			expectGravity(outcome?.pose, gravityOf(at(0.6, -0.2)));
 		});
 
 		it("turning over after the dot rests does not change the side", () => {
@@ -197,7 +197,7 @@ describe("settle", () => {
 
 		it("without a tilt sensor, sets a flat pose screen up straight away", () => {
 			const s = startSettle(WAITING_SETTLE, false);
-			expectGravity(zeroOf(s), FLAT.up);
+			expectGravity(poseOf(s), FLAT.up);
 			expect(settleOutcome(s)?.side).toBe("up");
 		});
 
@@ -216,12 +216,12 @@ describe("settle", () => {
 			expect(s.progress).toBe(1);
 			const outcome = settleOutcome(s);
 			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.zero, gravityOf(at(0.5, 0.1)));
+			expectGravity(outcome?.pose, gravityOf(at(0.5, 0.1)));
 		});
 
 		it("sets a flat pose if no tilt has been measured yet", () => {
 			const s = setSettleNow(INITIAL_SETTLE, "down");
-			expectGravity(zeroOf(s), FLAT.down);
+			expectGravity(poseOf(s), FLAT.down);
 			expect(settleOutcome(s)?.side).toBe("down");
 		});
 

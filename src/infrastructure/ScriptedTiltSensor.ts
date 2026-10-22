@@ -1,4 +1,5 @@
-import type { SensorPort, SensorSample } from "../application/ports";
+import type { SensorPort } from "../application/ports";
+import type { Attitude } from "../domain/types";
 
 /** Samples a second, about what a phone's motion sensor gives at a 60 Hz display */
 const SAMPLE_HZ = 60;
@@ -9,10 +10,10 @@ const SAMPLE_HZ = 60;
  */
 export class ScriptedTiltSensor implements SensorPort {
 	private timer: ReturnType<typeof setInterval> | null = null;
-	private readonly listeners = new Set<(sample: SensorSample) => void>();
+	private readonly listeners = new Set<(attitude: Attitude) => void>();
 
 	constructor(
-		private readonly path: (seconds: number) => SensorSample,
+		private readonly path: (seconds: number) => Attitude,
 		private readonly now: () => number = () => performance.now(),
 	) {}
 
@@ -30,7 +31,7 @@ export class ScriptedTiltSensor implements SensorPort {
 		this.timer = null;
 	}
 
-	onSample(listener: (sample: SensorSample) => void): () => void {
+	onSample(listener: (attitude: Attitude) => void): () => void {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);

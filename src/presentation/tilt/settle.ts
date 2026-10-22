@@ -1,22 +1,21 @@
 /**
  * Pure state machine behind the settle bowl (setting the level pose). The player holds the
  * phone the way they like to play; once the phone has stayed put for a moment, swivel included,
- * the running mean becomes the new zero. No timer on screen: holding still is the input. The bowl opens
- * waiting, so the player can read what to do; the hold only counts once they start it. The
- * outcome is the pose together with the level pose it replaces (screen up or turned over), so
- * a turn-over afterwards can't move it.
+ * the running mean becomes the new level pose. No timer on screen: holding still is the input.
+ * The bowl opens waiting, so the player can read what to do; the hold only counts once they
+ * start it. The outcome is the pose together with the side it replaces (screen up or turned
+ * over), so a turn-over afterwards can't move it.
  */
 
 import {
 	FLAT_ATTITUDES,
 	gravityOf,
-	type PoseSide,
 	tiltFromFlat,
 	turnBetween,
 	turnedToward,
 	wholeTilt,
 } from "../../domain/levelPose";
-import type { Attitude, TiltAngles, TiltZero } from "../../domain/types";
+import type { Attitude, Gravity, PoseSide, TiltAngles } from "../../domain/types";
 
 /**
  * "waiting": open, not yet started; "moving": the hand is still finding its pose;
@@ -26,9 +25,9 @@ export type SettlePhase = "waiting" | "moving" | "settling" | "settled";
 
 export interface SettleState {
 	phase: SettlePhase;
-	/** Running mean of the attitude held; its gravity is the zero once settled */
+	/** Running mean of the attitude held; its gravity is the pose once settled */
 	mean: Attitude;
-	/** The level pose in use at the latest sample; the one the zero replaces once settled */
+	/** The level pose in use at the latest sample; the one the pose replaces once settled */
 	side: PoseSide;
 	/** Attitude when the current hold began; the hold survives while within STILL_RAD of it */
 	anchor: Attitude;
@@ -68,7 +67,7 @@ export const WAITING_SETTLE: SettleState = { ...INITIAL_SETTLE, phase: "waiting"
 
 /** The level pose and which of the two it replaces, sampled together */
 export interface SettleOutcome {
-	zero: TiltZero;
+	pose: Gravity;
 	side: PoseSide;
 }
 
@@ -145,5 +144,5 @@ export function setSettleNow(state: SettleState, sideNow: PoseSide): SettleState
 export function settleOutcome(state: SettleState): SettleOutcome | null {
 	"worklet";
 	if (state.phase !== "settled") return null;
-	return { zero: gravityOf(state.mean), side: state.side };
+	return { pose: gravityOf(state.mean), side: state.side };
 }

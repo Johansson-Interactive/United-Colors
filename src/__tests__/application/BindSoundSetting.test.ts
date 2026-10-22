@@ -44,7 +44,7 @@ describe("bindSoundSetting", () => {
 		bindSoundSetting(store, audio);
 		calls.length = 0;
 		store.getState().setHighScore(10);
-		store.getState().updateSettings({ tiltZero: null });
+		store.getState().updateSettings({ levelPoses: { up: null, down: null } });
 		expect(calls).toEqual([]);
 	});
 

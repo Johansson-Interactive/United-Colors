@@ -11,14 +11,13 @@ describe("GameStore", () => {
 
 	it("updateSettings merges a patch and keeps the rest", () => {
 		const store = createGameStore();
-		store.getState().updateSettings({ tiltZero: { x: 0.1, y: 0.2, z: -1 } });
+		store.getState().updateSettings({ levelPoses: { up: { x: 0.1, y: 0.2, z: -1 }, down: null } });
 		store.getState().updateSettings({ soundEnabled: false });
 		expect(store.getState().settings).toEqual({
 			soundEnabled: false,
 			musicEnabled: true,
 			tiltSensitivity: 1,
-			tiltZero: { x: 0.1, y: 0.2, z: -1 },
-			tiltZeroDown: null,
+			levelPoses: { up: { x: 0.1, y: 0.2, z: -1 }, down: null },
 		});
 	});
 

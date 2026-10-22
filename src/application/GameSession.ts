@@ -1,10 +1,9 @@
 import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
-import { FLAT_ATTITUDES, type LevelAttitudes, levelTilt, type PoseSide } from "../domain/levelPose";
-import type { ScreenSize } from "../domain/types";
+import type { ScreenSize, TiltAngles } from "../domain/types";
 import type { GameStore } from "./GameStore";
-import type { Clock, ClockFactory, SensorSample } from "./ports";
+import type { Clock, ClockFactory } from "./ports";
 import { createSceneBuilder } from "./renderScene";
 
 export interface GameSessionOptions {
@@ -32,9 +31,6 @@ export class GameSession {
 	private engine: GameEngine | null = null;
 	private clock: Clock | null = null;
 	private screen = DEFAULT_SCREEN;
-	private poses = FLAT_ATTITUDES;
-	/** The level pose the last tilt was measured from (see levelTilt) */
-	private side: PoseSide = "up";
 	private sensitivity = 1;
 	private readonly presenters = new Set<(scene: Float32Array) => void>();
 	private readonly buildScene = createSceneBuilder();
@@ -124,24 +120,14 @@ export class GameSession {
 		this.clock = null;
 	}
 
-	/** The phone's attitude; the player feels it as the whole turn from the nearer level pose */
-	feedTilt(sample: SensorSample): void {
-		const tilt = levelTilt(sample, this.poses, this.side);
-		this.side = tilt.side;
+	/** The tilt from the level pose in use (see TiltSource), which rolls the player */
+	feedTilt(tilt: TiltAngles): void {
 		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}
 
 	/** Move the player by pixels (touch control); no-op unless a game is running */
 	feedDelta(dx: number, dy: number): void {
 		this.engine?.onMovementDelta(dx, dy);
-	}
-
-	/**
-	 * The poses that count as level, screen up and turned over, as attitudes with the swivel
-	 * zeroed (see bindTiltZero)
-	 */
-	setLevelPoses(poses: LevelAttitudes): void {
-		this.poses = poses;
 	}
 
 	/** How fast the player moves for a given tilt, as a multiple of the default speed */

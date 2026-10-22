@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StoragePort } from "../application/ports";
 import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
 import { unitGravity } from "../domain/levelPose";
-import type { GameSettings, TiltZero } from "../domain/types";
+import type { GameSettings, Gravity, SavedLevelPoses } from "../domain/types";
 
 const KEYS = {
 	highScore: "@tiltling/high_score",
@@ -34,12 +34,23 @@ function isFiniteNumber(value: unknown): value is number {
  * A pose is a gravity direction, three finite numbers not all zero, read back at unit length;
  * anything else (corrupt, hand-edited, an older shape) reads as unset
  */
-function readTiltZero(value: unknown): TiltZero | null {
+function readPose(value: unknown): Gravity | null {
 	if (!isRecord(value)) return null;
 	const { x, y, z } = value;
 	if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) return null;
 	if (Math.hypot(x, y, z) === 0) return null;
 	return unitGravity({ x, y, z });
+}
+
+/**
+ * Both level poses. Builds before the poses were kept together saved them as `tiltZero` and
+ * `tiltZeroDown`, so those are read where the poses are missing.
+ */
+function readLevelPoses(stored: Record<string, unknown>): SavedLevelPoses {
+	if (isRecord(stored.levelPoses)) {
+		return { up: readPose(stored.levelPoses.up), down: readPose(stored.levelPoses.down) };
+	}
+	return { up: readPose(stored.tiltZero), down: readPose(stored.tiltZeroDown) };
 }
 
 /**
@@ -55,8 +66,7 @@ function sanitizeSettings(stored: unknown): GameSettings {
 		soundEnabled,
 		musicEnabled,
 		tiltSensitivity: readSensitivity(stored.tiltSensitivity),
-		tiltZero: readTiltZero(stored.tiltZero),
-		tiltZeroDown: readTiltZero(stored.tiltZeroDown),
+		levelPoses: readLevelPoses(stored),
 	};
 }
 

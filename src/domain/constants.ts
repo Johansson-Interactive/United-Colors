@@ -147,6 +147,5 @@ export const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
 	tiltSensitivity: 1,
-	tiltZero: null,
-	tiltZeroDown: null,
+	levelPoses: { up: null, down: null },
 };
