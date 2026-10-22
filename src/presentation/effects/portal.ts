@@ -3,8 +3,8 @@
  * the pause on one side of it and the play on the other. The frost look over the frozen field
  * (see stageLook.ts) is the pause side. The game canvas blurs and dims the scene by the frost
  * amount, and the portal decides where that frost stops. Two steps open the portal, in opposite
- * directions: the bloom puts the pause inside the circle, growing out from under the finger
- * that pauses the run (see frostBloom.ts), and Get ready puts the play inside it, the window
+ * directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
+ * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the window
  * at the seat that thaws outward with the hold (see getReady.ts). Both grow from the same rest
  * size through the same ease, wear the same rim and fade it at the same point, so here are
  * the pieces they share. No React, so the canvas and the steppers can use it.

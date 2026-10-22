@@ -7,7 +7,6 @@ import {
 } from "../../presentation/flow/screenFlow";
 
 const PINK = "#E91E63";
-const AT = { x: 10, y: 20 };
 
 describe("the stage look", () => {
 	it("shows the stage on the title, its edges washed in ink over a clear field", () => {
@@ -55,7 +54,7 @@ describe("the stage look", () => {
 
 	it("frosts in full at once under the bloom, whose edge does the growing, and leaves the edge to it", () => {
 		for (const phase of ["RUNNING", "PAUSED"] as const) {
-			const look = stageLook({ screen: { kind: "frosting", at: AT }, phase });
+			const look = stageLook({ screen: { kind: "frosting", start: "finger" }, phase });
 			expect(look.frost).toEqual({ to: 1, over: { kind: "instant" } });
 			expect(look.shutWindow).toBe(false);
 			expect(look.accent).toBe("player");
