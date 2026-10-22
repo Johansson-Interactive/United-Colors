@@ -13,6 +13,15 @@ export type Voice = Pick<
 	| "volume"
 >;
 
+/**
+ * Where a play rewinds to (seconds): just past the start, never the start itself. Android's
+ * ExoPlayer skips a seek to the position it is already at, and a voice that has never played
+ * sits at 0 with its audio track released after a few idle seconds; the skipped seek leaves it
+ * playing on with no track, so its first play is silent. A millisecond in, the seek is real
+ * and rebuilds the track.
+ */
+export const REWIND_TO_S = 0.001;
+
 /** How one play of a sound effect sounds */
 export interface PlayOptions {
 	/** Its volume (0..1, default 1), as a share of the effect's mix level */
@@ -55,7 +64,7 @@ export class SoundEffect {
 		voice.setPlaybackRate(2 ** (pitch / 12));
 		this.rewinding.add(voice);
 		voice
-			.seekTo(0)
+			.seekTo(REWIND_TO_S)
 			.then(() => {
 				// Muted or torn down while rewinding: stay silent
 				if (!this.muted && !this.disposed) voice.play();

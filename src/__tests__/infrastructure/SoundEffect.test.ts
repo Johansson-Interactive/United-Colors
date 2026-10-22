@@ -1,4 +1,4 @@
-import { SoundEffect, type Voice } from "../../infrastructure/SoundEffect";
+import { REWIND_TO_S, SoundEffect, type Voice } from "../../infrastructure/SoundEffect";
 
 /** Seeks resolve when the test says so; play marks the voice as playing */
 function fakeVoice() {
@@ -39,11 +39,20 @@ function fakeVoice() {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("SoundEffect", () => {
+	// A seek to 0 on a voice still at 0 is skipped on Android and leaves its first play silent
+	it("rewinds to just past the start, so even a voice that never played really seeks", () => {
+		const a = fakeVoice();
+		new SoundEffect([a.asVoice]).play();
+		expect(a.voice.seekTo).toHaveBeenCalledWith(REWIND_TO_S);
+		expect(REWIND_TO_S).toBeGreaterThan(0);
+		expect(REWIND_TO_S).toBeLessThan(0.005);
+	});
+
 	it("rewinds then plays", async () => {
 		const a = fakeVoice();
 		const effect = new SoundEffect([a.asVoice]);
 		effect.play();
-		expect(a.voice.seekTo).toHaveBeenCalledWith(0);
+		expect(a.voice.seekTo).toHaveBeenCalledWith(REWIND_TO_S);
 		expect(a.voice.plays).toBe(0);
 		await a.finishSeeks();
 		expect(a.voice.plays).toBe(1);
