@@ -1,4 +1,7 @@
 import {
+	EDGE_DRAIN_MS,
+	EDGE_GROW_MS,
+	edgeProgress,
 	edgeRadius,
 	PAUSE_ALL,
 	portalReach,
@@ -55,6 +58,20 @@ describe("how the edge grows", () => {
 			expect(r).toBeGreaterThanOrEqual(previous);
 			previous = r;
 		}
+	});
+
+	it("tells how far along its growth it reaches a radius, the way back from edgeRadius", () => {
+		expect(edgeProgress(rest, rest, reach)).toBe(0);
+		expect(edgeProgress(reach, rest, reach)).toBe(1);
+		expect(edgeProgress((rest + reach) / 2, rest, reach)).toBeCloseTo(0.5, 9);
+		// smoothstep(0.25) is 0.15625
+		expect(edgeProgress(rest + (reach - rest) * 0.15625, rest, reach)).toBeCloseTo(0.25, 9);
+		expect(edgeProgress(0, rest, reach)).toBe(0);
+		expect(edgeProgress(reach * 2, rest, reach)).toBe(1);
+	});
+
+	it("drains faster than it grows", () => {
+		expect(EDGE_DRAIN_MS).toBeLessThan(EDGE_GROW_MS);
 	});
 
 	it("eases softly at both ends", () => {

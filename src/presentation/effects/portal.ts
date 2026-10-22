@@ -58,6 +58,8 @@ export const FROST_MAX_DIM = 0.5;
  * covering the field and Get ready's thaw clearing it go at the same pace
  */
 export const EDGE_GROW_MS = 900;
+/** Let go, the edge drains back along the way it grew, faster than it grew */
+export const EDGE_DRAIN_MS = EDGE_GROW_MS * 0.4;
 
 /** The edge at rest reaches this far beyond the dot it opens around, as dot radii */
 const REST_REACH = 1.7;
@@ -95,6 +97,20 @@ export function portalReach(centre: Point, field: FieldSize): number {
 export function edgeRadius(progress: number, rest: number, reach: number): number {
 	"worklet";
 	return rest + (reach - rest) * smoothstep(progress);
+}
+
+/**
+ * How far along its growth (0..1) the edge growing from `rest` to `reach` is at `radius`: the
+ * way back from edgeRadius, so a step can grow at the edge's pace and stop at a radius of its own
+ */
+export function edgeProgress(radius: number, rest: number, reach: number): number {
+	"worklet";
+	if (reach <= rest) return 1;
+	const eased = (radius - rest) / (reach - rest);
+	if (eased <= 0) return 0;
+	if (eased >= 1) return 1;
+	// The inverse of smoothstep on 0..1
+	return 0.5 - Math.sin(Math.asin(1 - 2 * eased) / 3);
 }
 
 /**
