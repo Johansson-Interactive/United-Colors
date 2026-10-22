@@ -10,7 +10,7 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
-import { FLAT } from "../../domain/levelPose";
+import { FLAT, gravityOf } from "../../domain/levelPose";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM } from "../theme/theme";
 import { bowlTilt, type SettleState, settleEase } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
@@ -51,7 +51,7 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
 		const k = 1 - (1 - SMOOTHING) ** (dt / 16.67);
-		const raw = tilt.raw.get();
+		const raw = gravityOf(tilt.raw.get());
 		const was = shown.get();
 		shown.set({
 			x: was.x + (raw.x - was.x) * k,

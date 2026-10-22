@@ -5,8 +5,7 @@ import { attitudeFromRotation } from "./attitudeFromRotation";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Provides SensorSample, the direction of gravity, read from the phone's attitude (see
- * `attitudeFromRotation`).
+ * Provides SensorSample, the phone's attitude, swivel included (see `attitudeFromRotation`).
  * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its rotation
  * vector would lean on the compass alone for the swivel (ADR 0010).
  * One native subscription fans out to every listener.
@@ -59,9 +58,7 @@ export class DeviceMotionAdapter implements SensorPort {
 			if (!data.rotation) return;
 
 			const { alpha, beta, gamma } = data.rotation;
-			const attitude = attitudeFromRotation(alpha, beta, gamma);
-			// Gravity in the phone's axes; the port carries gravity until the attitude flows through
-			const sample = { x: -attitude.xz, y: -attitude.yz, z: -attitude.zz };
+			const sample = attitudeFromRotation(alpha, beta, gamma);
 			for (const listener of this.listeners) listener(sample);
 		});
 	}

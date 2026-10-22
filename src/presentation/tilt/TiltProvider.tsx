@@ -2,15 +2,20 @@ import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import type { SensorPort, SensorSample } from "../../application/ports";
-import { FLAT, type LevelPoses, levelTilt, type PoseSide } from "../../domain/levelPose";
+import {
+	FLAT_ATTITUDES,
+	type LevelAttitudes,
+	levelWholeTilt,
+	type PoseSide,
+} from "../../domain/levelPose";
 import { smoothTowards } from "./smoothTilt";
 
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
- * anything that rolls on screen rolls the way the player dot would). `x`/`y` are measured
- * from the nearer level pose, as the game measures them (see levelTilt), and smoothed on the
- * UI thread every frame; `raw` is the latest sample as the sensor gave it, the gravity, for
- * setting that pose (one shared value, so a sample is one write to the UI thread). `available`
+ * anything that rolls on screen rolls the way the player dot would). `x`/`y` are the whole
+ * turn from the nearer level pose, as the game measures them (see levelWholeTilt), and smoothed
+ * on the UI thread every frame; `raw` is the latest sample as the sensor gave it, the attitude,
+ * for setting that pose (one shared value, so a sample is one write to the UI thread). `available`
  * flips once the first real sample arrives (false on simulators without motion sensors, so
  * gyro-driven UI can fall back to tap).
  */
@@ -18,8 +23,11 @@ export interface Tilt {
 	x: SharedValue<number>;
 	y: SharedValue<number>;
 	raw: SharedValue<SensorSample>;
-	/** The poses that read as level; the game screen keeps them in step with settings */
-	poses: SharedValue<LevelPoses>;
+	/**
+	 * The poses that read as level, swivel zeroed; the game screen keeps them in step with the
+	 * game's (see bindTiltZero)
+	 */
+	poses: SharedValue<LevelAttitudes>;
 	/** The level pose `x`/`y` are measured from */
 	side: SharedValue<PoseSide>;
 	available: SharedValue<boolean>;
@@ -33,8 +41,8 @@ interface TiltProviderProps {
 }
 
 export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) => {
-	const rawSample = useSharedValue<SensorSample>(FLAT.up);
-	const poses = useSharedValue<LevelPoses>(FLAT);
+	const rawSample = useSharedValue<SensorSample>(FLAT_ATTITUDES.up);
+	const poses = useSharedValue<LevelAttitudes>(FLAT_ATTITUDES);
 	const side = useSharedValue<PoseSide>("up");
 	const x = useSharedValue(0);
 	const y = useSharedValue(0);
@@ -43,7 +51,7 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// The interface tilts on every screen, so the provider owns the sensor; the game only listens
 	useEffect(() => {
 		const unsubscribe = sensor.onSample((sample) => {
-			rawSample.set({ x: sample.x, y: sample.y, z: sample.z });
+			rawSample.set(sample);
 			if (!available.get()) available.set(true);
 		});
 		sensor.start();
@@ -57,7 +65,7 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const tilt = levelTilt(rawSample.get(), poses.get(), side.get());
+		const tilt = levelWholeTilt(rawSample.get(), poses.get(), side.get());
 		side.set(tilt.side);
 		x.set(smoothTowards(x.get(), tilt.x, dt));
 		y.set(smoothTowards(y.get(), tilt.y, dt));
