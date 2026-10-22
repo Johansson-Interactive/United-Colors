@@ -4,7 +4,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # develop only runs verify; releases and builds come from main
+    branches: [main, develop]
 
 concurrency:
   group: verify-${{ github.ref }}
@@ -30,7 +31,7 @@ jobs:
   # Merging it tags vX.Y.Z on main, and the store job below ships that commit.
   release-please:
     needs: verify
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
