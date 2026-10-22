@@ -12,6 +12,7 @@ import {
 	levelWholeTilt,
 } from "../../domain/levelPose";
 import type { Attitude, GameSettings, Gravity } from "../../domain/types";
+import { swivelled } from "../domain/attitudes";
 
 function memoryStorage(initial: GameSettings): StoragePort {
 	let settings = initial;
@@ -48,23 +49,6 @@ function handSensor() {
 }
 
 const DEG = Math.PI / 180;
-
-/** The phone held in `a`, the player turned about the vertical by `angle` */
-function swivelled(a: Attitude, angle: number): Attitude {
-	const c = Math.cos(angle);
-	const s = Math.sin(angle);
-	return {
-		xx: c * a.xx - s * a.xy,
-		xy: s * a.xx + c * a.xy,
-		xz: a.xz,
-		yx: c * a.yx - s * a.yy,
-		yy: s * a.yx + c * a.yy,
-		yz: a.yz,
-		zx: c * a.zx - s * a.zy,
-		zy: s * a.zx + c * a.zy,
-		zz: a.zz,
-	};
-}
 
 const UPRIGHT = attitudeAt({ x: 0, y: 90 * DEG }, FLAT_ATTITUDES.up);
 const RECLINED = attitudeAt({ x: 0, y: 45 * DEG }, FLAT_ATTITUDES.up);

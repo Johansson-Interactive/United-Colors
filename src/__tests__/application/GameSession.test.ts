@@ -6,6 +6,7 @@ import { bindTiltZero } from "../../application/useCases/BindTiltZero";
 import { GAME_COLORS } from "../../domain/constants";
 import { attitudeAt, FLAT_ATTITUDES, gravityOf } from "../../domain/levelPose";
 import type { Attitude } from "../../domain/types";
+import { swivelled } from "../domain/attitudes";
 import { scriptedSpawner, smallDotAt } from "../domain/stage";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -44,23 +45,6 @@ const SCREEN = { width: 300, height: 600 };
 /** The phone tilted by `x`, `y` from flat, screen up */
 function tilted(x: number, y: number) {
 	return attitudeAt({ x, y }, FLAT_ATTITUDES.up);
-}
-
-/** The phone held in `a`, the player turned about the vertical by `angle` */
-function swivelled(a: Attitude, angle: number): Attitude {
-	const c = Math.cos(angle);
-	const s = Math.sin(angle);
-	return {
-		xx: c * a.xx - s * a.xy,
-		xy: s * a.xx + c * a.xy,
-		xz: a.xz,
-		yx: c * a.yx - s * a.yy,
-		yy: s * a.yx + c * a.yy,
-		yz: a.yz,
-		zx: c * a.zx - s * a.zy,
-		zy: s * a.zx + c * a.zy,
-		zz: a.zz,
-	};
 }
 
 /** A session on a hand-cranked clock; `staged` spawns only the dots a test queues on `small` */

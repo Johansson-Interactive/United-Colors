@@ -13,6 +13,7 @@ import {
 	zeroSwivel,
 } from "../../domain/levelPose";
 import type { Attitude, Gravity } from "../../domain/types";
+import { swivelled } from "./attitudes";
 
 const DEG = Math.PI / 180;
 
@@ -65,11 +66,6 @@ function turnedInRoom(a: Attitude, axis: Gravity, angle: number): Attitude {
 /** The phone held in `a`, turned about its own `axis` as it points in the room */
 function turnedAbout(a: Attitude, axis: "x" | "y" | "z", angle: number): Attitude {
 	return turnedInRoom(a, axisOf(a, axis), angle);
-}
-
-/** The phone held in `a`, the player turned about the vertical by `angle`, anticlockwise from above */
-function swivelled(a: Attitude, angle: number): Attitude {
-	return turnedInRoom(a, { x: 0, y: 0, z: 1 }, angle);
 }
 
 /**
