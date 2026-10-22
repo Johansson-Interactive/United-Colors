@@ -173,9 +173,12 @@ export interface FlowStep {
 	state: FlowState;
 	/** The screen to show for `state` */
 	screen: Screen;
-	/** Adopt this pose as level for the side the screen faced */
+	/**
+	 * Adopt this pose as level for the side the screen faced, then zero the swivel where the
+	 * phone is held now: the player is at their level pose as they write it
+	 */
 	calibrate?: { zero: TiltZero; side: PoseSide };
-	/** Zero the swivel where the phone is held now; after `calibrate`, so the new pose takes it */
+	/** Zero the swivel where the phone is held now, with no pose written (Get ready's cup opening) */
 	zeroSwivel?: true;
 	/** Do this to the game now */
 	act?: FlowAction;
@@ -275,7 +278,7 @@ const startFlood = (
 	calibrate?: FlowStep["calibrate"],
 ): BareStep => ({
 	state: { ...state, flooding: true },
-	...(calibrate && { calibrate, zeroSwivel: true }),
+	...(calibrate && { calibrate }),
 	flood,
 });
 
@@ -344,12 +347,12 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			const calibrate = { zero: event.zero, side: event.side };
 			// From the title the pose is only saved; the title comes straight back
 			if (settle.from === "menu") {
-				return { state: { ...state, settle: null }, calibrate, zeroSwivel: true, act: RUN_KIOSK };
+				return { state: { ...state, settle: null }, calibrate, act: RUN_KIOSK };
 			}
 			// From the pause too: the pause screen comes back, so play never picks up unannounced;
 			// the play dot then leads through Get ready as usual
 			if (settle.from === "pause") {
-				return { state: { ...state, settle: null }, calibrate, zeroSwivel: true };
+				return { state: { ...state, settle: null }, calibrate };
 			}
 			// The bowl stays under the flood until it has covered the screen
 			return startFlood(state, startRun(settle.color, event.at), calibrate);

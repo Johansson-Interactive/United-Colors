@@ -80,8 +80,9 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
+		// A written pose takes the swivel zeroed where the phone is held now, so zero after it
 		if (step.calibrate) controls.calibrate(step.calibrate.zero, step.calibrate.side);
-		if (step.zeroSwivel) controls.zeroSwivel();
+		if (step.calibrate || step.zeroSwivel) controls.zeroSwivel();
 		if (step.act) perform(controls, step.act);
 		if (step.flood) {
 			const { color, at, action, zeroSwivel } = step.flood;

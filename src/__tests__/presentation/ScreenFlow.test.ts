@@ -133,7 +133,6 @@ describe("screen flow", () => {
 			GAME,
 		);
 		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
-		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toEqual({
 			color: PINK,
 			at: AT,
@@ -153,7 +152,6 @@ describe("screen flow", () => {
 			GAME,
 		);
 		expect(step.calibrate).toEqual({ zero: ZERO, side: "down" });
-		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toBeUndefined();
 		expect(step.act).toBeUndefined();
 		expect(step.state).toEqual(PAUSED);
@@ -163,7 +161,6 @@ describe("screen flow", () => {
 	it("settling from the title only saves the pose; the title comes straight back", () => {
 		const step = stepFlow(open("menu"), { type: "settled", zero: ZERO, side: "up", at: AT }, GAME);
 		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
-		expect(step.zeroSwivel).toBe(true);
 		expect(step.flood).toBeUndefined();
 		expect(step.state).toEqual(INITIAL_FLOW);
 	});
