@@ -1,6 +1,7 @@
 import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
+import { FLAT_DOWN, FLAT_UP, levelTilt } from "../domain/levelPose";
 import type { ScreenSize, TiltZero } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { Clock, ClockFactory, SensorSample } from "./ports";
@@ -31,8 +32,10 @@ export class GameSession {
 	private engine: GameEngine | null = null;
 	private clock: Clock | null = null;
 	private screen = DEFAULT_SCREEN;
-	private tiltZero: TiltZero | null = null;
-	private tiltZeroDown: TiltZero | null = null;
+	private tiltZero: TiltZero = FLAT_UP;
+	private tiltZeroDown: TiltZero = FLAT_DOWN;
+	/** Whether the last tilt was measured from the screen-down pose (see levelTilt) */
+	private facingDown = false;
 	private sensitivity = 1;
 	private readonly presenters = new Set<(scene: Float32Array) => void>();
 	private readonly buildScene = createSceneBuilder();
@@ -122,9 +125,11 @@ export class GameSession {
 		this.clock = null;
 	}
 
-	/** Raw device tilt; the player sees it relative to the level pose for that side */
+	/** Which way gravity points; the player feels it as tilt from the nearer level pose */
 	feedTilt(sample: SensorSample): void {
-		this.engine?.onSensorInput(sample.x, sample.y, sample.facingDown);
+		const tilt = levelTilt(sample, this.tiltZero, this.tiltZeroDown, this.facingDown);
+		this.facingDown = tilt.facingDown;
+		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}
 
 	/** Move the player by pixels (touch control); no-op unless a game is running */
@@ -132,11 +137,10 @@ export class GameSession {
 		this.engine?.onMovementDelta(dx, dy);
 	}
 
-	/** The poses that count as level with the screen up and down; null reads flat */
+	/** The poses that count as level with the screen up and turned over; null reads flat */
 	setTiltZero(zero: TiltZero | null, zeroDown: TiltZero | null): void {
-		this.tiltZero = zero;
-		this.tiltZeroDown = zeroDown;
-		this.engine?.setTiltZero(zero, zeroDown);
+		this.tiltZero = zero ?? FLAT_UP;
+		this.tiltZeroDown = zeroDown ?? FLAT_DOWN;
 	}
 
 	/** How fast the player moves for a given tilt, as a multiple of the default speed */
@@ -154,7 +158,6 @@ export class GameSession {
 				spawner: this.options.spawner,
 				refusals: this.options.refusals,
 			});
-			this.engine.setTiltZero(this.tiltZero, this.tiltZeroDown);
 			this.engine.setSensitivity(this.sensitivity);
 		}
 		return this.engine;

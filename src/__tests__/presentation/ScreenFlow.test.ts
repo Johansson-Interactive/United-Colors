@@ -10,7 +10,7 @@ import {
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const AT = { x: 10, y: 20 };
-const ZERO = { x: 0.3, y: -0.1 };
+const ZERO = { x: 0.3, y: -0.1, z: -0.9 };
 const PINK = "#E91E63";
 const BLUE = "#2196F3";
 

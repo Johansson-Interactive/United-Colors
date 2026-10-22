@@ -7,7 +7,7 @@ describe("ScriptedTiltSensor", () => {
 	it("plays the path from when it started, to every listener, until stopped", () => {
 		let now = 1000;
 		const sensor = new ScriptedTiltSensor(
-			(s) => ({ x: s, y: -s, facingDown: false }),
+			(s) => ({ x: s, y: -s, z: -1 }),
 			() => now,
 		);
 		const a: number[] = [];

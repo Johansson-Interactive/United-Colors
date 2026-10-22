@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StoragePort } from "../application/ports";
 import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
-import type { GameSettings, TiltZero } from "../domain/types";
+import { FLAT_DOWN, FLAT_UP, gravityAt, unitGravity } from "../domain/levelPose";
+import type { GameSettings, Gravity, TiltZero } from "../domain/types";
 
 const KEYS = {
 	highScore: "@tiltling/high_score",
@@ -25,13 +26,22 @@ function readSensitivity(value: unknown): number {
 	return value;
 }
 
-/** A pose is two finite radians; anything else (corrupt, hand-edited, old shape) reads as unset */
-function readTiltZero(value: unknown): TiltZero | null {
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * A pose is a gravity direction, three finite numbers not all zero, read back at unit length.
+ * One saved before poses were gravity holds two angles, tilt from `flat`, and is read as the
+ * pose they describe. Anything else (corrupt, hand-edited) reads as unset.
+ */
+function readTiltZero(value: unknown, flat: Gravity): TiltZero | null {
 	if (!isRecord(value)) return null;
-	const { x, y } = value;
-	if (typeof x !== "number" || typeof y !== "number") return null;
-	if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-	return { x, y };
+	const { x, y, z } = value;
+	if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
+	if (z === undefined) return gravityAt({ x, y }, flat);
+	if (!isFiniteNumber(z) || Math.hypot(x, y, z) === 0) return null;
+	return unitGravity({ x, y, z });
 }
 
 /**
@@ -47,8 +57,8 @@ function sanitizeSettings(stored: unknown): GameSettings {
 		soundEnabled,
 		musicEnabled,
 		tiltSensitivity: readSensitivity(stored.tiltSensitivity),
-		tiltZero: readTiltZero(stored.tiltZero),
-		tiltZeroDown: readTiltZero(stored.tiltZeroDown),
+		tiltZero: readTiltZero(stored.tiltZero, FLAT_UP),
+		tiltZeroDown: readTiltZero(stored.tiltZeroDown, FLAT_DOWN),
 	};
 }
 

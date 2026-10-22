@@ -1,12 +1,7 @@
-import type { GameSettings } from "../domain/types";
+import type { GameSettings, Gravity } from "../domain/types";
 
-/** Raw tilt reading from the device, in radians from flat */
-export interface SensorSample {
-	x: number;
-	y: number;
-	/** The screen faces the ground; tilt is then measured from flat screen down */
-	facingDown: boolean;
-}
+/** A reading from the device: which way gravity points in its axes; tilt is measured from it */
+export type SensorSample = Gravity;
 
 /**
  * Device tilt. One source can feed several listeners; whoever owns it starts and stops it,

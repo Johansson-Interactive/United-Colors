@@ -35,7 +35,7 @@ interface SettleOverlayProps {
 	/** Colour of the dot that settles, and of the flood it swells into */
 	color: string;
 	/**
-	 * The pose is set; `facingDown`: the side the screen faced, which the pose is for;
+	 * The pose is set; `facingDown`: it replaces the screen-down pose (see levelTilt);
 	 * `point`: where the dot rests on screen, for the flood to grow from
 	 */
 	onSettled: (zero: TiltZero, facingDown: boolean, point: PressPoint) => void;
@@ -130,15 +130,14 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const raw = tilt.raw.get();
-		advance(stepSettle(state.get(), raw.x, raw.y, raw.facingDown, dt));
+		advance(stepSettle(state.get(), tilt.raw.get(), tilt.facingDown.get(), dt));
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
 	const handleSetNow = useCallback(() => {
 		scheduleOnUI(() => {
 			"worklet";
-			advance(setSettleNow(state.get(), tilt.raw.get().facingDown));
+			advance(setSettleNow(state.get(), tilt.facingDown.get()));
 		});
 	}, [advance, state, tilt]);
 

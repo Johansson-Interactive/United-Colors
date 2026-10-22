@@ -103,7 +103,7 @@ describe("the stage look", () => {
 		expect(
 			walk([
 				{ type: "startPressed", color: PINK, at: { x: 0, y: 0 } },
-				{ type: "settled", zero: { x: 0, y: 0 }, facingDown: false, at: { x: 0, y: 0 } },
+				{ type: "settled", zero: { x: 0, y: 0, z: -1 }, facingDown: false, at: { x: 0, y: 0 } },
 				{ type: "covered" },
 				{ type: "phaseChanged", phase: "RUNNING" },
 			]),

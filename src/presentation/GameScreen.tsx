@@ -17,6 +17,7 @@ import type {
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
+import { FLAT_DOWN, FLAT_UP } from "../domain/levelPose";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
@@ -49,7 +50,6 @@ import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
-import { NO_ZERO } from "./tilt/tiltZero";
 import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
 
 interface GameScreenProps {
@@ -103,8 +103,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		() =>
 			bindTiltZero(store, (zero: TiltZero | null, zeroDown: TiltZero | null) => {
 				session.setTiltZero(zero, zeroDown);
-				tilt.zero.set(zero ?? NO_ZERO);
-				tilt.zeroDown.set(zeroDown ?? NO_ZERO);
+				tilt.zero.set(zero ?? FLAT_UP);
+				tilt.zeroDown.set(zeroDown ?? FLAT_DOWN);
 			}),
 		[session, tilt, store],
 	);

@@ -1,5 +1,6 @@
 import { DOT_LIMIT, GAME_HERTZ } from "../domain/constants";
 import { BenchSpawner } from "../domain/engine/BenchSpawner";
+import { FLAT_UP, gravityAt } from "../domain/levelPose";
 import { seededRandom } from "../domain/random";
 import type { GameSessionOptions } from "./GameSession";
 import type { SensorSample } from "./ports";
@@ -46,11 +47,11 @@ const TILT_AMPLITUDE = 0.14;
 const PERIOD_X_S = 6.1;
 const PERIOD_Y_S = 4.3;
 
-/** The tilt the bench run steers with, `seconds` after it starts */
+/** The reading the bench run steers with, `seconds` after it starts: tilted from flat */
 export function benchTilt(seconds: number): SensorSample {
-	return {
+	const tilt = {
 		x: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_X_S),
 		y: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_Y_S),
-		facingDown: false,
 	};
+	return gravityAt(tilt, FLAT_UP);
 }

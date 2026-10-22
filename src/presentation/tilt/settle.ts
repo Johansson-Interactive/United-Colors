@@ -1,13 +1,14 @@
 /**
  * Pure state machine behind the settle bowl (setting the level pose). The player holds the
- * phone the way they like to play; once the tilt has stayed put for a moment the running
+ * phone the way they like to play; once gravity has stayed put for a moment the running
  * mean becomes the new zero. No timer on screen: holding still is the input. The bowl opens
  * waiting, so the player can read what to do; the hold only counts once they start it. The
- * outcome is the pose together with the side the screen faced while it was taken, so a
- * turn-over afterwards can't move it.
+ * outcome is the pose together with the level pose it replaces (screen up or turned over), so
+ * a turn-over afterwards can't move it.
  */
 
-import type { TiltZero } from "../../domain/types";
+import { angleBetween, FLAT_DOWN, FLAT_UP, unitGravity } from "../../domain/levelPose";
+import type { Gravity, TiltZero } from "../../domain/types";
 
 /**
  * "waiting": open, not yet started; "moving": the hand is still finding its pose;
@@ -17,20 +18,24 @@ export type SettlePhase = "waiting" | "moving" | "settling" | "settled";
 
 export interface SettleState {
 	phase: SettlePhase;
-	/** Running mean of the raw tilt (radians); the zero once settled */
-	meanX: number;
-	meanY: number;
-	/** Whether the screen faced down at the latest sample; the side the zero is for once settled */
+	/** Running mean of the gravity read; the zero once settled */
+	mean: Gravity;
+	/**
+	 * Whether the screen-down pose was in use at the latest sample; the pose the zero replaces
+	 * once settled
+	 */
 	facingDown: boolean;
-	/** Tilt when the current hold began; the hold survives while within STILL_RAD of it */
-	anchorX: number;
-	anchorY: number;
+	/** Gravity when the current hold began; the hold survives while within STILL_RAD of it */
+	anchor: Gravity;
 	/** Hold progress 0..1; also how far the bowl has levelled itself to the hand */
 	progress: number;
 	elapsedMs: number;
 }
 
-/** Drift from the hold's anchor (radians, ~2.3 degrees) that still counts as holding still */
+/**
+ * How far gravity may turn from the hold's anchor (radians, ~2.3 degrees) and still count as
+ * holding still. Gravity's own angle, so it is as forgiving upright or on your side as flat.
+ */
 export const STILL_RAD = 0.04;
 /** How long the pose must hold */
 export const SETTLE_HOLD_MS = 2000;
@@ -39,14 +44,14 @@ const WARMUP_MS = 120;
 /** Time constant of the running mean */
 const MEAN_TAU_MS = 90;
 
+const NO_GRAVITY: Gravity = { x: 0, y: 0, z: 0 };
+
 /** A started settle: holds count from here, after a short warm-up */
 export const INITIAL_SETTLE: SettleState = {
 	phase: "moving",
-	meanX: 0,
-	meanY: 0,
+	mean: NO_GRAVITY,
 	facingDown: false,
-	anchorX: 0,
-	anchorY: 0,
+	anchor: NO_GRAVITY,
 	progress: 0,
 	elapsedMs: 0,
 };
@@ -54,7 +59,7 @@ export const INITIAL_SETTLE: SettleState = {
 /** The bowl as it opens: waiting for the player to start */
 export const WAITING_SETTLE: SettleState = { ...INITIAL_SETTLE, phase: "waiting" };
 
-/** The level pose and the side it was taken on, sampled together */
+/** The level pose and which of the two it replaces, sampled together */
 export interface SettleOutcome {
 	zero: TiltZero;
 	facingDown: boolean;
@@ -66,11 +71,13 @@ export function settleEase(progress: number): number {
 	return progress * progress * (3 - 2 * progress);
 }
 
-/** Advance one frame with the latest raw tilt sample */
+/**
+ * Advance one frame with the latest gravity sample and whether the screen-down pose is in use
+ * (see levelTilt)
+ */
 export function stepSettle(
 	state: SettleState,
-	x: number,
-	y: number,
+	gravity: Gravity,
 	facingDown: boolean,
 	dt: number,
 ): SettleState {
@@ -79,18 +86,20 @@ export function stepSettle(
 	const first = state.elapsedMs === 0;
 	const elapsedMs = state.elapsedMs + dt;
 	const k = first ? 1 : 1 - Math.exp(-dt / MEAN_TAU_MS);
-	const meanX = state.meanX + (x - state.meanX) * k;
-	const meanY = state.meanY + (y - state.meanY) * k;
+	const mean = {
+		x: state.mean.x + (gravity.x - state.mean.x) * k,
+		y: state.mean.y + (gravity.y - state.mean.y) * k,
+		z: state.mean.z + (gravity.z - state.mean.z) * k,
+	};
 	// A new hold anchors where the hand is now; a hold in progress keeps its anchor so that a
 	// slow drift adds up and breaks it instead of being tracked
-	const anchorX = state.progress === 0 ? x : state.anchorX;
-	const anchorY = state.progress === 0 ? y : state.anchorY;
-	const still = elapsedMs > WARMUP_MS && Math.hypot(x - anchorX, y - anchorY) < STILL_RAD;
+	const anchor = state.progress === 0 ? gravity : state.anchor;
+	const still = elapsedMs > WARMUP_MS && angleBetween(gravity, anchor) < STILL_RAD;
 	const progress = still
 		? Math.min(1, state.progress + dt / SETTLE_HOLD_MS)
 		: Math.max(0, state.progress - dt / (SETTLE_HOLD_MS * 0.5));
 	const phase: SettlePhase = progress >= 1 ? "settled" : progress > 0 ? "settling" : "moving";
-	return { phase, meanX, meanY, facingDown, anchorX, anchorY, progress, elapsedMs };
+	return { phase, mean, facingDown, anchor, progress, elapsedMs };
 }
 
 /**
@@ -101,31 +110,31 @@ export function startSettle(state: SettleState, tiltAvailable: boolean): SettleS
 	"worklet";
 	if (state.phase !== "waiting") return state;
 	if (tiltAvailable) return INITIAL_SETTLE;
-	return { ...INITIAL_SETTLE, phase: "settled", progress: 1 };
+	return { ...INITIAL_SETTLE, phase: "settled", mean: FLAT_UP, progress: 1 };
 }
 
 /**
- * A tap once started: settle now on the running mean and the side of the sample it last took.
- * Before any tilt has been measured the pose is flat, for the side the screen faces at the tap.
- * A settled pose is final.
+ * A tap once started: settle now on the running mean and the pose in use at the sample it last
+ * took. Before any tilt has been measured the pose is flat, for the pose in use at the tap. A
+ * settled pose is final.
  */
 export function setSettleNow(state: SettleState, facingDownNow: boolean): SettleState {
 	"worklet";
 	if (state.phase === "waiting" || state.phase === "settled") return state;
 	const measured = state.elapsedMs > 0;
+	const facingDown = measured ? state.facingDown : facingDownNow;
 	return {
 		...state,
 		phase: "settled",
-		meanX: measured ? state.meanX : 0,
-		meanY: measured ? state.meanY : 0,
-		facingDown: measured ? state.facingDown : facingDownNow,
+		mean: measured ? state.mean : facingDown ? FLAT_DOWN : FLAT_UP,
+		facingDown,
 		progress: 1,
 	};
 }
 
-/** The pose and its side once settled; null before */
+/** The pose and which it replaces once settled; null before */
 export function settleOutcome(state: SettleState): SettleOutcome | null {
 	"worklet";
 	if (state.phase !== "settled") return null;
-	return { zero: { x: state.meanX, y: state.meanY }, facingDown: state.facingDown };
+	return { zero: unitGravity(state.mean), facingDown: state.facingDown };
 }

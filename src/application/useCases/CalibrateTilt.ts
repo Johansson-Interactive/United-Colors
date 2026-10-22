@@ -4,8 +4,8 @@ import type { StoragePort } from "../ports";
 import { updateSettings } from "./UpdateSettings";
 
 /**
- * Adopt `zero` as the level pose for the side the screen faced while it was set, and persist
- * it with the other settings; the other side's pose is kept
+ * Adopt `zero` in place of the level pose that was in use while it was set (screen up, or
+ * `facingDown`: turned over), and persist it with the other settings; the other pose is kept
  */
 export function calibrateTilt(
 	zero: TiltZero,

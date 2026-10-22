@@ -1,12 +1,12 @@
 import { DeviceMotion } from "expo-sensors";
 import type { Subscription } from "expo-sensors/build/DeviceSensor";
 import type { SensorPort, SensorSample } from "../application/ports";
-import { tiltFromRotation } from "./tiltFromRotation";
+import { gravityFromRotation } from "./gravityFromRotation";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Provides SensorSample { x, y, facingDown } from gyro-fused device orientation (radians),
- * measured from flat screen up or screen down (see `tiltFromRotation`).
+ * Provides SensorSample, the direction of gravity, from gyro-fused device orientation (see
+ * `gravityFromRotation`).
  * One native subscription fans out to every listener.
  */
 export class DeviceMotionAdapter implements SensorPort {
@@ -20,8 +20,6 @@ export class DeviceMotionAdapter implements SensorPort {
 	 * requests SENSOR_DELAY_NORMAL natively, even when this dispatch interval is zero.
 	 */
 	private updateIntervalMs = 0;
-	/** Which way the screen faced at the last sample */
-	private facingDown = false;
 
 	start(): void {
 		if (this.subscription) return;
@@ -32,13 +30,7 @@ export class DeviceMotionAdapter implements SensorPort {
 			if (this.listeners.size === 0) return;
 			if (!data.rotation) return;
 
-			const { x, y, facingDown } = tiltFromRotation(
-				data.rotation.beta,
-				data.rotation.gamma,
-				this.facingDown,
-			);
-			this.facingDown = facingDown;
-			const sample = { x, y, facingDown };
+			const sample = gravityFromRotation(data.rotation.beta, data.rotation.gamma);
 			for (const listener of this.listeners) listener(sample);
 		});
 	}

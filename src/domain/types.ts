@@ -5,13 +5,29 @@
 export type GamePhase = "KIOSK" | "RUNNING" | "REJECTING" | "PAUSED" | "GAME_OVER";
 
 /**
- * The device pose the player calls "level" (raw tilt in radians); tilt is measured from
- * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ * Which way gravity points, in the device's own axes: x to the right of the screen, y to its
+ * top, z out of its face. Any length; only the direction counts.
  */
-export interface TiltZero {
+export interface Gravity {
+	x: number;
+	y: number;
+	z: number;
+}
+
+/**
+ * How far the phone is tipped from a level pose (radians): `x` turns its right edge away from
+ * the player's eyes, `y` its top edge towards them (see levelPose.ts)
+ */
+export interface TiltAngles {
 	x: number;
 	y: number;
 }
+
+/**
+ * The device pose the player calls "level", as the gravity it reads; tilt is measured from
+ * here, so the dot rests wherever the phone is comfortably held rather than flat on a table.
+ */
+export type TiltZero = Gravity;
 
 /** Persisted user settings */
 export interface GameSettings {
@@ -25,7 +41,10 @@ export interface GameSettings {
 	tiltSensitivity: number;
 	/** Null until the player has set a level pose */
 	tiltZero: TiltZero | null;
-	/** Level pose with the screen facing down (lying back, phone overhead); null reads flat */
+	/**
+	 * The second level pose, for playing turned over (lying back, phone overhead); null reads
+	 * flat screen down. Whichever pose the phone is nearer is the one in use (see levelTilt).
+	 */
 	tiltZeroDown: TiltZero | null;
 }
 

@@ -21,7 +21,6 @@ import type {
 	RenderFrame,
 	RunCatch,
 	ScreenSize,
-	TiltZero,
 } from "../types";
 import { circlesOverlap } from "./Collision";
 import type { Spawner } from "./Spawner";
@@ -71,10 +70,6 @@ export class GameEngine {
 	private hasFlaggedDots = false;
 	/** The wrong-colour dot being refused while REJECTING (and after, at game over) */
 	private rejected: Dot | null = null;
-	/** Pose that counts as no tilt; null means the raw sensor frame (flat) */
-	private tiltZero: TiltZero | null = null;
-	/** The same with the screen facing down */
-	private tiltZeroDown: TiltZero | null = null;
 	/** Scratch for where each dot is caught between ticks, so collisions allocate nothing */
 	private readonly collisionCircle: Circle = { x: 0, y: 0, radius: 0 };
 	private readonly refusals: boolean;
@@ -132,19 +127,9 @@ export class GameEngine {
 		return this.stateMachine.transition("RUNNING");
 	}
 
-	/**
-	 * Measure tilt from these poses from now on, one per side the screen faces (null restores
-	 * the raw sensor frame)
-	 */
-	setTiltZero(zero: TiltZero | null, zeroDown: TiltZero | null = null): void {
-		this.tiltZero = zero;
-		this.tiltZeroDown = zeroDown;
-	}
-
-	/** Feed raw sensor data (radians); the player sees it relative to that side's level pose */
-	onSensorInput(x: number, y: number, facingDown = false): void {
-		const zero = facingDown ? this.tiltZeroDown : this.tiltZero;
-		this.player.updateOrientation(zero ? x - zero.x : x, zero ? y - zero.y : y);
+	/** Feed the tilt (radians) from the player's level pose, which rolls the player */
+	onSensorInput(x: number, y: number): void {
+		this.player.updateOrientation(x, y);
 	}
 
 	/** Player speed in px/s per degree of tilt */

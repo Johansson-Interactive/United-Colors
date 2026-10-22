@@ -2,17 +2,18 @@ import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import type { SensorPort, SensorSample } from "../../application/ports";
+import { FLAT_DOWN, FLAT_UP, levelTilt } from "../../domain/levelPose";
 import type { TiltZero } from "../../domain/types";
 import { smoothTowards } from "./smoothTilt";
-import { NO_ZERO } from "./tiltZero";
 
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
  * anything that rolls on screen rolls the way the player dot would). `x`/`y` are measured
- * from the level pose for the side the screen faces and smoothed on the UI thread every frame;
- * `raw` is the latest sample as the sensor gave it, for setting that pose (one shared value, so
- * a sample is one write to the UI thread). `available` flips once the first real sample
- * arrives (false on simulators without motion sensors, so gyro-driven UI can fall back to tap).
+ * from the nearer level pose, as the game measures them (see levelTilt), and smoothed on the
+ * UI thread every frame; `raw` is the latest sample as the sensor gave it, the gravity, for
+ * setting that pose (one shared value, so a sample is one write to the UI thread). `available`
+ * flips once the first real sample arrives (false on simulators without motion sensors, so
+ * gyro-driven UI can fall back to tap).
  */
 export interface Tilt {
 	x: SharedValue<number>;
@@ -20,8 +21,10 @@ export interface Tilt {
 	raw: SharedValue<SensorSample>;
 	/** The pose that reads as level; the game screen keeps it in step with settings */
 	zero: SharedValue<TiltZero>;
-	/** The same with the screen facing down */
+	/** The same turned over, screen down */
 	zeroDown: SharedValue<TiltZero>;
+	/** Whether `x`/`y` are measured from the screen-down pose */
+	facingDown: SharedValue<boolean>;
 	available: SharedValue<boolean>;
 }
 
@@ -33,9 +36,10 @@ interface TiltProviderProps {
 }
 
 export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) => {
-	const rawSample = useSharedValue<SensorSample>({ x: 0, y: 0, facingDown: false });
-	const zero = useSharedValue<TiltZero>(NO_ZERO);
-	const zeroDown = useSharedValue<TiltZero>(NO_ZERO);
+	const rawSample = useSharedValue<SensorSample>(FLAT_UP);
+	const zero = useSharedValue<TiltZero>(FLAT_UP);
+	const zeroDown = useSharedValue<TiltZero>(FLAT_DOWN);
+	const facingDown = useSharedValue(false);
 	const x = useSharedValue(0);
 	const y = useSharedValue(0);
 	const available = useSharedValue(false);
@@ -43,7 +47,7 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// The interface tilts on every screen, so the provider owns the sensor; the game only listens
 	useEffect(() => {
 		const unsubscribe = sensor.onSample((sample) => {
-			rawSample.set({ x: sample.x, y: sample.y, facingDown: sample.facingDown });
+			rawSample.set({ x: sample.x, y: sample.y, z: sample.z });
 			if (!available.get()) available.set(true);
 		});
 		sensor.start();
@@ -57,10 +61,10 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const raw = rawSample.get();
-		const level = raw.facingDown ? zeroDown.get() : zero.get();
-		x.set(smoothTowards(x.get(), raw.x - level.x, dt));
-		y.set(smoothTowards(y.get(), raw.y - level.y, dt));
+		const tilt = levelTilt(rawSample.get(), zero.get(), zeroDown.get(), facingDown.get());
+		facingDown.set(tilt.facingDown);
+		x.set(smoothTowards(x.get(), tilt.x, dt));
+		y.set(smoothTowards(y.get(), tilt.y, dt));
 	});
 
 	const value = useMemo<Tilt>(
@@ -70,9 +74,10 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 			raw: rawSample,
 			zero,
 			zeroDown,
+			facingDown,
 			available,
 		}),
-		[x, y, rawSample, zero, zeroDown, available],
+		[x, y, rawSample, zero, zeroDown, facingDown, available],
 	);
 	return <TiltContext value={value}>{children}</TiltContext>;
 };

@@ -2,6 +2,7 @@ import { type BenchRun, benchSessionOptions, benchTilt } from "../../application
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { Clock } from "../../application/ports";
+import { FLAT_UP, tiltFrom } from "../../domain/levelPose";
 
 /** A clock the test steps by hand: each step is one tick and one rendered frame */
 function manualClock() {
@@ -65,7 +66,7 @@ describe("bench run", () => {
 	});
 
 	it("steers the player round the screen, both ways on both axes", () => {
-		const samples = Array.from({ length: 300 }, (_, i) => benchTilt(i / 10));
+		const samples = Array.from({ length: 300 }, (_, i) => tiltFrom(benchTilt(i / 10), FLAT_UP));
 		expect(Math.min(...samples.map((s) => s.x))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.x))).toBeGreaterThan(0.1);
 		expect(Math.min(...samples.map((s) => s.y))).toBeLessThan(-0.1);

@@ -1,3 +1,5 @@
+import { FLAT_DOWN, FLAT_UP, gravityAt, tiltFrom } from "../../domain/levelPose";
+import type { Gravity } from "../../domain/types";
 import {
 	INITIAL_SETTLE,
 	SETTLE_HOLD_MS,
@@ -11,9 +13,19 @@ import {
 	WAITING_SETTLE,
 } from "../../presentation/tilt/settle";
 
+/** Gravity with the phone tipped `x`, `y` from flat, screen up */
+function at(x: number, y: number): Gravity {
+	return gravityAt({ x, y }, FLAT_UP);
+}
+
+/** The tilt from flat of a pose */
+function tiltOf(g: Gravity | undefined) {
+	return g ? tiltFrom(g, FLAT_UP) : { x: Number.NaN, y: Number.NaN };
+}
+
 function run(state: SettleState, x: number, y: number, ms: number, dt = 16): SettleState {
 	let s = state;
-	for (let t = 0; t < ms; t += dt) s = stepSettle(s, x, y, false, dt);
+	for (let t = 0; t < ms; t += dt) s = stepSettle(s, at(x, y), false, dt);
 	return s;
 }
 
@@ -29,7 +41,7 @@ function hold(
 	let s = state;
 	let sign = 1;
 	for (let t = 0; t < ms; t += 16) {
-		s = stepSettle(s, x + tremor * sign, y - tremor * sign, facingDown, 16);
+		s = stepSettle(s, at(x + tremor * sign, y - tremor * sign), facingDown, 16);
 		sign = -sign;
 	}
 	return s;
@@ -40,8 +52,30 @@ describe("settle", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
 		expect(s.phase).toBe("settled");
 		expect(s.progress).toBe(1);
-		expect(s.meanX).toBeCloseTo(0.6, 2);
-		expect(s.meanY).toBeCloseTo(-0.2, 2);
+		expect(tiltOf(s.mean).x).toBeCloseTo(0.6, 2);
+		expect(tiltOf(s.mean).y).toBeCloseTo(-0.2, 2);
+	});
+
+	it("settles held upright or on your side, through the sensor's jitter", () => {
+		for (const pose of [
+			{ x: 0, y: 1.55 },
+			{ x: 1.55, y: 0 },
+		]) {
+			let s = INITIAL_SETTLE;
+			let sign = 1;
+			for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16) {
+				// Half a degree of jitter in the screen's own plane, which once read many times larger
+				const g = at(pose.x, pose.y);
+				const twist = 0.5 * (Math.PI / 180) * sign;
+				const c = Math.cos(twist);
+				const n = Math.sin(twist);
+				s = stepSettle(s, { x: g.x * c - g.y * n, y: g.x * n + g.y * c, z: g.z }, false, 16);
+				sign = -sign;
+			}
+			expect(s.phase).toBe("settled");
+			expect(tiltOf(s.mean).x).toBeCloseTo(pose.x, 2);
+			expect(tiltOf(s.mean).y).toBeCloseTo(pose.y, 2);
+		}
 	});
 
 	it("does not settle before the hold time", () => {
@@ -55,7 +89,7 @@ describe("settle", () => {
 		let s = INITIAL_SETTLE;
 		let peak = 0;
 		for (let i = 0; i < 200; i++) {
-			s = stepSettle(s, Math.sin(i / 3) * 0.3, 0, false, 16);
+			s = stepSettle(s, at(Math.sin(i / 3) * 0.3, 0), false, 16);
 			peak = Math.max(peak, s.progress);
 		}
 		expect(s.phase).not.toBe("settled");
@@ -73,13 +107,13 @@ describe("settle", () => {
 		expect(s.phase).toBe("settling");
 		s = run(s, moved, 0, SETTLE_HOLD_MS / 2);
 		expect(s.phase).toBe("settled");
-		expect(s.meanX).toBeCloseTo(moved, 2);
+		expect(tiltOf(s.mean).x).toBeCloseTo(moved, 2);
 	});
 
 	it("a slow drift adds up against the anchor and breaks the hold", () => {
 		let s = INITIAL_SETTLE;
 		// 0.15 rad/s: each frame moves far less than STILL_RAD, the whole hold moves more
-		for (let i = 0; i < 80; i++) s = stepSettle(s, i * 0.0024, 0, false, 16);
+		for (let i = 0; i < 80; i++) s = stepSettle(s, at(i * 0.0024, 0), false, 16);
 		expect(s.phase).not.toBe("settled");
 	});
 
@@ -87,13 +121,13 @@ describe("settle", () => {
 		let s = run(INITIAL_SETTLE, 0.1, 0.1, 200);
 		s = hold(s, 0.7, 0.3, SETTLE_HOLD_MS + 400);
 		expect(s.phase).toBe("settled");
-		expect(s.meanX).toBeCloseTo(0.7, 2);
-		expect(s.meanY).toBeCloseTo(0.3, 2);
+		expect(tiltOf(s.mean).x).toBeCloseTo(0.7, 2);
+		expect(tiltOf(s.mean).y).toBeCloseTo(0.3, 2);
 	});
 
 	it("stays settled and ignores further samples", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
-		expect(stepSettle(s, 2, 2, true, 16)).toBe(s);
+		expect(stepSettle(s, FLAT_DOWN, true, 16)).toBe(s);
 	});
 
 	it("waits for the player to start: holding still before then counts for nothing", () => {
@@ -117,8 +151,8 @@ describe("settle", () => {
 			const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200, 0.01, true);
 			const outcome = settleOutcome(s);
 			expect(outcome?.facingDown).toBe(true);
-			expect(outcome?.zero.x).toBeCloseTo(0.6, 2);
-			expect(outcome?.zero.y).toBeCloseTo(-0.2, 2);
+			expect(tiltOf(outcome?.zero).x).toBeCloseTo(0.6, 2);
+			expect(tiltOf(outcome?.zero).y).toBeCloseTo(-0.2, 2);
 		});
 
 		it("turning over after the dot rests does not change the side", () => {
@@ -136,7 +170,7 @@ describe("settle", () => {
 
 		it("without a tilt sensor, sets a flat pose screen up straight away", () => {
 			const s = startSettle(WAITING_SETTLE, false);
-			expect(settleOutcome(s)).toEqual({ zero: { x: 0, y: 0 }, facingDown: false });
+			expect(settleOutcome(s)).toEqual({ zero: FLAT_UP, facingDown: false });
 		});
 
 		it("only starts from waiting", () => {
@@ -154,13 +188,13 @@ describe("settle", () => {
 			expect(s.progress).toBe(1);
 			const outcome = settleOutcome(s);
 			expect(outcome?.facingDown).toBe(true);
-			expect(outcome?.zero.x).toBeCloseTo(0.5, 2);
-			expect(outcome?.zero.y).toBeCloseTo(0.1, 2);
+			expect(tiltOf(outcome?.zero).x).toBeCloseTo(0.5, 2);
+			expect(tiltOf(outcome?.zero).y).toBeCloseTo(0.1, 2);
 		});
 
 		it("sets a flat pose if no tilt has been measured yet", () => {
 			expect(settleOutcome(setSettleNow(INITIAL_SETTLE, true))).toEqual({
-				zero: { x: 0, y: 0 },
+				zero: FLAT_DOWN,
 				facingDown: true,
 			});
 		});
@@ -174,7 +208,7 @@ describe("settle", () => {
 			expect(setSettleNow(settled, true)).toBe(settled);
 			const tapped = setSettleNow(run(INITIAL_SETTLE, 0.2, 0, 300), false);
 			expect(setSettleNow(tapped, true)).toBe(tapped);
-			expect(stepSettle(tapped, 1, 1, true, 16)).toBe(tapped);
+			expect(stepSettle(tapped, FLAT_DOWN, true, 16)).toBe(tapped);
 		});
 	});
 
