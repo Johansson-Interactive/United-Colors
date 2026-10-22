@@ -28,6 +28,11 @@ describe("the stage look", () => {
 		expect(look.frost).toEqual({ to: 0.6, over: { kind: "timed", duration: 700, delay: 350 } });
 	});
 
+	it("dims the game over all over, with no window left from a Get ready that resumed the run", () => {
+		const look = stageLook({ screen: { kind: "gameOver" }, phase: "GAME_OVER" });
+		expect(look.shutWindow).toBe(true);
+	});
+
 	it("keeps the stage showing, frosted, under the bowl and the speed view opened from the pause", () => {
 		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
 		for (const screen of [

@@ -10,7 +10,8 @@
  * back in as they close.
  *
  * The frost edge is the bloom's and Get ready's to move; the look only resets it to frosted
- * all over as the pause's frost comes on, so a pause screen always starts frosted all over.
+ * all over as the pause's or the game over's frost comes on, so neither starts with a window
+ * left by a Get ready that resumed the run, or the clear edge of a bloom that drained.
  */
 
 import type { GamePhase } from "../../domain/types";
@@ -44,7 +45,7 @@ export interface StageMove<T> {
 export interface StageLook {
 	/** 0 = clear; 1 = fully frosted (see frost.ts) */
 	frost: StageMove<number>;
-	/** Reset the frost edge to frosted all over as the pause's frost comes on */
+	/** Reset the frost edge to frosted all over as the pause's or the game over's frost comes on */
 	shutWindow: boolean;
 	/** The edge wash's colour */
 	accent: StageAccent;
@@ -69,7 +70,7 @@ export function stageLook({ screen, phase }: StagePlace): StageLook {
 	const frost = frostOf(screen, phase);
 	return {
 		frost,
-		shutWindow: frost.over === FROST_ON,
+		shutWindow: frost.over === FROST_ON || frost.over === GAME_OVER_DIM,
 		accent: phase === "KIOSK" ? "ink" : "player",
 		opacity: opacityOf(screen, phase),
 	};

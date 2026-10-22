@@ -21,7 +21,7 @@ import { INK_LIFT } from "../theme/theme";
 export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
 	const frostEdge = useSharedValue<FrostEdge>(FROSTED_ALL);
-	// Before the frost's move, so the edge is frosted all over as the pause's frost comes on
+	// Before the frost's move, so the edge is frosted all over as the pause's or the game over's frost comes on
 	useEffect(() => {
 		if (look.shutWindow) frostEdge.set(FROSTED_ALL);
 	}, [look.shutWindow, frostEdge]);
