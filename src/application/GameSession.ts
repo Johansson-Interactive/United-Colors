@@ -1,8 +1,8 @@
 import { GAME_DENSITY } from "../domain/constants";
 import { GameEngine } from "../domain/engine/GameEngine";
 import type { Spawner } from "../domain/engine/Spawner";
-import { FLAT_DOWN, FLAT_UP, levelTilt } from "../domain/levelPose";
-import type { ScreenSize, TiltZero } from "../domain/types";
+import { FLAT, type LevelPoses, levelTilt, type PoseSide } from "../domain/levelPose";
+import type { ScreenSize } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { Clock, ClockFactory, SensorSample } from "./ports";
 import { createSceneBuilder } from "./renderScene";
@@ -32,10 +32,9 @@ export class GameSession {
 	private engine: GameEngine | null = null;
 	private clock: Clock | null = null;
 	private screen = DEFAULT_SCREEN;
-	private tiltZero: TiltZero = FLAT_UP;
-	private tiltZeroDown: TiltZero = FLAT_DOWN;
-	/** Whether the last tilt was measured from the screen-down pose (see levelTilt) */
-	private facingDown = false;
+	private poses = FLAT;
+	/** The level pose the last tilt was measured from (see levelTilt) */
+	private side: PoseSide = "up";
 	private sensitivity = 1;
 	private readonly presenters = new Set<(scene: Float32Array) => void>();
 	private readonly buildScene = createSceneBuilder();
@@ -127,8 +126,8 @@ export class GameSession {
 
 	/** Which way gravity points; the player feels it as tilt from the nearer level pose */
 	feedTilt(sample: SensorSample): void {
-		const tilt = levelTilt(sample, this.tiltZero, this.tiltZeroDown, this.facingDown);
-		this.facingDown = tilt.facingDown;
+		const tilt = levelTilt(sample, this.poses, this.side);
+		this.side = tilt.side;
 		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}
 
@@ -137,10 +136,9 @@ export class GameSession {
 		this.engine?.onMovementDelta(dx, dy);
 	}
 
-	/** The poses that count as level with the screen up and turned over; null reads flat */
-	setTiltZero(zero: TiltZero | null, zeroDown: TiltZero | null): void {
-		this.tiltZero = zero ?? FLAT_UP;
-		this.tiltZeroDown = zeroDown ?? FLAT_DOWN;
+	/** The poses that count as level, screen up and turned over */
+	setLevelPoses(poses: LevelPoses): void {
+		this.poses = poses;
 	}
 
 	/** How fast the player moves for a given tilt, as a multiple of the default speed */

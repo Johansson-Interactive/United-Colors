@@ -1,7 +1,6 @@
 import {
 	angleBetween,
-	FLAT_DOWN,
-	FLAT_UP,
+	FLAT,
 	gravityAt,
 	levelTilt,
 	tiltFrom,
@@ -13,19 +12,19 @@ const DEG = Math.PI / 180;
 
 /** Gravity with the phone's top edge tipped `pitch` towards you and its right edge `roll` down, from flat */
 function heldUp(pitch: number, roll: number): Gravity {
-	return gravityAt({ x: roll, y: pitch }, FLAT_UP);
+	return gravityAt({ x: roll, y: pitch }, FLAT.up);
 }
 
 /** Level poses players hold: at a desk, propped in bed, upright, on their side, overhead */
 const POSES: Record<string, Gravity> = {
-	flat: FLAT_UP,
+	flat: FLAT.up,
 	"at a desk": heldUp(40 * DEG, 0),
 	"propped in bed": heldUp(75 * DEG, 0),
 	upright: { x: 0, y: -1, z: 0 },
 	"on your side": heldUp(0, 88 * DEG),
 	"on your side, exactly": { x: 1, y: 0, z: 0 },
 	"on your side, screen a little down": unitGravity({ x: 1, y: 0.1, z: 0.05 }),
-	overhead: FLAT_DOWN,
+	overhead: FLAT.down,
 	"overhead, tipped": unitGravity({ x: 0.3, y: 0.4, z: 0.85 }),
 };
 
@@ -53,20 +52,20 @@ describe("tiltFrom", () => {
 
 	it("screen up, reads the angles from flat as before", () => {
 		// Right edge lowered by 0.4 rad: gravity leans to +x
-		const right = tiltFrom({ x: Math.sin(0.4), y: 0, z: -Math.cos(0.4) }, FLAT_UP);
+		const right = tiltFrom({ x: Math.sin(0.4), y: 0, z: -Math.cos(0.4) }, FLAT.up);
 		expect(right.x).toBeCloseTo(0.4);
 		expect(right.y).toBeCloseTo(0);
 		// Top edge raised by 0.7 rad: gravity leans to -y
-		const top = tiltFrom({ x: 0, y: -Math.sin(0.7), z: -Math.cos(0.7) }, FLAT_UP);
+		const top = tiltFrom({ x: 0, y: -Math.sin(0.7), z: -Math.cos(0.7) }, FLAT.up);
 		expect(top.x).toBeCloseTo(0);
 		expect(top.y).toBeCloseTo(0.7);
 	});
 
 	it("screen down, both axes are mirrored from screen up", () => {
 		// Right edge lowered by 0.3 rad, as the player sees the screen
-		expect(tiltFrom({ x: Math.sin(0.3), y: 0, z: Math.cos(0.3) }, FLAT_DOWN).x).toBeCloseTo(-0.3);
+		expect(tiltFrom({ x: Math.sin(0.3), y: 0, z: Math.cos(0.3) }, FLAT.down).x).toBeCloseTo(-0.3);
 		// Top edge lowered by 0.3 rad
-		expect(tiltFrom({ x: 0, y: Math.sin(0.3), z: Math.cos(0.3) }, FLAT_DOWN).y).toBeCloseTo(0.3);
+		expect(tiltFrom({ x: 0, y: Math.sin(0.3), z: Math.cos(0.3) }, FLAT.down).y).toBeCloseTo(0.3);
 	});
 
 	it("reads how far gravity has turned, so jitter is never magnified, in any pose", () => {
@@ -132,16 +131,16 @@ describe("gravityAt", () => {
 
 describe("levelTilt", () => {
 	it("lying screen down turns over to the screen-down pose straight away", () => {
-		expect(levelTilt(FLAT_DOWN, FLAT_UP, FLAT_DOWN, false).facingDown).toBe(true);
-		expect(levelTilt(FLAT_UP, FLAT_UP, FLAT_DOWN, true).facingDown).toBe(false);
+		expect(levelTilt(FLAT.down, FLAT, "up").side).toBe("down");
+		expect(levelTilt(FLAT.up, FLAT, "down").side).toBe("up");
 	});
 
 	it("held near upright, the pose in use doesn't flip back and forth", () => {
 		// Upright, leaning 10 degrees either way
 		for (const lean of [-10 * DEG, 10 * DEG]) {
 			const g = heldUp(90 * DEG + lean, 0);
-			expect(levelTilt(g, FLAT_UP, FLAT_DOWN, false).facingDown).toBe(false);
-			expect(levelTilt(g, FLAT_UP, FLAT_DOWN, true).facingDown).toBe(true);
+			expect(levelTilt(g, FLAT, "up").side).toBe("up");
+			expect(levelTilt(g, FLAT, "down").side).toBe("down");
 		}
 	});
 
@@ -149,8 +148,8 @@ describe("levelTilt", () => {
 		const onSide = POSES["on your side, screen a little down"];
 		for (const lean of [-30 * DEG, 30 * DEG]) {
 			const g = turned(onSide, { x: 0, y: 1, z: 0 }, lean);
-			const tilt = levelTilt(g, onSide, FLAT_DOWN, false);
-			expect(tilt.facingDown).toBe(false);
+			const tilt = levelTilt(g, { up: onSide, down: FLAT.down }, "up");
+			expect(tilt.side).toBe("up");
 			// Not quite all of the turn: the pose's y axis leans a little out of level
 			expect(Math.abs(tilt.x)).toBeGreaterThan(29 * DEG);
 		}
@@ -159,9 +158,9 @@ describe("levelTilt", () => {
 	it("measures from the pose in use", () => {
 		const up = POSES["at a desk"];
 		const down = POSES["overhead, tipped"];
-		expect(levelTilt(up, up, down, false).x).toBeCloseTo(0);
-		const overhead = levelTilt(down, up, down, false);
-		expect(overhead.facingDown).toBe(true);
+		expect(levelTilt(up, { up, down }, "up").x).toBeCloseTo(0);
+		const overhead = levelTilt(down, { up, down }, "up");
+		expect(overhead.side).toBe("down");
 		expect(overhead.x).toBeCloseTo(0);
 		expect(overhead.y).toBeCloseTo(0);
 	});

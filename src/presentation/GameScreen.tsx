@@ -17,7 +17,7 @@ import type {
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
 import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
-import { FLAT_DOWN, FLAT_UP } from "../domain/levelPose";
+import type { PoseSide } from "../domain/levelPose";
 import type { Corners, ScreenSize, TiltZero } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
@@ -101,10 +101,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// the dots on the menus rest in the same hand position
 	useEffect(
 		() =>
-			bindTiltZero(store, (zero: TiltZero | null, zeroDown: TiltZero | null) => {
-				session.setTiltZero(zero, zeroDown);
-				tilt.zero.set(zero ?? FLAT_UP);
-				tilt.zeroDown.set(zeroDown ?? FLAT_DOWN);
+			bindTiltZero(store, (poses) => {
+				session.setLevelPoses(poses);
+				tilt.poses.set(poses);
 			}),
 		[session, tilt, store],
 	);
@@ -140,7 +139,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		haltKiosk: () => session.halt(),
 		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
-		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
+		calibrate: (zero, side) => void calibrateTilt(zero, side, store, storage),
 		facts: () => ({
 			levelPoseSet: store.getState().settings.tiltZero !== null,
 			tiltPresent: tilt.available.get(),
@@ -205,8 +204,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[dispatch],
 	);
 	const handleSettled = useCallback(
-		(zero: TiltZero, facingDown: boolean, at: PressPoint) =>
-			dispatch({ type: "settled", zero, facingDown, at }),
+		(zero: TiltZero, side: PoseSide, at: PressPoint) =>
+			dispatch({ type: "settled", zero, side, at }),
 		[dispatch],
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);

@@ -4,7 +4,7 @@ import {
 	TILT_SENSITIVITY_MAX,
 	TILT_SENSITIVITY_MIN,
 } from "../../domain/constants";
-import { FLAT_DOWN, FLAT_UP, gravityAt } from "../../domain/levelPose";
+import { FLAT, gravityAt } from "../../domain/levelPose";
 import type { GameSettings } from "../../domain/types";
 import { AsyncStorageRepository } from "../../infrastructure/AsyncStorageRepository";
 
@@ -124,8 +124,8 @@ describe("Persisted settings are validated before use", () => {
 			tiltZero: { x: 0.25, y: -0.5 },
 			tiltZeroDown: { x: 0.1, y: 0.2 },
 		});
-		expect(settings.tiltZero).toEqual(gravityAt({ x: 0.25, y: -0.5 }, FLAT_UP));
-		expect(settings.tiltZeroDown).toEqual(gravityAt({ x: 0.1, y: 0.2 }, FLAT_DOWN));
+		expect(settings.tiltZero).toEqual(gravityAt({ x: 0.25, y: -0.5 }, FLAT.up));
+		expect(settings.tiltZeroDown).toEqual(gravityAt({ x: 0.1, y: 0.2 }, FLAT.down));
 	});
 
 	it("drops unknown keys instead of carrying them into the settings", async () => {

@@ -123,12 +123,12 @@ describe("screen flow", () => {
 			{
 				type: "settled",
 				zero: ZERO,
-				facingDown: false,
+				side: "up",
 				at: AT,
 			},
 			GAME,
 		);
-		expect(step.calibrate).toEqual({ zero: ZERO, facingDown: false });
+		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
 		expect(step.flood).toEqual({ color: PINK, at: AT, action: { kind: "play", color: PINK } });
 		// The bowl stays under the flood until it has covered the screen
 		expect(step.state.settle).toEqual({ from: "start", color: PINK });
@@ -139,10 +139,10 @@ describe("screen flow", () => {
 	it("settling from the pause saves the pose for the side faced and returns to the pause screen", () => {
 		const step = stepFlow(
 			{ ...open("pause", BLUE), phase: "PAUSED" },
-			{ type: "settled", zero: ZERO, facingDown: true, at: AT },
+			{ type: "settled", zero: ZERO, side: "down", at: AT },
 			GAME,
 		);
-		expect(step.calibrate).toEqual({ zero: ZERO, facingDown: true });
+		expect(step.calibrate).toEqual({ zero: ZERO, side: "down" });
 		expect(step.flood).toBeUndefined();
 		expect(step.act).toBeUndefined();
 		expect(step.state).toEqual(PAUSED);
@@ -150,22 +150,14 @@ describe("screen flow", () => {
 	});
 
 	it("settling from the title only saves the pose; the title comes straight back", () => {
-		const step = stepFlow(
-			open("menu"),
-			{ type: "settled", zero: ZERO, facingDown: false, at: AT },
-			GAME,
-		);
-		expect(step.calibrate).toEqual({ zero: ZERO, facingDown: false });
+		const step = stepFlow(open("menu"), { type: "settled", zero: ZERO, side: "up", at: AT }, GAME);
+		expect(step.calibrate).toEqual({ zero: ZERO, side: "up" });
 		expect(step.flood).toBeUndefined();
 		expect(step.state).toEqual(INITIAL_FLOW);
 	});
 
 	it("a settle with no bowl open does nothing", () => {
-		const step = stepFlow(
-			INITIAL_FLOW,
-			{ type: "settled", zero: ZERO, facingDown: false, at: AT },
-			GAME,
-		);
+		const step = stepFlow(INITIAL_FLOW, { type: "settled", zero: ZERO, side: "up", at: AT }, GAME);
 		expect(step).toEqual(rests(INITIAL_FLOW));
 	});
 
@@ -202,7 +194,7 @@ describe("screen flow", () => {
 			{
 				type: "settled",
 				zero: ZERO,
-				facingDown: false,
+				side: "up",
 				at: AT,
 			},
 			GAME,
@@ -234,7 +226,7 @@ describe("screen flow", () => {
 			{
 				type: "settled",
 				zero: ZERO,
-				facingDown: false,
+				side: "up",
 				at: AT,
 			},
 			GAME,
@@ -258,7 +250,7 @@ describe("screen flow", () => {
 			{
 				type: "settled",
 				zero: ZERO,
-				facingDown: false,
+				side: "up",
 				at: AT,
 			},
 			GAME,

@@ -10,9 +10,9 @@ import {
 	useSharedValue,
 	withTiming,
 } from "react-native-reanimated";
-import { FLAT_DOWN, FLAT_UP, tiltFrom } from "../../domain/levelPose";
+import { FLAT } from "../../domain/levelPose";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM } from "../theme/theme";
-import { type SettleState, settleEase } from "../tilt/settle";
+import { bowlTilt, type SettleState, settleEase } from "../tilt/settle";
 import { useTilt } from "../tilt/TiltProvider";
 
 interface SettleBowlProps {
@@ -46,7 +46,7 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 	const closed = dot * 1.7;
 
 	// Smoothed gravity so the dot rolls rather than steps at the sensor rate
-	const shown = useSharedValue(FLAT_UP);
+	const shown = useSharedValue(FLAT.up);
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
@@ -74,15 +74,9 @@ export const SettleBowl: React.FC<SettleBowlProps> = ({ size, color, state, dim 
 
 	const level = useDerivedValue(() => settleEase(state.get().progress));
 	const position = useDerivedValue(() => {
-		// The bowl levels to the hand as the hold progresses: the dot rolls from flat at first,
-		// then more and more from the mean
-		const s = state.get();
-		const g = shown.get();
-		const blend = level.get();
-		const fromFlat = tiltFrom(g, s.facingDown ? FLAT_DOWN : FLAT_UP);
-		const fromMean = blend > 0 ? tiltFrom(g, s.mean) : fromFlat;
-		let x = (fromFlat.x + (fromMean.x - fromFlat.x) * blend) * GAIN;
-		let y = (fromFlat.y + (fromMean.y - fromFlat.y) * blend) * GAIN;
+		const tilt = bowlTilt(state.get(), shown.get());
+		let x = tilt.x * GAIN;
+		let y = tilt.y * GAIN;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;

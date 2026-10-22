@@ -3,7 +3,7 @@ import { createGameStore } from "../../application/GameStore";
 import type { ClockFactory } from "../../application/ports";
 import { dotCount, findPlayer, readDot, sceneDot } from "../../application/sceneRecord";
 import { GAME_COLORS } from "../../domain/constants";
-import { FLAT_DOWN, FLAT_UP, gravityAt } from "../../domain/levelPose";
+import { FLAT, gravityAt } from "../../domain/levelPose";
 import { scriptedSpawner, smallDotAt } from "../domain/stage";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -41,7 +41,7 @@ const SCREEN = { width: 300, height: 600 };
 
 /** The gravity the phone reads tilted by `x`, `y` from flat, screen up */
 function tilted(x: number, y: number) {
-	return gravityAt({ x, y }, FLAT_UP);
+	return gravityAt({ x, y }, FLAT.up);
 }
 
 /** A session on a hand-cranked clock; `staged` spawns only the dots a test queues on `small` */
@@ -146,7 +146,7 @@ describe("GameSession", () => {
 
 	it("tilt is measured from the level pose, even one set before the game exists", () => {
 		const { session, clock, player } = setup();
-		session.setTiltZero(tilted(0.5, 0), null);
+		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT.down });
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
 		const before = player()?.x ?? 0;
@@ -156,19 +156,19 @@ describe("GameSession", () => {
 		expect(player()?.x).toBe(before);
 	});
 
-	it("turned over, tilt is measured from the screen-down pose, or from flat without one", () => {
+	it("turned over, tilt is measured from the screen-down pose", () => {
 		const { session, clock, player } = setup();
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
-		session.setTiltZero(tilted(0.5, 0), null);
+		session.setLevelPoses({ up: tilted(0.5, 0), down: FLAT.down });
 		const before = player()?.x ?? 0;
-		session.feedTilt(FLAT_DOWN);
+		session.feedTilt(FLAT.down);
 		clock.frame(100, 0);
 		clock.tick();
 		expect(player()?.x).toBe(before);
 
-		const overhead = gravityAt({ x: 0.5, y: 0 }, FLAT_DOWN);
-		session.setTiltZero(tilted(0.5, 0), overhead);
+		const overhead = gravityAt({ x: 0.5, y: 0 }, FLAT.down);
+		session.setLevelPoses({ up: tilted(0.5, 0), down: overhead });
 		session.feedTilt(overhead);
 		clock.frame(100, 0);
 		clock.tick();

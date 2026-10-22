@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { StoragePort } from "../application/ports";
 import { DEFAULT_SETTINGS, TILT_SENSITIVITY_MAX, TILT_SENSITIVITY_MIN } from "../domain/constants";
-import { FLAT_DOWN, FLAT_UP, gravityAt, unitGravity } from "../domain/levelPose";
+import { FLAT, gravityAt, unitGravity } from "../domain/levelPose";
 import type { GameSettings, Gravity, TiltZero } from "../domain/types";
 
 const KEYS = {
@@ -57,8 +57,8 @@ function sanitizeSettings(stored: unknown): GameSettings {
 		soundEnabled,
 		musicEnabled,
 		tiltSensitivity: readSensitivity(stored.tiltSensitivity),
-		tiltZero: readTiltZero(stored.tiltZero, FLAT_UP),
-		tiltZeroDown: readTiltZero(stored.tiltZeroDown, FLAT_DOWN),
+		tiltZero: readTiltZero(stored.tiltZero, FLAT.up),
+		tiltZeroDown: readTiltZero(stored.tiltZeroDown, FLAT.down),
 	};
 }
 

@@ -3,7 +3,8 @@ import type { StoragePort } from "../../application/ports";
 import { bindTiltZero } from "../../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../../application/useCases/CalibrateTilt";
 import { loadSettings } from "../../application/useCases/LoadSettings";
-import type { GameSettings, TiltZero } from "../../domain/types";
+import { FLAT, type LevelPoses } from "../../domain/levelPose";
+import type { GameSettings } from "../../domain/types";
 
 function memoryStorage(initial: GameSettings): StoragePort {
 	let settings = initial;
@@ -30,7 +31,7 @@ describe("tilt zero", () => {
 		const store = createGameStore();
 		const storage = memoryStorage({ ...UNSET, soundEnabled: false });
 		await loadSettings(store, storage);
-		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, store, storage);
+		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, "up", store, storage);
 		expect(store.getState().settings).toEqual({
 			soundEnabled: false,
 			musicEnabled: true,
@@ -43,8 +44,8 @@ describe("tilt zero", () => {
 	it("a pose set screen down is kept apart from the screen-up one", async () => {
 		const store = createGameStore();
 		const storage = memoryStorage(UNSET);
-		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, store, storage);
-		await calibrateTilt({ x: 0.1, y: 0.2, z: 1 }, store, storage, true);
+		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, "up", store, storage);
+		await calibrateTilt({ x: 0.1, y: 0.2, z: 1 }, "down", store, storage);
 		expect(store.getState().settings.tiltZero).toEqual({ x: 0.5, y: -0.3, z: -0.8 });
 		expect(store.getState().settings.tiltZeroDown).toEqual({ x: 0.1, y: 0.2, z: 1 });
 		const reloaded = createGameStore();
@@ -54,30 +55,27 @@ describe("tilt zero", () => {
 
 	it("the pose survives a reload", async () => {
 		const storage = memoryStorage(UNSET);
-		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, createGameStore(), storage);
+		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, "up", createGameStore(), storage);
 		const store = createGameStore();
 		await loadSettings(store, storage);
 		expect(store.getState().settings.tiltZero).toEqual({ x: 0.5, y: -0.3, z: -0.8 });
 	});
 
-	it("bindTiltZero applies the current pose at once and again when it changes", async () => {
+	it("bindTiltZero applies the current poses at once, flat until set, and again when they change", async () => {
 		const store = createGameStore();
-		const seen: [TiltZero | null, TiltZero | null][] = [];
-		const unbind = bindTiltZero(store, (zero, zeroDown) => seen.push([zero, zeroDown]));
-		expect(seen).toEqual([[null, null]]);
-		await calibrateTilt({ x: 0.1, y: 0.2, z: 1 }, store, memoryStorage(UNSET));
+		const seen: LevelPoses[] = [];
+		const unbind = bindTiltZero(store, (poses) => seen.push(poses));
+		expect(seen).toEqual([FLAT]);
+		await calibrateTilt({ x: 0.1, y: 0.2, z: 1 }, "up", store, memoryStorage(UNSET));
 		store.getState().updateSettings({ soundEnabled: false });
-		await calibrateTilt({ x: 0.3, y: 0.4, z: 1 }, store, memoryStorage(UNSET), true);
+		await calibrateTilt({ x: 0.3, y: 0.4, z: 1 }, "down", store, memoryStorage(UNSET));
 		expect(seen).toEqual([
-			[null, null],
-			[{ x: 0.1, y: 0.2, z: 1 }, null],
-			[
-				{ x: 0.1, y: 0.2, z: 1 },
-				{ x: 0.3, y: 0.4, z: 1 },
-			],
+			FLAT,
+			{ up: { x: 0.1, y: 0.2, z: 1 }, down: FLAT.down },
+			{ up: { x: 0.1, y: 0.2, z: 1 }, down: { x: 0.3, y: 0.4, z: 1 } },
 		]);
 		unbind();
-		await calibrateTilt({ x: 0.5, y: 0.6, z: -1 }, store, memoryStorage(UNSET));
+		await calibrateTilt({ x: 0.5, y: 0.6, z: -1 }, "up", store, memoryStorage(UNSET));
 		expect(seen).toHaveLength(3);
 	});
 });

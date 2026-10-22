@@ -14,12 +14,27 @@ import type { Gravity, TiltAngles } from "./types";
  *
  * Screen down, a turn that tips an edge away from the eyes still reads the way it does screen
  * up. To the hand that is the same tilt, though gravity sees it mirrored.
+ *
+ * The functions are worklets because the interface measures tilt on the UI thread every frame,
+ * with the same arithmetic as the game; the directive is inert outside Reanimated. For the same
+ * reason the vector arithmetic is written out in scalars rather than built from small vector
+ * helpers, so a frame's reading makes no throwaway vectors.
  */
 
-/** Gravity lying flat on a table, screen up */
-export const FLAT_UP: Gravity = { x: 0, y: 0, z: -1 };
-/** Gravity held flat overhead, screen down */
-export const FLAT_DOWN: Gravity = { x: 0, y: 0, z: 1 };
+/**
+ * Which of the two level poses: `up`, held screen up, or `down`, turned over (lying back, phone
+ * overhead). Set on your side, a pose is still one of these two.
+ */
+export type PoseSide = "up" | "down";
+
+/** The two level poses, as the gravity each reads */
+export type LevelPoses = Readonly<Record<PoseSide, Gravity>>;
+
+/** The level poses before any is set: flat on a table, and flat overhead */
+export const FLAT: LevelPoses = {
+	up: { x: 0, y: 0, z: -1 },
+	down: { x: 0, y: 0, z: 1 },
+};
 
 /**
  * How much nearer the other level pose must be before it takes over (60 degrees). Between flat
@@ -33,8 +48,17 @@ const NO_TURN = 1e-9;
 
 /** The level tilt and the level pose it was measured from */
 export interface LevelTilt extends TiltAngles {
-	/** The screen-down pose was the nearer (see levelTilt) */
-	facingDown: boolean;
+	side: PoseSide;
+}
+
+/** A level pose's axes (unit, level): `ux` the phone's x axis laid level, `uy` its y axis */
+interface LevelAxes {
+	uxX: number;
+	uxY: number;
+	uxZ: number;
+	uyX: number;
+	uyY: number;
+	uyZ: number;
 }
 
 /** The same direction at unit length */
@@ -59,7 +83,7 @@ export function angleBetween(a: Gravity, b: Gravity): number {
  * from the phone's x and y axes together, each counting as much as it lies level, so they hold
  * in any pose.
  */
-function levelAxes(level: Gravity) {
+function levelAxes(level: Gravity): LevelAxes {
 	"worklet";
 	const length = Math.hypot(level.x, level.y, level.z);
 	// Up at the level pose
@@ -67,7 +91,7 @@ function levelAxes(level: Gravity) {
 	const ny = -level.y / length;
 	const nz = -level.z / length;
 	// Screen down the axes keep the phone's own sense rather than gravity's
-	const side = nz >= 0 ? 1 : -1;
+	const sense = nz >= 0 ? 1 : -1;
 	// The phone's x axis laid level, plus its y axis laid level and turned onto x (their sum is
 	// never shorter than 1, so it always has a direction)
 	const ax = 1 - nx * nx;
@@ -76,9 +100,9 @@ function levelAxes(level: Gravity) {
 	const bx = -ny * nx;
 	const by = 1 - ny * ny;
 	const bz = -ny * nz;
-	const vx = ax + side * (by * nz - bz * ny);
-	const vy = ay + side * (bz * nx - bx * nz);
-	const vz = az + side * (bx * ny - by * nx);
+	const vx = ax + sense * (by * nz - bz * ny);
+	const vy = ay + sense * (bz * nx - bx * nz);
+	const vz = az + sense * (bx * ny - by * nx);
 	const v = Math.hypot(vx, vy, vz);
 	const uxX = vx / v;
 	const uxY = vy / v;
@@ -87,9 +111,9 @@ function levelAxes(level: Gravity) {
 		uxX,
 		uxY,
 		uxZ,
-		uyX: side * (ny * uxZ - nz * uxY),
-		uyY: side * (nz * uxX - nx * uxZ),
-		uyZ: side * (nx * uxY - ny * uxX),
+		uyX: sense * (ny * uxZ - nz * uxY),
+		uyY: sense * (nz * uxX - nx * uxZ),
+		uyZ: sense * (nx * uxY - ny * uxX),
 	};
 }
 
@@ -136,22 +160,17 @@ export function gravityAt(tilt: TiltAngles, level: Gravity): Gravity {
 }
 
 /**
- * Tilt from whichever level pose the phone is nearer, `up` (held screen up) or `down` (turned
- * over). The one in use, from the last sample, stays until the other is nearer by
- * TURN_OVER_MARGIN, so a phone held between them doesn't flip back and forth.
+ * Tilt from whichever of the level `poses` the phone is nearer. The one in use at the last
+ * sample, `was`, stays until the other is nearer by TURN_OVER_MARGIN, so a phone held between
+ * them doesn't flip back and forth.
  */
-export function levelTilt(
-	gravity: Gravity,
-	up: Gravity,
-	down: Gravity,
-	wasFacingDown: boolean,
-): LevelTilt {
+export function levelTilt(gravity: Gravity, poses: LevelPoses, was: PoseSide): LevelTilt {
 	"worklet";
-	const fromUp = angleBetween(gravity, up);
-	const fromDown = angleBetween(gravity, down);
-	const facingDown = wasFacingDown
-		? fromUp + TURN_OVER_MARGIN >= fromDown
-		: fromDown + TURN_OVER_MARGIN < fromUp;
-	const tilt = tiltFrom(gravity, facingDown ? down : up);
-	return { x: tilt.x, y: tilt.y, facingDown };
+	const fromUp = angleBetween(gravity, poses.up);
+	const fromDown = angleBetween(gravity, poses.down);
+	const turnOver =
+		was === "down" ? fromUp + TURN_OVER_MARGIN >= fromDown : fromDown + TURN_OVER_MARGIN < fromUp;
+	const side: PoseSide = turnOver ? "down" : "up";
+	const tilt = tiltFrom(gravity, poses[side]);
+	return { x: tilt.x, y: tilt.y, side };
 }

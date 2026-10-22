@@ -42,8 +42,8 @@ function setup() {
 			calls.push(`flood ${color} ${at.x},${at.y}`);
 			cover = onCovered;
 		},
-		calibrate: (zero, facingDown) =>
-			calls.push(`calibrate ${zero.x},${zero.y}${facingDown ? " down" : ""}`),
+		calibrate: (zero, side) =>
+			calls.push(`calibrate ${zero.x},${zero.y}${side === "down" ? " down" : ""}`),
 		facts: () => ({ ...answers }),
 	});
 	const unfollow = follow();
@@ -224,7 +224,7 @@ describe("flow store", () => {
 		answers.levelPoseSet = false;
 		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
 		expect(screen()).toEqual({ kind: "settle", color: PINK });
-		flow.getState().dispatch({ type: "settled", zero: ZERO, facingDown: true, at: AT });
+		flow.getState().dispatch({ type: "settled", zero: ZERO, side: "down", at: AT });
 		covers();
 		expect(calls).toEqual([
 			"haltKiosk",
@@ -237,7 +237,7 @@ describe("flow store", () => {
 	it("a bowl settled from the title adopts the pose, then runs the kiosk again", () => {
 		const { flow, calls, screen } = setup();
 		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: PINK });
-		flow.getState().dispatch({ type: "settled", zero: ZERO, facingDown: false, at: AT });
+		flow.getState().dispatch({ type: "settled", zero: ZERO, side: "up", at: AT });
 		expect(calls).toEqual(["haltKiosk", "calibrate 0.3,-0.1", "runKiosk"]);
 		expect(screen()).toEqual({ kind: "title" });
 	});

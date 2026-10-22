@@ -16,6 +16,7 @@
  * then shuts the window and the pause screen comes back.
  */
 
+import type { PoseSide } from "../../domain/levelPose";
 import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import type { Point } from "../effects/frost";
@@ -115,7 +116,7 @@ export type FlowEvent =
 	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
 	| ({ type: "levelPressed" } & MenuOpening)
 	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
-	| { type: "settled"; zero: TiltZero; facingDown: boolean; at: PressPoint }
+	| { type: "settled"; zero: TiltZero; side: PoseSide; at: PressPoint }
 	| { type: "settleBacked" }
 	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
 	| ({ type: "speedPressed" } & MenuOpening)
@@ -168,7 +169,7 @@ export interface FlowStep {
 	/** The screen to show for `state` */
 	screen: Screen;
 	/** Adopt this pose as level for the side the screen faced */
-	calibrate?: { zero: TiltZero; facingDown: boolean };
+	calibrate?: { zero: TiltZero; side: PoseSide };
 	/** Do this to the game now */
 	act?: FlowAction;
 	/** Grow a dot of `color` from `at`; run `action` once it covers the screen */
@@ -322,7 +323,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "settled": {
 			const settle = state.settle;
 			if (!settle) return { state };
-			const calibrate = { zero: event.zero, facingDown: event.facingDown };
+			const calibrate = { zero: event.zero, side: event.side };
 			// From the title the pose is only saved; the title comes straight back
 			if (settle.from === "menu") {
 				return { state: { ...state, settle: null }, calibrate, act: RUN_KIOSK };

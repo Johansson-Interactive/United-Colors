@@ -2,8 +2,7 @@ import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import type { SensorPort, SensorSample } from "../../application/ports";
-import { FLAT_DOWN, FLAT_UP, levelTilt } from "../../domain/levelPose";
-import type { TiltZero } from "../../domain/types";
+import { FLAT, type LevelPoses, levelTilt, type PoseSide } from "../../domain/levelPose";
 import { smoothTowards } from "./smoothTilt";
 
 /**
@@ -19,12 +18,10 @@ export interface Tilt {
 	x: SharedValue<number>;
 	y: SharedValue<number>;
 	raw: SharedValue<SensorSample>;
-	/** The pose that reads as level; the game screen keeps it in step with settings */
-	zero: SharedValue<TiltZero>;
-	/** The same turned over, screen down */
-	zeroDown: SharedValue<TiltZero>;
-	/** Whether `x`/`y` are measured from the screen-down pose */
-	facingDown: SharedValue<boolean>;
+	/** The poses that read as level; the game screen keeps them in step with settings */
+	poses: SharedValue<LevelPoses>;
+	/** The level pose `x`/`y` are measured from */
+	side: SharedValue<PoseSide>;
 	available: SharedValue<boolean>;
 }
 
@@ -36,10 +33,9 @@ interface TiltProviderProps {
 }
 
 export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) => {
-	const rawSample = useSharedValue<SensorSample>(FLAT_UP);
-	const zero = useSharedValue<TiltZero>(FLAT_UP);
-	const zeroDown = useSharedValue<TiltZero>(FLAT_DOWN);
-	const facingDown = useSharedValue(false);
+	const rawSample = useSharedValue<SensorSample>(FLAT.up);
+	const poses = useSharedValue<LevelPoses>(FLAT);
+	const side = useSharedValue<PoseSide>("up");
 	const x = useSharedValue(0);
 	const y = useSharedValue(0);
 	const available = useSharedValue(false);
@@ -61,8 +57,8 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const tilt = levelTilt(rawSample.get(), zero.get(), zeroDown.get(), facingDown.get());
-		facingDown.set(tilt.facingDown);
+		const tilt = levelTilt(rawSample.get(), poses.get(), side.get());
+		side.set(tilt.side);
 		x.set(smoothTowards(x.get(), tilt.x, dt));
 		y.set(smoothTowards(y.get(), tilt.y, dt));
 	});
@@ -72,12 +68,11 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ sensor, children }) 
 			x,
 			y,
 			raw: rawSample,
-			zero,
-			zeroDown,
-			facingDown,
+			poses,
+			side,
 			available,
 		}),
-		[x, y, rawSample, zero, zeroDown, facingDown, available],
+		[x, y, rawSample, poses, side, available],
 	);
 	return <TiltContext value={value}>{children}</TiltContext>;
 };
