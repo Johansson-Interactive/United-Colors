@@ -12,8 +12,8 @@ import { scheduleOnRN } from "react-native-worklets";
 import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
-import { FrostRim } from "../components/FrostRim";
-import type { FrostEdge, Point } from "../effects/frost";
+import { PortalRim } from "../components/PortalRim";
+import type { Point, Portal } from "../effects/portal";
 import { useStageBox } from "../layout/StageFrame";
 import type { FieldTouchState } from "../touch/fieldTouch";
 import { type BloomFrame, bloomFrame, OPEN_BLOOM, stepBloom } from "../touch/frostBloom";
@@ -30,7 +30,7 @@ interface FrostBloomOverlayProps {
 	/** How the stage's corners are rounded (null: square) */
 	corners: Corners | null;
 	/** The frost's edge, which this drives while the bloom runs */
-	frostEdge: SharedValue<FrostEdge>;
+	portal: SharedValue<Portal>;
 	/** Fired once, the moment the frost has covered the field */
 	onCovered: () => void;
 	/** Fired once, when a lifted finger's frost has drained away */
@@ -39,7 +39,7 @@ interface FrostBloomOverlayProps {
 
 /** Before the first frame is stepped nothing is drawn */
 const BEFORE_FIRST_FRAME: BloomFrame = {
-	edge: { x: 0, y: 0, radius: 0, frosted: "inside" },
+	edge: { x: 0, y: 0, radius: 0, inside: "pause" },
 	rim: 0,
 };
 
@@ -49,7 +49,7 @@ const BEFORE_FIRST_FRAME: BloomFrame = {
  * shows the frost covering it, or draining back if the finger lifts first. The rules live in
  * the bloom stepper: each frame, on the UI thread, this takes one step of it and copies what
  * it says to draw. The frost itself is cut by the game canvas, which this drives through
- * `frostEdge`; the edge it leaves behind is the stepper's last word, covered or clear, so the
+ * `portal`; the edge it leaves behind is the stepper's last word, covered or clear, so the
  * frost coming on or lifting behind it goes unseen.
  */
 export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
@@ -58,7 +58,7 @@ export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
 	origin,
 	touch,
 	corners,
-	frostEdge,
+	portal,
 	onCovered,
 	onCleared,
 }) => {
@@ -82,7 +82,7 @@ export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
 		state.set(next);
 		const now = bloomFrame(next, origin, playerDisc(scene.get())?.radius ?? 0, field);
 		frame.set(now);
-		frostEdge.set(now.edge);
+		portal.set(now.edge);
 		if (next.outcome === "covered") scheduleOnRN(onCovered);
 		if (next.outcome === "cleared") scheduleOnRN(onCleared);
 	});
@@ -93,7 +93,7 @@ export const FrostBloomOverlay: React.FC<FrostBloomOverlayProps> = ({
 
 	return (
 		<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-			<FrostRim centre={centre} radius={radius} opacity={rim} color={color} />
+			<PortalRim centre={centre} radius={radius} opacity={rim} color={color} />
 		</Canvas>
 	);
 };

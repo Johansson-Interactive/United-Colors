@@ -9,7 +9,7 @@
  * under the bowl and the speed view opened from the title, so only their one dot moves, and
  * back in as they close.
  *
- * The frost edge is the bloom's and Get ready's to move; the look only resets it to frosted
+ * The portal is the bloom's and Get ready's to move; the look only resets it to frosted
  * all over as the pause's or the game over's frost comes on, so neither starts with a window
  * left by a Get ready that resumed the run, or the clear edge of a bloom that drained.
  */
@@ -43,9 +43,9 @@ export interface StageMove<T> {
 
 /** How the field looks behind a screen */
 export interface StageLook {
-	/** 0 = clear; 1 = fully frosted (see frost.ts) */
+	/** 0 = clear; 1 = fully frosted (see portal.ts) */
 	frost: StageMove<number>;
-	/** Reset the frost edge to frosted all over as the pause's or the game over's frost comes on */
+	/** Reset the portal to frosted all over as the pause's or the game over's frost comes on */
 	shutWindow: boolean;
 	/** The edge wash's colour */
 	accent: StageAccent;

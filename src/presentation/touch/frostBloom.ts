@@ -1,6 +1,6 @@
 /**
  * Pure state machine behind the bloom (see GLOSSARY.md): a finger held on the field in play
- * freezes the run at once and frosts the field from under the finger outward. The frost's edge
+ * freezes the run at once and frosts the field from under the finger outward. The portal
  * wears the rim and grows with the hold; once it has passed the walls the pause screen opens
  * (covered). A finger lifted before then drains the frost back into the fingertip, faster than
  * it grew, and play goes on from the frozen frame (cleared). The bloom is the Get ready window
@@ -15,13 +15,13 @@ import {
 	EDGE_GROW_MS,
 	edgeRadius,
 	type FieldSize,
-	type FrostEdge,
-	frostReach,
 	type Point,
+	type Portal,
+	portalReach,
 	restRadius,
 	rimFade,
 	smoothstep,
-} from "../effects/frost";
+} from "../effects/portal";
 
 export interface BloomState {
 	/** How far the frost has grown towards the walls, 0..1; the field is covered at 1 */
@@ -65,8 +65,8 @@ export function stepBloom(state: BloomState, held: boolean, dt: number): BloomSt
 
 /** What the bloom draws this frame */
 export interface BloomFrame {
-	/** The frost's edge, frosted inside; a zero radius is a clear field */
-	edge: FrostEdge;
+	/** The portal, frosted inside; a zero radius is a clear field */
+	edge: Portal;
 	/** How strongly the rim on the edge shows, 0..1 */
 	rim: number;
 }
@@ -86,10 +86,10 @@ export function bloomFrame(
 	field: FieldSize,
 ): BloomFrame {
 	"worklet";
-	const grown = edgeRadius(state.progress, restRadius(dotRadius), frostReach(origin, field));
+	const grown = edgeRadius(state.progress, restRadius(dotRadius), portalReach(origin, field));
 	const radius = grown * smoothstep(state.open);
 	return {
-		edge: { x: origin.x, y: origin.y, radius, frosted: "inside" },
+		edge: { x: origin.x, y: origin.y, radius, inside: "pause" },
 		rim: RIM * rimFade(state.progress) * smoothstep(state.open),
 	};
 }

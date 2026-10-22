@@ -1,33 +1,33 @@
 import {
 	edgeRadius,
-	FROSTED_ALL,
-	frostReach,
-	frostShape,
+	PAUSE_ALL,
+	portalReach,
+	portalShape,
 	restRadius,
 	rimFade,
 	smoothstep,
-} from "../../presentation/effects/frost";
+} from "../../presentation/effects/portal";
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
 
 describe("the frost's edge", () => {
 	it("is the field frosted all over at rest, with no window in it", () => {
-		expect(frostShape(FROSTED_ALL)).toBe("all");
+		expect(portalShape(PAUSE_ALL)).toBe("all");
 	});
 
 	it("is a clear window where the field is frosted outside a circle", () => {
-		expect(frostShape({ x: 10, y: 10, radius: 30, frosted: "outside" })).toBe("window");
+		expect(portalShape({ x: 10, y: 10, radius: 30, inside: "play" })).toBe("window");
 	});
 
 	it("is a frosted disc where the field is frosted inside a circle, and nothing at radius zero", () => {
-		expect(frostShape({ x: 10, y: 10, radius: 30, frosted: "inside" })).toBe("disc");
-		expect(frostShape({ x: 10, y: 10, radius: 0, frosted: "inside" })).toBe("none");
+		expect(portalShape({ x: 10, y: 10, radius: 30, inside: "pause" })).toBe("disc");
+		expect(portalShape({ x: 10, y: 10, radius: 0, inside: "pause" })).toBe("none");
 	});
 });
 
 describe("how the edge grows", () => {
 	const rest = restRadius(20);
-	const reach = frostReach({ x: 150, y: 300 }, field);
+	const reach = portalReach({ x: 150, y: 300 }, field);
 
 	it("rests a little clear of the dot it opens around", () => {
 		expect(rest).toBeGreaterThan(20);
@@ -36,7 +36,7 @@ describe("how the edge grows", () => {
 
 	it("reaches from its centre to the farthest corner of the field", () => {
 		expect(reach).toBeCloseTo(Math.hypot(250, 500), 9);
-		expect(frostReach({ x: 200, y: 400 }, field)).toBeCloseTo(Math.hypot(200, 400), 9);
+		expect(portalReach({ x: 200, y: 400 }, field)).toBeCloseTo(Math.hypot(200, 400), 9);
 	});
 
 	it("goes from rest to the reach, easing in and out", () => {

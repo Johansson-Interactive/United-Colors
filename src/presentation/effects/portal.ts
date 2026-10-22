@@ -1,10 +1,11 @@
 /**
- * The frost over the frozen field (see stageLook.ts): the game canvas blurs and dims the scene
- * by the frost amount, and the frost's edge is a circle around a point with one side frosted
- * and the other clear. Two steps draw that edge, in opposite directions (see GLOSSARY.md):
- * the bloom frosts the field inside the edge, growing out from under the finger that pauses
- * the run (see frostBloom.ts), and Get ready leaves the field clear inside it, the window at
- * the seat that thaws outward with the hold (see getReady.ts). Both grow from the same rest
+ * The portal between the pause and the play (see GLOSSARY.md): a circle around a point, with
+ * the pause on one side of it and the play on the other. The frost look over the frozen field
+ * (see stageLook.ts) is the pause side. The game canvas blurs and dims the scene by the frost
+ * amount, and the portal decides where that frost stops. Two steps open the portal, in opposite
+ * directions: the bloom puts the pause inside the circle, growing out from under the finger
+ * that pauses the run (see frostBloom.ts), and Get ready puts the play inside it, the window
+ * at the seat that thaws outward with the hold (see getReady.ts). Both grow from the same rest
  * size through the same ease, wear the same rim and fade it at the same point, so here are
  * the pieces they share. No React, so the canvas and the steppers can use it.
  */
@@ -24,29 +25,29 @@ export interface FieldSize {
 }
 
 /**
- * The frost's edge: a circle in stage px, and which side of it is frosted. "outside" at radius
- * 0 is the field frosted all over; "inside" at radius 0 is a clear field.
+ * The portal: a circle in stage px, and which side of it is the pause. "play" at radius 0 is
+ * the field frosted all over; "pause" at radius 0 is a clear field.
  */
-export interface FrostEdge {
+export interface Portal {
 	x: number;
 	y: number;
 	radius: number;
-	frosted: "inside" | "outside";
+	inside: "pause" | "play";
 }
 
 /** The field frosted all over: the pause's rest state, with no window in it */
-export const FROSTED_ALL: FrostEdge = { x: 0, y: 0, radius: 0, frosted: "outside" };
+export const PAUSE_ALL: Portal = { x: 0, y: 0, radius: 0, inside: "play" };
 
 /**
- * What the canvas has to draw for an edge: the field frosted all over, a clear window in the
+ * What the canvas has to draw for a portal: the field frosted all over, a clear window in the
  * frost, a frosted disc on a clear field, or nothing frosted at all
  */
-export type FrostShape = "all" | "window" | "disc" | "none";
+export type PortalShape = "all" | "window" | "disc" | "none";
 
-export function frostShape(edge: FrostEdge): FrostShape {
+export function portalShape(portal: Portal): PortalShape {
 	"worklet";
-	if (edge.frosted === "outside") return edge.radius > 0 ? "window" : "all";
-	return edge.radius > 0 ? "disc" : "none";
+	if (portal.inside === "play") return portal.radius > 0 ? "window" : "all";
+	return portal.radius > 0 ? "disc" : "none";
 }
 
 /** How dark the frosted scene is dimmed at full frost (the ink laid over it) */
@@ -82,7 +83,7 @@ export function restRadius(dotRadius: number): number {
 }
 
 /** How far the edge must reach from `centre` to pass the whole field: its farthest corner */
-export function frostReach(centre: Point, field: FieldSize): number {
+export function portalReach(centre: Point, field: FieldSize): number {
 	"worklet";
 	return Math.hypot(
 		Math.max(centre.x, field.width - centre.x),

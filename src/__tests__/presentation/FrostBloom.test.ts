@@ -1,4 +1,4 @@
-import { frostReach, restRadius } from "../../presentation/effects/frost";
+import { portalReach, restRadius } from "../../presentation/effects/portal";
 import { HOLD_MS, INITIAL_GET_READY, stepGetReady } from "../../presentation/tilt/getReady";
 import {
 	BLOOM_MS,
@@ -99,18 +99,18 @@ describe("the bloom's hold", () => {
 
 describe("what the bloom draws", () => {
 	const rest = restRadius(DOT);
-	const reach = frostReach(ORIGIN, field);
+	const reach = portalReach(ORIGIN, field);
 
 	it("frosts inside an edge centred on the finger", () => {
 		const { edge } = bloomFrame(run(OPEN_BLOOM, true, 200), ORIGIN, DOT, field);
-		expect(edge.frosted).toBe("inside");
+		expect(edge.inside).toBe("pause");
 		expect(edge.x).toBe(ORIGIN.x);
 		expect(edge.y).toBe(ORIGIN.y);
 	});
 
 	it("draws nothing before the edge has opened, and nothing once the frost has cleared", () => {
 		expect(bloomFrame(OPEN_BLOOM, ORIGIN, DOT, field)).toEqual({
-			edge: { ...ORIGIN, radius: 0, frosted: "inside" },
+			edge: { ...ORIGIN, radius: 0, inside: "pause" },
 			rim: 0,
 		});
 		const cleared = run(run(OPEN_BLOOM, true, 100), false, 1000);
@@ -139,7 +139,7 @@ describe("what the bloom draws", () => {
 		expect(covered.edge.radius).toBe(reach);
 		expect(covered.rim).toBe(0);
 		// Covering the field leaves it frosted all over, as the pause screen wants it
-		expect(covered.edge.frosted).toBe("inside");
+		expect(covered.edge.inside).toBe("pause");
 	});
 
 	it("shrinks back into the fingertip as the frost drains", () => {

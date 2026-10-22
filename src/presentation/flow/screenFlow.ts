@@ -18,7 +18,7 @@
 
 import type { GamePhase, TiltZero } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
-import type { Point } from "../effects/frost";
+import type { Point } from "../effects/portal";
 import { INK_LIFT } from "../theme/theme";
 
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
