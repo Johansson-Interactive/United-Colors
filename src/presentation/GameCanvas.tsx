@@ -31,7 +31,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScreenSize } from "../domain/types";
 import type { Burst } from "./effects/burstFrames";
-import { FROST_MAX_DIM, type FrostEdge, type FrostShape, frostShape } from "./effects/frost";
+import { FROST_MAX_DIM, type Portal, type PortalShape, portalShape } from "./effects/portal";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
 import { ROOM_SKSL, type RoomUniforms, roomUniforms, stageCover } from "./room";
@@ -55,8 +55,8 @@ interface GameCanvasProps {
 	onLayout: (size: ScreenSize) => void;
 	/** 0 = live; 1 = fully frosted (blurred and dimmed) for pause / game over */
 	frost: SharedValue<number>;
-	/** Where the frost stops (see frost.ts): all over, a clear window in it, or a frosted disc */
-	frostEdge: SharedValue<FrostEdge>;
+	/** Where the frost stops (see portal.ts): all over, a clear window in it, or a frosted disc */
+	portal: SharedValue<Portal>;
 	/** Colour washed into the room's edges (the player's colour while playing) */
 	accent: SharedValue<string>;
 	/** How much of the stage (the scene) shows over the room, 0..1 */
@@ -159,7 +159,7 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * pictures, with the wall drops and the liquid body as shader nodes between them; how the dots
  * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
  * from follows the device tilt, and freezes while frosted. The frost is the scene blurred and
- * dimmed, up to its edge (see frost.ts): Get ready's window in it is the room and the scene
+ * dimmed, up to its edge (see portal.ts): Get ready's window in it is the room and the scene
  * drawn again, sharp, clipped to the window's circle, so the field is clear there and frosted
  * around it; the bloom's disc is the scene drawn again blurred and dimmed, clipped to the disc,
  * over the sharp field. Either costs a second scene draw only while the edge is on the field.
@@ -177,7 +177,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	scene,
 	onLayout,
 	frost,
-	frostEdge,
+	portal,
 	accent,
 	stageOpacity,
 	shake,
@@ -190,7 +190,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
 	const [frosted, setFrosted] = useState(false);
-	const [shape, setShape] = useState<FrostShape>("all");
+	const [shape, setShape] = useState<PortalShape>("all");
 	const [fading, setFading] = useState(false);
 
 	// Only track the light while live: frosted scenes stay still even as the phone moves
@@ -205,7 +205,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	);
 
 	useAnimatedReaction(
-		() => frostShape(frostEdge.get()),
+		() => portalShape(portal.get()),
 		(current, previous) => {
 			if (current !== previous) scheduleOnRN(setShape, current);
 		},
@@ -288,7 +288,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const frostSigma = useDerivedValue(() => frost.get() * FROST_MAX_SIGMA);
 	const frostDim = useDerivedValue(() => frost.get() * FROST_MAX_DIM);
 	const edgeClip = useDerivedValue(() => {
-		const { x, y, radius } = frostEdge.get();
+		const { x, y, radius } = portal.get();
 		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
 	});
 	const shakeTransform = useDerivedValue(() => [{ translateX: shake.get() }]);

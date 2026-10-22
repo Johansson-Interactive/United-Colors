@@ -1,4 +1,4 @@
-import type { Point } from "../effects/frost";
+import type { Point } from "../effects/portal";
 
 /**
  * Whether a finger is on the field, and where it landed (stage px). The field touch layer

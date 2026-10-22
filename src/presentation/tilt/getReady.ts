@@ -20,13 +20,13 @@ import {
 	EDGE_GROW_MS,
 	edgeRadius,
 	type FieldSize,
-	FROSTED_ALL,
-	type FrostEdge,
-	frostReach,
+	PAUSE_ALL,
 	type Point,
+	type Portal,
+	portalReach,
 	rimFade,
 	smoothstep,
-} from "../effects/frost";
+} from "../effects/portal";
 import { BOWL_SIZE } from "../theme/theme";
 
 export interface GetReadyState {
@@ -383,7 +383,7 @@ export interface GetReadyFrame {
 	/** The rolling dot as drawn, pressed into a wall the way the player is in play (see rollBody) */
 	body: RollBody;
 	/** The clear window in the frost, the cup at rest: frosted all over without a player */
-	window: FrostEdge;
+	window: Portal;
 	/** How strongly the rim on the window's edge shows, 0..1 */
 	rim: number;
 	/**
@@ -421,7 +421,7 @@ function drawFrame(
 			seat: NO_SEAT,
 			dot,
 			body: rollBody(dot, 0, field),
-			window: FROSTED_ALL,
+			window: PAUSE_ALL,
 			rim: 0,
 			opened: 0,
 			caption,
@@ -440,8 +440,8 @@ function drawFrame(
 		window: {
 			x: player.x,
 			y: player.y,
-			radius: windowRadius(hold.progress, frostReach(player, field), pulse * (1 - home)) * opened,
-			frosted: "outside",
+			radius: windowRadius(hold.progress, portalReach(player, field), pulse * (1 - home)) * opened,
+			inside: "play",
 		},
 		rim: rimOpacity(hold.progress, home, pulse) * opened,
 		opened,
@@ -483,11 +483,11 @@ export function advanceGetReady(
 }
 
 /**
- * The frost edge Get ready leaves behind when it closes, given its last state and the window
+ * The portal Get ready leaves behind when it closes, given its last state and the window
  * it had open: unchanged once fired, so the frost lifts behind the open window unseen; the field
  * frosted all over otherwise (the window shut, leaving the app), so the pause screen is frosted
  * all over.
  */
-export function closeGetReady(state: GetReadyFrameState, frostEdge: FrostEdge): FrostEdge {
-	return state.hold.fired ? frostEdge : FROSTED_ALL;
+export function closeGetReady(state: GetReadyFrameState, portal: Portal): Portal {
+	return state.hold.fired ? portal : PAUSE_ALL;
 }

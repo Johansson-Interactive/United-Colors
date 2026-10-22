@@ -6,7 +6,7 @@ import {
 	withDelay,
 	withTiming,
 } from "react-native-reanimated";
-import { FROSTED_ALL, type FrostEdge } from "../effects/frost";
+import { PAUSE_ALL, type Portal } from "../effects/portal";
 import { type StageMove, type StagePlace, stageLook } from "../effects/stageLook";
 import { INK_LIFT } from "../theme/theme";
 
@@ -14,22 +14,22 @@ import { INK_LIFT } from "../theme/theme";
  * Applies the field's look behind the screen (see stageLook.ts) to the shared values the game
  * canvas draws from. Each value starts its move only when the move itself changes, so a look
  * that stays the same restarts nothing: going between the pause and Get ready leaves alone
- * the frost edge Get ready has opened. This is the only writer of the stage opacity; the
- * frost edge is shared with the bloom and Get ready, which move it. A wash in the player's
+ * the portal Get ready has opened. This is the only writer of the stage opacity; the
+ * portal is shared with the bloom and Get ready, which move it. A wash in the player's
  * colour follows `playerColor` on the UI thread, so a colour switch in play renders nothing.
  */
 export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
-	const frostEdge = useSharedValue<FrostEdge>(FROSTED_ALL);
+	const portal = useSharedValue<Portal>(PAUSE_ALL);
 	// Before the frost's move, so the edge is frosted all over as the pause's or the game over's frost comes on
 	useEffect(() => {
-		if (look.shutWindow) frostEdge.set(FROSTED_ALL);
-	}, [look.shutWindow, frostEdge]);
+		if (look.shutWindow) portal.set(PAUSE_ALL);
+	}, [look.shutWindow, portal]);
 	const frost = useStageValue(0, look.frost);
 	const washInPlayer = look.accent === "player";
 	const accent = useDerivedValue(() => (washInPlayer ? playerColor.get() : INK_LIFT));
 	const stageOpacity = useStageValue(1, look.opacity);
-	return { frost, frostEdge, accent, stageOpacity };
+	return { frost, portal, accent, stageOpacity };
 }
 
 /**

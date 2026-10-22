@@ -2,7 +2,7 @@ import type React from "react";
 import { useCallback } from "react";
 import { type GestureResponderEvent, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
-import type { Point } from "../effects/frost";
+import type { Point } from "../effects/portal";
 import { FIELD_TOUCH_FRAME, type FieldTouchState, onStage } from "../touch/fieldTouch";
 
 interface FieldTouchProps {

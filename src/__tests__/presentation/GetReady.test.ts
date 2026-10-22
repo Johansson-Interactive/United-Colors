@@ -2,7 +2,7 @@ import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { cornerExtent, holdInside } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
-import { FROSTED_ALL, frostReach, type Point } from "../../presentation/effects/frost";
+import { PAUSE_ALL, type Point, portalReach } from "../../presentation/effects/portal";
 import { BOWL_SIZE } from "../../presentation/theme/theme";
 import {
 	ARMING_MS,
@@ -352,7 +352,7 @@ describe("get-ready seat", () => {
 });
 
 describe("get-ready window", () => {
-	const reach = frostReach(seat, field);
+	const reach = portalReach(seat, field);
 
 	it("rests at the cup, breathing a little with the pulse", () => {
 		expect(windowRadius(0, reach, 0)).toBe(CUP_RADIUS);
@@ -423,7 +423,7 @@ describe("get-ready cup", () => {
 		for (const f of frames) {
 			expect(f.window.x).toBe(seat.x);
 			expect(f.window.y).toBe(seat.y);
-			expect(f.window.frosted).toBe("outside");
+			expect(f.window.inside).toBe("play");
 		}
 		const radii = frames.map((f) => f.window.radius);
 		expect(radii[0]).toBeGreaterThan(0);
@@ -459,7 +459,7 @@ describe("get-ready frame step", () => {
 		const firing = frames.filter((f) => f.fired);
 		expect(firing).toHaveLength(1);
 		const at = frames.indexOf(firing[0]);
-		const open = { x: seat.x, y: seat.y, radius: frostReach(seat, field), frosted: "outside" };
+		const open = { x: seat.x, y: seat.y, radius: portalReach(seat, field), inside: "play" };
 		expect(firing[0].window).toEqual(open);
 		for (const after of frames.slice(at + 1)) {
 			expect(after.fired).toBe(false);
@@ -517,7 +517,7 @@ describe("get-ready frame step", () => {
 	});
 
 	it("breathes the window by this frame's roll, not the last frame's", () => {
-		const reach = frostReach(seat, field);
+		const reach = portalReach(seat, field);
 		const homeReach = seat.radius * 1.5;
 		const off = (f: GetReadyFrame) => Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y);
 		// Tipped hard off level, so the hold never grows and the dot rolls off the seat
@@ -562,7 +562,7 @@ describe("get-ready frame step", () => {
 		const { frames } = play(OPEN_GET_READY, LEVEL, PLENTY, null);
 		for (const f of frames) {
 			expect(f.drawn).toBe(false);
-			expect(f.window).toEqual(FROSTED_ALL);
+			expect(f.window).toEqual(PAUSE_ALL);
 			expect(f.opened).toBe(0);
 		}
 	});
@@ -639,11 +639,11 @@ describe("get-ready close", () => {
 		expect(frames.some((f) => f.fired)).toBe(false);
 		const thawing = frames[frames.length - 1].window;
 		expect(thawing.radius).toBeGreaterThan(CUP_RADIUS);
-		expect(closeGetReady(state, thawing)).toEqual(FROSTED_ALL);
+		expect(closeGetReady(state, thawing)).toEqual(PAUSE_ALL);
 	});
 
 	it("frosts the field all over once the cup has shut", () => {
 		const { state, frames } = play(halfHeld(), LEVEL, 400, seat, false);
-		expect(closeGetReady(state, frames[frames.length - 1].window)).toEqual(FROSTED_ALL);
+		expect(closeGetReady(state, frames[frames.length - 1].window)).toEqual(PAUSE_ALL);
 	});
 });

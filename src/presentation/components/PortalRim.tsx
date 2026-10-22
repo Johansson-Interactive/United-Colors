@@ -3,8 +3,8 @@ import { BlurMask, Circle, Group } from "@shopify/react-native-skia";
 import type React from "react";
 import { type SharedValue, useDerivedValue } from "react-native-reanimated";
 
-interface FrostRimProps {
-	/** The frost edge's centre and radius, in stage px */
+interface PortalRimProps {
+	/** The portal's centre and radius, in stage px */
 	centre: SharedValue<SkPoint>;
 	radius: SharedValue<number>;
 	/** How strongly the rim shows, 0..1 */
@@ -20,11 +20,11 @@ const GLOW_BLUR = 6;
 const GLOW_SHARE = 0.4;
 
 /**
- * The rim on the frost's edge (see frost.ts): a thin stroke in the player's colour over a soft
+ * The rim on the portal (see portal.ts): a thin stroke in the player's colour over a soft
  * glow, drawn inside a Skia canvas. The bloom and Get ready draw the same rim, so the frost
  * closing over the field and opening from the seat read as one edge going two ways.
  */
-export const FrostRim: React.FC<FrostRimProps> = ({ centre, radius, opacity, color }) => {
+export const PortalRim: React.FC<PortalRimProps> = ({ centre, radius, opacity, color }) => {
 	const glow = useDerivedValue(() => opacity.get() * GLOW_SHARE);
 	return (
 		<>

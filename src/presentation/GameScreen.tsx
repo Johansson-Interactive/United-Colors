@@ -25,7 +25,7 @@ import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import type { Point } from "./effects/frost";
+import type { Point } from "./effects/portal";
 import type { MenuOpening } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -171,7 +171,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
 	// the store; the flood is the transition
-	const { frost, frostEdge, accent, stageOpacity } = useStageLook({ screen, phase }, playerColor);
+	const { frost, portal, accent, stageOpacity } = useStageLook({ screen, phase }, playerColor);
 	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
@@ -241,7 +241,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 				<GameCanvas
 					scene={scene}
 					frost={frost}
-					frostEdge={frostEdge}
+					portal={portal}
 					accent={accent}
 					stageOpacity={stageOpacity}
 					shake={shake}
@@ -260,7 +260,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						origin={screen.at}
 						touch={touch}
 						corners={corners}
-						frostEdge={frostEdge}
+						portal={portal}
 						onCovered={handleBloomCovered}
 						onCleared={handleBloomCleared}
 					/>
@@ -273,7 +273,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						sensitivity={sensitivity}
 						corners={corners}
 						touch={touch}
-						frostEdge={frostEdge}
+						portal={portal}
 						onReady={handleReady}
 						onShut={handleReadyShut}
 					/>

@@ -26,9 +26,9 @@ import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
 import { DotMatrixText } from "../components/DotMatrixText";
-import { FrostRim } from "../components/FrostRim";
+import { PortalRim } from "../components/PortalRim";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
-import { FROSTED_ALL, type FrostEdge } from "../effects/frost";
+import { PAUSE_ALL, type Portal } from "../effects/portal";
 import { SCORE_CENTRE_Y, SCORE_PITCH } from "../effects/scoreTally";
 import { useStageBox } from "../layout/StageFrame";
 import { LIQUID_WOBBLE } from "../liquidShader";
@@ -57,7 +57,7 @@ interface GetReadyOverlayProps {
 	/** Whether the finger on the frost is still down, as the field touch layer keeps it; lifted, the cup shuts */
 	touch: SharedValue<FieldTouchState>;
 	/** The frost's edge, which this keeps as the window and widens with the hold */
-	frostEdge: SharedValue<FrostEdge>;
+	portal: SharedValue<Portal>;
 	/** Fired once, the moment the thaw clears the field */
 	onReady: () => void;
 	/** Fired once, when the window has shut after the finger lifted */
@@ -86,7 +86,7 @@ const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	seat: NO_SEAT,
 	dot: { x: 0, y: 0 },
 	body: { x: 0, y: 0, radius: 0, wallX: 0, wallY: 0, wallC: 0, neck: 0 },
-	window: FROSTED_ALL,
+	window: PAUSE_ALL,
 	rim: 0,
 	opened: 0,
 	caption: false,
@@ -111,7 +111,7 @@ const COVER_MARGIN = 0.5;
  *
  * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt and the
  * touch are, this takes one step of it and copies what it says to draw. The window itself is
- * cut by the game canvas, which this drives through `frostEdge`; the seat and the dot are drawn
+ * cut by the game canvas, which this drives through `portal`; the seat and the dot are drawn
  * here over it.
  */
 export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
@@ -120,7 +120,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	sensitivity,
 	corners,
 	touch,
-	frostEdge,
+	portal,
 	onReady,
 	onShut,
 }) => {
@@ -162,7 +162,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 			caption.set(withTiming(now.caption ? 1 : 0, { duration: CAPTION_FADE_MS }));
 		}
 		frame.set(now);
-		frostEdge.set(now.window);
+		portal.set(now.window);
 		if (now.fired) scheduleOnRN(onReady);
 		if (now.shut) scheduleOnRN(onShut);
 	});
@@ -170,9 +170,9 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	// Leaves the edge the stepper says on close: the window open once fired, frosted all over otherwise
 	useEffect(
 		() => () => {
-			frostEdge.set(closeGetReady(state.get(), frostEdge.get()));
+			portal.set(closeGetReady(state.get(), portal.get()));
 		},
-		[state, frostEdge],
+		[state, portal],
 	);
 
 	const shown = useDerivedValue(() => (frame.get().drawn ? 1 : 0));
@@ -238,7 +238,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
 				<Group opacity={shown}>
 					{/* The rim on the window's edge: the cup's at rest, and outward with the thaw */}
-					<FrostRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
+					<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
 					<Group opacity={opened}>
 						{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
 						<Group transform={coverTransform} origin={seatCentre}>
