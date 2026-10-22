@@ -44,7 +44,7 @@ export const HUD: React.FC<HUDProps> = ({ score, color, visible, onPause, corner
 
 	return (
 		<View style={[styles.container, !visible && styles.hidden]} pointerEvents="box-none">
-			<ScoreMeter score={score} color={color} />
+			<ScoreMeter score={score} color={color} visible={visible} />
 			{visible && onPause ? (
 				<View style={[styles.corner, cornerAt]}>
 					<IconDot size={CORNER_SIZE} icon="pause" onPress={onPause} accessibilityLabel="Pause" />
