@@ -8,14 +8,13 @@
  */
 
 import {
-	FLAT,
 	FLAT_ATTITUDES,
 	gravityOf,
 	type PoseSide,
+	tiltFromFlat,
 	turnBetween,
 	turnedToward,
 	wholeTilt,
-	zeroSwivel,
 } from "../../domain/levelPose";
 import type { Attitude, TiltAngles, TiltZero } from "../../domain/types";
 
@@ -87,8 +86,7 @@ export function settleEase(progress: number): number {
 export function bowlTilt(state: SettleState, attitude: Attitude): TiltAngles {
 	"worklet";
 	const level = settleEase(state.progress);
-	// Flat, swivelled to face the way the phone does, so only gravity's turn is left
-	const fromFlat = wholeTilt(attitude, zeroSwivel(FLAT, attitude)[state.side]);
+	const fromFlat = tiltFromFlat(attitude, state.side);
 	const fromMean = wholeTilt(attitude, state.mean);
 	return {
 		x: fromFlat.x + (fromMean.x - fromFlat.x) * level,

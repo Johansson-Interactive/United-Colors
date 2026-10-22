@@ -234,6 +234,30 @@ export function levelWholeTilt(
 }
 
 /**
+ * Gravity's turn from flat on `side` for the phone held in `attitude`: its tilt from that flat
+ * pose swung to face the way the phone faces, so no swivel reads, only how far and which way
+ * the screen has tipped. Turned right over, it reads a half turn about the phone's short axis.
+ */
+export function tiltFromFlat(attitude: Attitude, side: PoseSide): TiltAngles {
+	"worklet";
+	const flat = FLAT[side];
+	// Gravity, flat to now, in the phone's axes
+	const gx = -attitude.xz;
+	const gy = -attitude.yz;
+	const gz = -attitude.zz;
+	// The turn that takes gravity from now back to flat, as an axis scaled by its sine; the phone
+	// turned the other way about the same axis, from flat to now
+	const cx = gy * flat.z - gz * flat.y;
+	const cy = gz * flat.x - gx * flat.z;
+	const sine = Math.hypot(cx, cy, gx * flat.y - gy * flat.x);
+	const cosine = gx * flat.x + gy * flat.y + gz * flat.z;
+	if (sine <= NO_TURN) return { x: 0, y: cosine > 0 ? 0 : Math.PI };
+	const scale = Math.atan2(sine, cosine) / sine;
+	// About the long axis is x, about the short axis is y
+	return { x: cy * scale, y: cx * scale };
+}
+
+/**
  * `attitude` turned the shortest way to read `gravity`, so the turn has no swivel. Gravity
  * straight the other way has no shortest turn; then it turns over about the phone's short axis,
  * or its long axis if the short one points along gravity.

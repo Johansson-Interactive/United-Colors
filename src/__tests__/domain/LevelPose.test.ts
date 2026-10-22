@@ -6,6 +6,7 @@ import {
 	gravityOf,
 	type LevelPoses,
 	levelWholeTilt,
+	tiltFromFlat,
 	turnBetween,
 	turnedToward,
 	unitGravity,
@@ -303,6 +304,33 @@ describe("levelWholeTilt", () => {
 		expect(overhead.side).toBe("down");
 		expect(overhead.x).toBeCloseTo(0.3);
 		expect(overhead.y).toBeCloseTo(0);
+	});
+});
+
+describe("tiltFromFlat", () => {
+	it("reads the tilt from flat whichever way the phone faces, screen up or down", () => {
+		const tilt = { x: 0.3, y: -0.2 };
+		for (const heading of [0, 1, -2.5, Math.PI]) {
+			const up = tiltFromFlat(swivelled(attitudeAt(tilt, FLAT_ATTITUDES.up), heading), "up");
+			expect(up.x).toBeCloseTo(tilt.x);
+			expect(up.y).toBeCloseTo(tilt.y);
+			const down = tiltFromFlat(swivelled(attitudeAt(tilt, FLAT_ATTITUDES.down), heading), "down");
+			expect(down.x).toBeCloseTo(tilt.x);
+			expect(down.y).toBeCloseTo(tilt.y);
+		}
+	});
+
+	it("upright, a swivel reads as nothing: only gravity's turn counts", () => {
+		for (const heading of [0, 0.4, 2]) {
+			const tilt = tiltFromFlat(swivelled(HELD.upright, heading), "up");
+			expect(tilt.x).toBeCloseTo(0);
+			expect(tilt.y).toBeCloseTo(90 * DEG);
+		}
+	});
+
+	it("turned right over from the flat pose it reads, a half turn", () => {
+		const tilt = tiltFromFlat(FLAT_ATTITUDES.down, "up");
+		expect(Math.hypot(tilt.x, tilt.y)).toBeCloseTo(Math.PI);
 	});
 });
 
