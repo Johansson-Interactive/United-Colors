@@ -10,26 +10,20 @@ import {
 } from "@shopify/react-native-skia";
 import type React from "react";
 import { useEffect, useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import Animated, {
-	FadeIn,
 	FadeOut,
 	type SharedValue,
-	useAnimatedStyle,
 	useDerivedValue,
 	useFrameCallback,
 	useSharedValue,
-	withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
-import { DotMatrixText } from "../components/DotMatrixText";
 import { PortalRim } from "../components/PortalRim";
-import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
 import { PAUSE_ALL, type Portal } from "../effects/portal";
-import { SCORE_CENTRE_Y, SCORE_PITCH } from "../effects/scoreTally";
 import { useStageBox } from "../layout/StageFrame";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { WALL_DROP_EFFECT } from "../sceneDrawer";
@@ -48,15 +42,15 @@ import { wallDropUniformsByName } from "../wallDropShader";
 interface GetReadyOverlayProps {
 	/** The frozen scene, for where the player dot froze (the seat) and how big it is */
 	scene: SharedValue<Float32Array>;
-	/** The player's colour: the rolling dot, the rim and the caption wear it */
+	/** The player's colour: the rolling dot and the rim wear it */
 	color: string;
 	/** The rolling dot moves this many times its usual distance per tilt, like the player dot */
 	sensitivity: number;
 	/** How the stage's corners are rounded, so the dot rolls round them (null: square) */
 	corners: Corners | null;
-	/** Whether the finger on the frost is still down, as the field touch layer keeps it; lifted, the cup shuts */
+	/** Whether the finger on the pause is still down, as the field touch layer keeps it; lifted, the cup drains */
 	touch: SharedValue<FieldTouchState>;
-	/** The frost's edge, which this keeps as the window and widens with the hold */
+	/** The portal, which this opens at the seat and widens with the hold */
 	portal: SharedValue<Portal>;
 	/** Fired once, the moment the thaw clears the field */
 	onReady: () => void;
@@ -64,14 +58,8 @@ interface GetReadyOverlayProps {
 	onShut: () => void;
 }
 
-const CAPTION = "ROLL IT HOME";
-/** The caption's pitch where it fits, the same as the PAUSED it stands in for */
-const CAPTION_PITCH = 8;
-/** Room the caption keeps from the stage's sides */
-const CAPTION_MARGIN = 48;
-/** The caption's top: below the score waiting at the HUD's spot (see scoreSink.ts), with room */
-const CAPTION_TOP = SCORE_CENTRE_Y + SCORE_PITCH * 3.5 + 16;
-const CAPTION_FADE_MS = 250;
+/** On resume the dot copy fades into the real dot on the seat in this long */
+const HANDOFF_MS = 150;
 /** The glare on the rolling dot, as fractions of its radius; the light is frozen with the field */
 const GLARE_OFFSET = -0.28;
 const GLARE_RADIUS = 0.4;
@@ -80,7 +68,7 @@ const SHADE_MAX = 0.35;
 const SHADE_FULL_AT = 40;
 const SHADE_TRAIL = 8;
 
-/** Before the first frame is stepped nothing is drawn; the overlay is still fading in */
+/** Before the first frame is stepped nothing is drawn */
 const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	drawn: false,
 	seat: NO_SEAT,
@@ -89,7 +77,6 @@ const BEFORE_FIRST_FRAME: GetReadyFrame = {
 	window: PAUSE_ALL,
 	rim: 0,
 	opened: 0,
-	caption: false,
 	fired: false,
 	shut: false,
 };
@@ -98,16 +85,16 @@ const COVER_SCALE = 1 + LIQUID_WOBBLE;
 const COVER_MARGIN = 0.5;
 
 /**
- * Get ready: the field stays frosted from the pause, and the cup opens in it at the seat, where
- * the player dot froze: the title's bowl, a clear circle in the frost with no glass over it,
- * and the rim on its edge pulsing in the player's colour like a point dot. A solid copy of the dot rolls
- * around inside it with the tilt, with a little weight to it, and presses into a wall as the
- * player does in play. Rolling it home and holding level
- * thaws the frost outward from the cup, and the moment the field is clear play resumes; the
- * window is left open, so the frost lifts behind it unseen. Lift the finger first and the cup
- * shuts, and Get ready is over. One caption says what to do; it fades while the player holds
- * and comes back when the hold breaks. Touches go through to the field touch layer. The paused
- * score waits dimmed at the top (see PausedScore), so the caption sits under it.
+ * Get ready: a portal into play opens at the seat, where the player dot froze, growing with the
+ * held finger at the bloom's pace to the title's bowl: the cup, wearing the rim in the player's
+ * colour, which pulses like a point dot once the cup is fully open. A solid copy of the dot
+ * waits on the seat until then, and then rolls around inside the cup with the tilt, with a
+ * little weight to it, and presses into a wall as the player does in play. Rolling it home and
+ * holding level widens the portal to the walls, and the moment the field is clear play resumes;
+ * the window is left open, so the frost lifts behind it unseen. Lift the finger first and the
+ * portal drains back into the seat, and Get ready is over. Nothing here fades in; on resume all
+ * that is left drawn is the dot copy on the seat, which fades into the real dot. Touches go
+ * through to the field touch layer.
  *
  * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt and the
  * touch are, this takes one step of it and copies what it says to draw. The window itself is
@@ -137,8 +124,6 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	const state = useSharedValue(OPEN_GET_READY);
 	// What the stepper last said to draw
 	const frame = useSharedValue(BEFORE_FIRST_FRAME);
-	// The caption's opacity, faded on the frame's caption edges
-	const caption = useSharedValue(0);
 
 	// The scene is frozen, so the seat is where the player is drawn in it throughout
 	const player = useDerivedValue(() => playerDisc(scene.get()));
@@ -158,9 +143,6 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		// Once fired or shut the stepper answers with the same state, and there is nothing new to copy
 		if (next === prev) return;
 		state.set(next);
-		if (now.caption !== frame.get().caption) {
-			caption.set(withTiming(now.caption ? 1 : 0, { duration: CAPTION_FADE_MS }));
-		}
 		frame.set(now);
 		portal.set(now.window);
 		if (now.fired) scheduleOnRN(onReady);
@@ -176,7 +158,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	);
 
 	const shown = useDerivedValue(() => (frame.get().drawn ? 1 : 0));
-	// The seat, the dot and its shade show as the cup opens, and go as it shuts
+	// The seat, the dot and its shade show as the cup opens, and go as it drains
 	const opened = useDerivedValue(() => frame.get().opened);
 	const seatCentre = useDerivedValue(() => vec(seat.get().x, seat.get().y));
 	const seatRadius = useDerivedValue(() => seat.get().radius);
@@ -222,22 +204,17 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	const glareRadius = useDerivedValue(() => GLARE_RADIUS * frame.get().body.radius);
 	const glareBlur = useDerivedValue(() => 0.3 * frame.get().body.radius);
 
-	const captionPitch = useMemo(
-		() => pitchToFit(layoutDotMatrix(CAPTION), width - CAPTION_MARGIN, CAPTION_PITCH),
-		[width],
-	);
-	const captionStyle = useAnimatedStyle(() => ({ opacity: caption.get() }));
-
 	return (
+		// Leaving on resume, only the dot copy is still drawn (the rim is gone past the walls), so
+		// this fades the copy into the real dot; leaving otherwise, the cup has drained already
 		<Animated.View
 			style={StyleSheet.absoluteFill}
-			entering={FadeIn.duration(300)}
-			exiting={FadeOut.duration(150)}
+			exiting={FadeOut.duration(HANDOFF_MS)}
 			pointerEvents="none"
 		>
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
 				<Group opacity={shown}>
-					{/* The rim on the window's edge: the cup's at rest, and outward with the thaw */}
+					{/* The rim on the portal's edge: the cup's as it opens, and outward with the thaw */}
 					<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
 					<Group opacity={opened}>
 						{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
@@ -257,18 +234,6 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 					</Group>
 				</Group>
 			</Canvas>
-			<View style={styles.top}>
-				<Animated.View style={captionStyle}>
-					<DotMatrixText text={CAPTION} pitch={captionPitch} color={color} glow />
-				</Animated.View>
-			</View>
 		</Animated.View>
 	);
 };
-
-const styles = StyleSheet.create({
-	top: {
-		alignItems: "center",
-		paddingTop: CAPTION_TOP,
-	},
-});

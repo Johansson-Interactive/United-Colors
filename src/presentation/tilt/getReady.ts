@@ -1,13 +1,14 @@
 /**
  * Pure state machine behind Get ready: the step between the pause and play, held open by the
- * finger that touched the frost. The field stays frosted; the cup opens in it at the seat,
- * where the player dot froze: a clear bowl the size of the title's, which a solid copy of the
- * dot rolls around inside with the tilt and cannot leave. Rolling the dot home and holding the
- * phone level thaws the frost outward from the cup, and play resumes the instant the whole
- * field is clear. Tilt is relative to the level pose, so "level" is the pose the player likes
- * to play in. The hold only counts after a short arming delay, so the jolt of the finger
- * landing can't start play. A finger lifted before the field is clear shuts the cup again, and
- * Get ready is over: back to the pause.
+ * finger on the pause. A portal into play opens at the seat, where the player dot froze: the
+ * cup, grown from nothing with the hold at the bloom's pace to the size of the title's bowl,
+ * which a solid copy of the dot rolls around inside with the tilt and cannot leave. The cup
+ * being fully open is the arming: until then the copy stays on the seat and the level hold
+ * doesn't count, so the jolt of the finger landing can't start play. Then rolling the dot home
+ * and holding the phone level widens the portal to the walls, and play resumes the instant the
+ * whole field is clear. Tilt is relative to the level pose, so "level" is the pose the player
+ * likes to play in. A finger lifted before the field is clear drains the portal back into the
+ * seat, faster than it grew, and Get ready is over: back to the pause.
  *
  * The hold (stepGetReady) is the rule; the cup, the roll and the rim are what shows it.
  * advanceGetReady puts them together into one step a frame, which is all the overlay runs.
@@ -17,38 +18,36 @@ import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
 import {
+	EDGE_DRAIN_MS,
 	EDGE_GROW_MS,
+	edgeProgress,
 	edgeRadius,
 	type FieldSize,
 	PAUSE_ALL,
 	type Point,
 	type Portal,
 	portalReach,
+	restRadius,
 	rimFade,
-	smoothstep,
 } from "../effects/portal";
 import { BOWL_SIZE } from "../theme/theme";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
 	progress: number;
-	/** Time since Get ready opened */
-	elapsedMs: number;
 	fired: boolean;
 }
 
 /** Tilt (radians, either axis) that still counts as level */
 const LEVEL_RAD = 0.11;
-/** Samples this early are ignored, so the jolt of the finger landing can't count */
-export const ARMING_MS = 200;
 /** How long the device must stay level: the thaw grows at the bloom's pace */
 export const HOLD_MS = EDGE_GROW_MS;
-/** A broken hold drains faster than it fills */
-const DRAIN_MS = HOLD_MS * 0.4;
+/** A broken hold drains faster than it fills, as the bloom does */
+const DRAIN_MS = EDGE_DRAIN_MS;
 /** Progress this close to full counts as full, so frame-sized steps can't fall short by rounding */
 const FULL_EPSILON = 1e-9;
 
-export const INITIAL_GET_READY: GetReadyState = { progress: 0, elapsedMs: 0, fired: false };
+export const INITIAL_GET_READY: GetReadyState = { progress: 0, fired: false };
 
 function isLevel(x: number, y: number): boolean {
 	"worklet";
@@ -61,37 +60,25 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Whether the player is holding level over the frame from `prev` to `next`: the hold grew. The
- * caption fades while this holds and comes back when the hold breaks (or hasn't armed yet).
- */
-export function isHolding(prev: GetReadyState, next: GetReadyState): boolean {
-	"worklet";
-	return next.progress > prev.progress;
-}
-
-/**
  * Advance one frame with the latest tilt (radians, relative to the level pose). The hold grows
- * only while the finger is down (`held`) and the phone is level, and only for the part of the
- * frame past the arming delay; otherwise it drains.
+ * only while it is `armed` (the finger down and the cup fully open) and the phone is level;
+ * otherwise it drains.
  */
 export function stepGetReady(
 	state: GetReadyState,
 	x: number,
 	y: number,
 	dt: number,
-	held: boolean,
+	armed: boolean,
 ): GetReadyState {
 	"worklet";
 	if (state.fired) return state;
-	const elapsedMs = state.elapsedMs + dt;
-	// Only the part of this frame past the arming delay counts
-	const armedMs = Math.min(dt, Math.max(0, elapsedMs - ARMING_MS));
 	const raw =
-		held && isLevel(x, y)
-			? state.progress + armedMs / HOLD_MS
+		armed && isLevel(x, y)
+			? state.progress + dt / HOLD_MS
 			: Math.max(0, state.progress - dt / DRAIN_MS);
 	const progress = raw >= 1 - FULL_EPSILON ? 1 : raw;
-	return { progress, elapsedMs, fired: progress === 1 };
+	return { progress, fired: progress === 1 };
 }
 
 // ---- The cup, and the roll: a solid copy of the player dot that the tilt pushes around it ----
@@ -290,18 +277,33 @@ export function seated(roll: Point, seat: Disc): number {
 const BREATH = 0.03;
 /** A pulse's period: the point dot's own rhythm, a shrink and a grow at the game's rate */
 export const PULSE_MS = (2 * POINT_DOT_PULSE_SPEED * 1000) / GAME_HERTZ;
-/** The cup opens at the seat in this long as the finger lands */
-export const OPEN_MS = 120;
-/** And shuts in this long once the finger lifts, faster than it opened */
-const SHUT_MS = OPEN_MS * 0.4;
 
 /**
- * The beat of the seat's pulse at `elapsedMs` since Get ready opened, 0..1 and back each
+ * How far along the bloom's growth from `seat` (0..1) the cup is fully open. The cup grows from
+ * nothing at the bloom's pace: as the bloom from this seat grows past its rest, so the cup grows
+ * from the seat, until it is the cup's size.
+ */
+function cupOpenAt(seat: Disc, field: FieldSize): number {
+	"worklet";
+	const rest = restRadius(seat.radius);
+	return edgeProgress(rest + CUP_RADIUS, rest, portalReach(seat, field));
+}
+
+/** How open the cup is at `opening` along the bloom's growth, 0..1 of the cup's size */
+function cupOpened(opening: number, seat: Disc, field: FieldSize): number {
+	"worklet";
+	if (opening >= cupOpenAt(seat, field)) return 1;
+	const rest = restRadius(seat.radius);
+	return (edgeRadius(opening, rest, portalReach(seat, field)) - rest) / CUP_RADIUS;
+}
+
+/**
+ * The beat of the seat's pulse at `openMs` since the cup was fully open, 0..1 and back each
  * PULSE_MS, so it reads as the point dot's "come here"
  */
-export function seatPulse(elapsedMs: number): number {
+export function seatPulse(openMs: number): number {
 	"worklet";
-	return 0.5 - 0.5 * Math.cos((2 * Math.PI * elapsedMs) / PULSE_MS);
+	return 0.5 - 0.5 * Math.cos((2 * Math.PI * openMs) / PULSE_MS);
 }
 
 /**
@@ -334,22 +336,22 @@ export interface GetReadyFrameState {
 	/** The rolling dot; null until the first frame sets it on the seat */
 	roll: Roll | null;
 	/**
-	 * Whether the caption is up: down while the hold grows, back as soon as it breaks. Kept
-	 * rather than read off the last two holds, so it stays down once fired.
+	 * How far along the bloom's growth the cup's opening is, 0..1: growing while the finger is
+	 * down until the cup is fully open, draining back along the same way once it has lifted
 	 */
-	caption: boolean;
-	/** How open the cup is, 0..1: opening as the finger lands, shutting once it has lifted */
-	open: number;
+	opening: number;
+	/** Time the cup has been fully open, the clock of the rim's pulse */
+	openMs: number;
 	/** The cup has shut after the finger lifted: Get ready is over, back to the pause */
 	shut: boolean;
 }
 
-/** Get ready as it opens, as the finger lands on the frost */
+/** Get ready as it opens, as the finger lands on the pause */
 export const OPEN_GET_READY: GetReadyFrameState = {
 	hold: INITIAL_GET_READY,
 	roll: null,
-	caption: false,
-	open: 0,
+	opening: 0,
+	openMs: 0,
 	shut: false,
 };
 
@@ -387,12 +389,10 @@ export interface GetReadyFrame {
 	/** How strongly the rim on the window's edge shows, 0..1 */
 	rim: number;
 	/**
-	 * How open the cup is, 0..1, eased: the seat, the dot and its shade show by it
-	 * as it opens, and go with it as it shuts
+	 * How open the cup is, 0..1 of its size: the seat, the dot and its shade show by it as it
+	 * opens, and go with it as it drains
 	 */
 	opened: number;
-	/** Whether the caption is up (the overlay fades it on the edges) */
-	caption: boolean;
 	/** True on the one frame Get ready fired on: play resumes */
 	fired: boolean;
 	/** True on the one frame the window shut on: the pause screen comes back */
@@ -413,7 +413,7 @@ function drawFrame(
 	shutNow: boolean,
 ): GetReadyFrame {
 	"worklet";
-	const { hold, roll, caption, open } = state;
+	const { hold, roll, opening, openMs } = state;
 	const dot = { x: roll.x, y: roll.y };
 	if (player === null) {
 		return {
@@ -424,14 +424,13 @@ function drawFrame(
 			window: PAUSE_ALL,
 			rim: 0,
 			opened: 0,
-			caption,
 			fired: firedNow,
 			shut: shutNow,
 		};
 	}
 	const home = seated(roll, player);
-	const pulse = seatPulse(hold.elapsedMs);
-	const opened = smoothstep(open);
+	const pulse = seatPulse(openMs);
+	const opened = cupOpened(opening, player, field);
 	return {
 		drawn: true,
 		seat: player,
@@ -445,14 +444,15 @@ function drawFrame(
 		},
 		rim: rimOpacity(hold.progress, home, pulse) * opened,
 		opened,
-		caption,
 		fired: firedNow,
 		shut: shutNow,
 	};
 }
 
 /**
- * Advance Get ready one frame: the cup's opening, then the roll, then the hold. Once fired or
+ * Advance Get ready one frame: the cup's opening, then the roll, then the hold. The roll and the
+ * hold go by whether the cup was fully open as the frame began: until then the dot is kept on
+ * the seat and the hold isn't armed, so the hold counts from the frame after. Once fired or
  * shut it is inert: the state comes back unchanged and the frame leaves the window where it
  * was, so the frost can lift behind an open window unseen, and it never fires again.
  */
@@ -467,16 +467,19 @@ export function advanceGetReady(
 	if (state.hold.fired || state.shut) {
 		return { state, frame: drawFrame({ ...state, roll }, inputs.seat, field, false, false) };
 	}
-	const open = held
-		? clamp(state.open + dt / OPEN_MS, 0, 1)
-		: clamp(state.open - dt / SHUT_MS, 0, 1);
-	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt, held);
-	const shut = !held && open === 0;
+	const openAt = cupOpenAt(seat, field);
+	const wasOpen = state.opening >= openAt;
+	const opening = held
+		? Math.min(openAt, state.opening + dt / EDGE_GROW_MS)
+		: Math.max(0, state.opening - dt / EDGE_DRAIN_MS);
+	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt, held && wasOpen);
+	const shut = !held && opening === 0;
+	const target = wasOpen ? rollTarget(seat, tilt, sensitivity, field) : seat;
 	const next: GetReadyFrameState & { roll: Roll } = {
 		hold,
-		roll: stepRoll(roll, rollTarget(seat, tilt, sensitivity, field), dt),
-		caption: held && !isHolding(state.hold, hold),
-		open,
+		roll: stepRoll(roll, target, dt),
+		opening,
+		openMs: wasOpen ? state.openMs + dt : state.openMs,
 		shut,
 	};
 	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired, shut) };
