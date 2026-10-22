@@ -1,6 +1,6 @@
 import { Canvas, vec } from "@shopify/react-native-skia";
 import type React from "react";
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
 import {
 	type SharedValue,
@@ -15,14 +15,7 @@ import type { Corners } from "../../domain/types";
 import { PortalRim } from "../components/PortalRim";
 import type { Portal } from "../effects/portal";
 import { useStageBox } from "../layout/StageFrame";
-import {
-	type BloomFrame,
-	type BloomStart,
-	bloomFrame,
-	bloomHeld,
-	OPEN_BLOOM,
-	stepBloom,
-} from "../touch/bloom";
+import { type BloomStart, bloomFrame, bloomHeld, OPEN_BLOOM, stepBloom } from "../touch/bloom";
 import type { FieldTouchState } from "../touch/fieldTouch";
 
 interface BloomOverlayProps {
@@ -44,20 +37,15 @@ interface BloomOverlayProps {
 	onCleared: () => void;
 }
 
-/** Before the first frame is stepped nothing is drawn */
-const BEFORE_FIRST_FRAME: BloomFrame = {
-	edge: { x: 0, y: 0, radius: 0, inside: "pause" },
-	rim: 0,
-};
-
 /**
  * The bloom (see bloom.ts): the portal into the pause opening at the seat, where the player
  * dot froze, its edge wearing the rim in the player's colour. The run is already frozen; this
- * only shows the portal covering it, or draining back into the dot if the finger lifts first. The rules live in
- * the bloom stepper: each frame, on the UI thread, this takes one step of it and copies what
- * it says to draw. The frost itself is cut by the game canvas, which this drives through
- * `portal`; the edge it leaves behind is the stepper's last word, covered or clear, so the
- * frost coming on or lifting behind it goes unseen.
+ * only shows the portal covering it, or draining back into the dot if the finger lifts first.
+ * The rules live in the bloom stepper: each frame, on the UI thread, this takes one step of it
+ * and copies what it says to draw. The portal itself is cut by the play side's canvases (see
+ * PlaySide), which this drives through `portal`, over the pause world; the rim on its edge is
+ * drawn here, over both worlds. The first frame, the portal at its rest size around the dot, is
+ * worked out as this mounts, so the dot is gone from the very first frame drawn.
  */
 export const BloomOverlay: React.FC<BloomOverlayProps> = ({
 	scene,
@@ -79,7 +67,10 @@ export const BloomOverlay: React.FC<BloomOverlayProps> = ({
 		[width, height, corners],
 	);
 	const state = useSharedValue(OPEN_BLOOM);
-	const frame = useSharedValue(BEFORE_FIRST_FRAME);
+	// The scene is frozen, so its first frame is the one the stepper would draw before stepping
+	const [first] = useState(() => bloomFrame(OPEN_BLOOM, playerDisc(scene.get()), field));
+	const frame = useSharedValue(first);
+	useLayoutEffect(() => portal.set(first.edge), [portal, first]);
 
 	useFrameCallback((info) => {
 		const prev = state.get();
