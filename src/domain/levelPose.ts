@@ -10,10 +10,6 @@ import type { Attitude, Gravity, TiltAngles } from "./types";
  * every pose. The level pose is then an attitude, made from a saved gravity where the swivel is
  * zeroed (zeroSwivel).
  *
- * tiltFrom is ADR 0009's reading, which gravity alone can give: the shortest turn from the
- * level gravity to the current one, read along the phone's x and y axes laid level. Upright or
- * on your side that loses one axis. Only the settle bowl still reads it.
- *
  * Screen down, a turn that tips an edge away from the eyes still reads the way it does screen
  * up. To the hand that is the same tilt, though gravity sees it mirrored.
  *
@@ -53,16 +49,6 @@ export interface LevelTilt extends TiltAngles {
 	side: PoseSide;
 }
 
-/** A level pose's axes (unit, level): `ux` the phone's x axis laid level, `uy` its y axis */
-interface LevelAxes {
-	uxX: number;
-	uxY: number;
-	uxZ: number;
-	uyX: number;
-	uyY: number;
-	uyZ: number;
-}
-
 /** The same direction at unit length */
 export function unitGravity(g: Gravity): Gravity {
 	"worklet";
@@ -77,67 +63,6 @@ export function angleBetween(a: Gravity, b: Gravity): number {
 	const cy = a.z * b.x - a.x * b.z;
 	const cz = a.x * b.y - a.y * b.x;
 	return Math.atan2(Math.hypot(cx, cy, cz), a.x * b.x + a.y * b.y + a.z * b.z);
-}
-
-/**
- * The level pose's axes (unit, at right angles to gravity): `ux` the phone's x axis laid level,
- * which tilt `y` turns about, and `uy` its y axis, which tilt `x` turns about. Both are drawn
- * from the phone's x and y axes together, each counting as much as it lies level, so they hold
- * in any pose.
- */
-function levelAxes(level: Gravity): LevelAxes {
-	"worklet";
-	const length = Math.hypot(level.x, level.y, level.z);
-	// Up at the level pose
-	const nx = -level.x / length;
-	const ny = -level.y / length;
-	const nz = -level.z / length;
-	// Screen down the axes keep the phone's own sense rather than gravity's
-	const sense = nz >= 0 ? 1 : -1;
-	// The phone's x axis laid level, plus its y axis laid level and turned onto x (their sum is
-	// never shorter than 1, so it always has a direction)
-	const ax = 1 - nx * nx;
-	const ay = -nx * ny;
-	const az = -nx * nz;
-	const bx = -ny * nx;
-	const by = 1 - ny * ny;
-	const bz = -ny * nz;
-	const vx = ax + sense * (by * nz - bz * ny);
-	const vy = ay + sense * (bz * nx - bx * nz);
-	const vz = az + sense * (bx * ny - by * nx);
-	const v = Math.hypot(vx, vy, vz);
-	const uxX = vx / v;
-	const uxY = vy / v;
-	const uxZ = vz / v;
-	return {
-		uxX,
-		uxY,
-		uxZ,
-		uyX: sense * (ny * uxZ - nz * uxY),
-		uyY: sense * (nz * uxX - nx * uxZ),
-		uyZ: sense * (nx * uxY - ny * uxX),
-	};
-}
-
-/** Tilt of the phone reading `gravity`, from the level pose reading `level` */
-export function tiltFrom(gravity: Gravity, level: Gravity): TiltAngles {
-	"worklet";
-	// The shortest turn of the phone from level to now, as an axis scaled by its angle
-	const cx = gravity.y * level.z - gravity.z * level.y;
-	const cy = gravity.z * level.x - gravity.x * level.z;
-	const cz = gravity.x * level.y - gravity.y * level.x;
-	const sine = Math.hypot(cx, cy, cz);
-	const cosine = gravity.x * level.x + gravity.y * level.y + gravity.z * level.z;
-	// Lengths cancel in the angle; a turn too small to have an axis scales as its sine
-	const scale =
-		sine > NO_TURN
-			? Math.atan2(sine, cosine) / sine
-			: 1 / (Math.hypot(gravity.x, gravity.y, gravity.z) * Math.hypot(level.x, level.y, level.z));
-	const axes = levelAxes(level);
-	return {
-		x: (cx * axes.uyX + cy * axes.uyY + cz * axes.uyZ) * scale,
-		y: (cx * axes.uxX + cy * axes.uxY + cz * axes.uxZ) * scale,
-	};
 }
 
 /**
@@ -219,7 +144,7 @@ function turnedBy(attitude: Attitude, kx: number, ky: number, kz: number): Attit
  * spin on a tabletop always did.
  *
  * The axes are the phone's own, so screen down a turn that tips an edge away from the eyes
- * reads the way it does screen up, swivel included, just as tiltFrom reads it.
+ * reads the way it does screen up, swivel included.
  */
 export function wholeTilt(attitude: Attitude, pose: Attitude): TiltAngles {
 	"worklet";

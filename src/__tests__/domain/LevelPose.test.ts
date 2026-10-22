@@ -6,7 +6,6 @@ import {
 	gravityOf,
 	type LevelPoses,
 	levelWholeTilt,
-	tiltFrom,
 	turnBetween,
 	turnedToward,
 	unitGravity,
@@ -93,74 +92,6 @@ function expectGravity(actual: Gravity, expected: Gravity, label?: string): void
 	expect(actual.z, label).toBeCloseTo(expected.z);
 }
 
-describe("tiltFrom", () => {
-	it("the level pose itself reads as no tilt, in any pose", () => {
-		for (const level of Object.values(POSES)) {
-			const tilt = tiltFrom(level, level);
-			expect(tilt.x).toBeCloseTo(0);
-			expect(tilt.y).toBeCloseTo(0);
-		}
-	});
-
-	it("screen up, reads the angles from flat as before", () => {
-		// Right edge lowered by 0.4 rad: gravity leans to +x
-		const right = tiltFrom({ x: Math.sin(0.4), y: 0, z: -Math.cos(0.4) }, FLAT.up);
-		expect(right.x).toBeCloseTo(0.4);
-		expect(right.y).toBeCloseTo(0);
-		// Top edge raised by 0.7 rad: gravity leans to -y
-		const top = tiltFrom({ x: 0, y: -Math.sin(0.7), z: -Math.cos(0.7) }, FLAT.up);
-		expect(top.x).toBeCloseTo(0);
-		expect(top.y).toBeCloseTo(0.7);
-	});
-
-	it("screen down, both axes are mirrored from screen up", () => {
-		// Right edge lowered by 0.3 rad, as the player sees the screen
-		expect(tiltFrom({ x: Math.sin(0.3), y: 0, z: Math.cos(0.3) }, FLAT.down).x).toBeCloseTo(-0.3);
-		// Top edge lowered by 0.3 rad
-		expect(tiltFrom({ x: 0, y: Math.sin(0.3), z: Math.cos(0.3) }, FLAT.down).y).toBeCloseTo(0.3);
-	});
-
-	it("reads how far gravity has turned, so jitter is never magnified, in any pose", () => {
-		for (const [pose, level] of Object.entries(POSES)) {
-			for (const axis of [
-				{ x: 1, y: 0, z: 0 },
-				{ x: 0, y: 1, z: 0 },
-				{ x: 0, y: 0, z: 1 },
-				{ x: 1, y: 1, z: 1 },
-			]) {
-				const shaken = turned(level, axis, 0.3 * DEG);
-				const tilt = tiltFrom(shaken, level);
-				expect(Math.hypot(tilt.x, tilt.y), pose).toBeCloseTo(angleBetween(shaken, level), 9);
-			}
-		}
-	});
-
-	it("on your side, turning the screen like a steering wheel steers", () => {
-		const level = POSES["on your side, exactly"];
-		// Gravity swings from the right edge towards the top edge: the top edge drops
-		const tilt = tiltFrom(turned(level, { x: 0, y: 0, z: 1 }, 0.2), level);
-		expect(tilt.y).toBeCloseTo(-0.2);
-		expect(tilt.x).toBeCloseTo(0);
-	});
-
-	it("propped in bed, dropping the right edge steers right", () => {
-		const level = POSES["propped in bed"];
-		// Gravity swings from the bottom edge towards the right edge
-		const tilt = tiltFrom(turned(level, { x: 0, y: 0, z: 1 }, 0.2), level);
-		expect(tilt.x).toBeCloseTo(0.2 * Math.sin(75 * DEG), 2);
-		expect(Math.abs(tilt.y)).toBeLessThan(0.01);
-	});
-
-	it("doesn't care how long the vectors are", () => {
-		const level = POSES["at a desk"];
-		const g = turned(level, { x: 1, y: 0, z: 0 }, 0.3);
-		const scaled = tiltFrom({ x: g.x * 9.8, y: g.y * 9.8, z: g.z * 9.8 }, { x: 0, y: -2, z: -2 });
-		const unit = tiltFrom(g, unitGravity({ x: 0, y: -1, z: -1 }));
-		expect(scaled.x).toBeCloseTo(unit.x);
-		expect(scaled.y).toBeCloseTo(unit.y);
-	});
-});
-
 describe("wholeTilt", () => {
 	const ROOM_X = { x: 1, y: 0, z: 0 };
 	const ROOM_Y = { x: 0, y: 1, z: 0 };
@@ -173,8 +104,8 @@ describe("wholeTilt", () => {
 		}
 	});
 
-	it("flat, reads the angles from flat as tiltFrom does", () => {
-		// Right edge lowered by 0.4 rad: the same gravity as tiltFrom's case
+	it("flat, reads the angles from flat as gravity does", () => {
+		// Right edge lowered by 0.4 rad: gravity leans to +x
 		const right = turnedInRoom(FLAT_ATTITUDES.up, ROOM_Y, 0.4);
 		expectGravity(gravityOf(right), { x: Math.sin(0.4), y: 0, z: -Math.cos(0.4) });
 		expect(wholeTilt(right, FLAT_ATTITUDES.up).x).toBeCloseTo(0.4);
@@ -186,7 +117,7 @@ describe("wholeTilt", () => {
 		expect(wholeTilt(top, FLAT_ATTITUDES.up).y).toBeCloseTo(0.7);
 	});
 
-	it("screen down, both axes read as tiltFrom reads them", () => {
+	it("screen down, both axes are mirrored from screen up, as the hand sees them", () => {
 		// Right edge lowered by 0.3 rad, as the player sees the screen: towards the eyes below
 		const right = turnedInRoom(FLAT_ATTITUDES.down, ROOM_Y, 0.3);
 		expectGravity(gravityOf(right), { x: Math.sin(0.3), y: 0, z: Math.cos(0.3) });
@@ -431,18 +362,6 @@ describe("attitudeAt", () => {
 				expect(back.x, pose).toBeCloseTo(tilt.x);
 				expect(back.y, pose).toBeCloseTo(tilt.y);
 			}
-		}
-	});
-
-	it("from flat, tips the phone so its gravity reads the same tilt", () => {
-		for (const tilt of [
-			{ x: 0.4, y: 0 },
-			{ x: 0, y: 0.7 },
-			{ x: -0.3, y: 0.5 },
-		]) {
-			const read = tiltFrom(gravityOf(attitudeAt(tilt, FLAT_ATTITUDES.up)), FLAT.up);
-			expect(read.x).toBeCloseTo(tilt.x);
-			expect(read.y).toBeCloseTo(tilt.y);
 		}
 	});
 
