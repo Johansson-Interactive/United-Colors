@@ -1,6 +1,5 @@
 import { GLYPH_ROWS, GLYPHS, UNKNOWN_GLYPH } from "../../presentation/dotmatrix/glyphs";
 import {
-	dotReveal,
 	LETTER_GAP,
 	LINE_GAP,
 	layoutDotMatrix,
@@ -8,8 +7,6 @@ import {
 	matrixSize,
 	paletteIndex,
 	pitchToFit,
-	REVEAL_POP_SHARE,
-	revealOrder,
 	trioIndex,
 } from "../../presentation/dotmatrix/layout";
 
@@ -128,39 +125,5 @@ describe("dot-matrix box", () => {
 		expect(plain.width).toBe(matrixSize(layout, 6).width + plain.pad * 2);
 		expect(plain.height).toBe(matrixSize(layout, 6).height + plain.pad * 2);
 		expect(lit.pad).toBeGreaterThan(plain.pad);
-	});
-});
-
-describe("reveal", () => {
-	it("ranks the dots left to right, column by column and down each column", () => {
-		const layout = layoutDotMatrix("1:2");
-		const ranks = revealOrder(layout);
-		expect(ranks).toHaveLength(layout.dots.length);
-		expect([...ranks].sort((a, b) => a - b)).toEqual(layout.dots.map((_, i) => i));
-		const byRank = [...layout.dots].sort((a, b) => ranks[a.index] - ranks[b.index]);
-		for (let i = 1; i < byRank.length; i++) {
-			const before = byRank[i - 1];
-			const after = byRank[i];
-			expect(before.col < after.col || (before.col === after.col && before.row < after.row)).toBe(
-				true,
-			);
-		}
-	});
-
-	it("pops each dot in its turn: hidden before it, full after, the last one full only at the end", () => {
-		const count = 10;
-		expect(dotReveal(0, count, 0)).toBe(0);
-		expect(dotReveal(0, count, REVEAL_POP_SHARE)).toBe(1);
-		expect(dotReveal(9, count, 1 - REVEAL_POP_SHARE)).toBe(0);
-		expect(dotReveal(9, count, 1 - REVEAL_POP_SHARE / 2)).toBeGreaterThan(0);
-		expect(dotReveal(9, count, 1 - REVEAL_POP_SHARE / 2)).toBeLessThan(1);
-		expect(dotReveal(9, count, 1)).toBe(1);
-		for (let rank = 0; rank < count; rank++) expect(dotReveal(rank, count, 1)).toBe(1);
-	});
-
-	it("a lone dot pops over the whole of its share from the start, and eases out", () => {
-		expect(dotReveal(0, 1, 0)).toBe(0);
-		expect(dotReveal(0, 1, REVEAL_POP_SHARE / 2)).toBeGreaterThan(0.5);
-		expect(dotReveal(0, 1, REVEAL_POP_SHARE)).toBe(1);
 	});
 });

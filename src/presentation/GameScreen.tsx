@@ -25,6 +25,7 @@ import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
+import { pauseContent, pauseEntryFades } from "./flow/pauseContent";
 import type { MenuOpening } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -187,6 +188,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
 	const inPlay = screen.kind === "hud" || screen.kind === "frosting";
+	// The pause's content is in place under the bloom and around Get ready, pressable only on the pause
+	const pauseShows = pauseContent(screen.kind);
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
@@ -303,7 +306,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								/>
 							)}
 
-							{screen.kind === "pause" && <PauseOverlay onQuit={handleLeavePress} />}
+							{pauseShows && (
+								<PauseOverlay
+									pressable={pauseShows.pressable}
+									fadesIn={pauseEntryFades(screen.kind)}
+									onQuit={handleLeavePress}
+								/>
+							)}
 						</CornerMenusProvider>
 
 						{screen.kind === "speed" && (
@@ -334,8 +343,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 							/>
 						)}
 
-						{/* The paused score and run time, sinking in from the HUD's spot and rising back */}
-						<PausedScore store={store} color={playerColor} screen={screen.kind} score={score} />
+						{/* The paused score and run time, still in the middle, with the pause's content */}
+						{pauseShows && <PausedScore store={store} color={playerColor} score={score} />}
 
 						<PauseHint store={store} screen={screen.kind} fieldPauses={!devTouch} />
 					</View>

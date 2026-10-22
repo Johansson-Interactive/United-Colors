@@ -303,8 +303,8 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	}
 	// The flood decides the next screen; nothing under it can change that
 	if (state.flooding && event.type !== "covered") return { state };
-	// Get ready and the bloom each answer only their own events; the pause's controls have
-	// faded out under Get ready, and a hold that lands once either has closed is too late
+	// Get ready and the bloom each answer only their own events; the pause's controls take
+	// no press under either (see pauseContent.ts), and a hold that lands once either has closed is too late
 	const gettingReady = state.over?.kind === "getReady";
 	const blooming = state.bloom !== null;
 	if (gettingReady && !GET_READY_EVENTS.has(event.type)) return { state };
