@@ -15,7 +15,7 @@ interface ScoreMeterProps {
 	 * always visible
 	 */
 	color: SharedValue<string>;
-	/** Whether the meter is on screen; hidden, it draws nothing, and shown again it draws afresh */
+	/** Whether the meter is on screen */
 	visible: boolean;
 }
 

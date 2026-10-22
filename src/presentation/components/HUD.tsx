@@ -43,19 +43,16 @@ export const HUD: React.FC<HUDProps> = ({ score, color, visible, onPause, corner
 	);
 
 	return (
-		// Hidden, it takes no touch at all: on Android a box-none view at opacity 0 still caught
-		// the finger meant for the field under it, so the pause screen could not be left
-		<View
-			style={[styles.container, !visible && styles.hidden]}
-			pointerEvents={visible ? "box-none" : "none"}
-		>
-			<ScoreMeter score={score} color={color} visible={visible} />
+		<>
+			<View style={[styles.container, !visible && styles.hidden]} pointerEvents="none">
+				<ScoreMeter score={score} color={color} visible={visible} />
+			</View>
 			{visible && onPause ? (
 				<View style={[styles.corner, cornerAt]}>
 					<IconDot size={CORNER_SIZE} icon="pause" onPress={onPause} accessibilityLabel="Pause" />
 				</View>
 			) : null}
-		</View>
+		</>
 	);
 };
 

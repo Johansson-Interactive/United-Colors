@@ -37,6 +37,11 @@ function fillingStyles(source: string): string[] {
 	return [...source.matchAll(/(\w+):\s*\{[^}]*StyleSheet\.absoluteFill/g)].map((m) => m[1]);
 }
 
+/** The names in the file's StyleSheet whose style hides it by its opacity */
+function hidingStyles(source: string): string[] {
+	return [...source.matchAll(/(\w+):\s*\{[^}]*opacity:\s*0\s*[,}]/g)].map((m) => m[1]);
+}
+
 /**
  * The text of every opening tag of a container in `source`, from `<` to its `>`, with braces
  * tracked so a `>` inside a prop's expression doesn't end it early
@@ -69,21 +74,9 @@ const fillsTheStage = (tag: string, styles: string[]) =>
 	/StyleSheet\.absoluteFill/.test(tag) ||
 	styles.some((s) => new RegExp(`styles\\.${s}\\b`).test(tag));
 
-/** The pointerEvents prop's value as written: a literal, or the expression in its braces */
-const pointerEventsOf = (tag: string) =>
-	tag
-		.match(/pointerEvents=(?:["']([^"']*)["']|\{([^}]*)\})/)
-		?.slice(1)
-		.find((v) => v !== undefined);
+const letsTouchesThrough = (tag: string) => /pointerEvents=\{?["'](none|box-none)["']\}?/.test(tag);
 
-/** Every value the prop can take is "none" or "box-none", literal or picked by a condition */
-const letsTouchesThrough = (tag: string) => {
-	const value = pointerEventsOf(tag);
-	if (value === undefined) return false;
-	const literals = [...value.matchAll(/["']([^"']*)["']/g)].map((m) => m[1]);
-	const options = literals.length > 0 ? literals : [value];
-	return options.every((v) => v === "none" || v === "box-none");
-};
+const takesNoTouch = (tag: string) => /pointerEvents=\{?["']none["']\}?/.test(tag);
 
 describe("the layers over the field", () => {
 	it.each(OVER_THE_FIELD)(
@@ -103,17 +96,21 @@ describe("the layers over the field", () => {
 	);
 });
 
-describe("a layer over the field hidden by its opacity", () => {
+describe("the layers over the field hidden by their opacity", () => {
 	// On Android a box-none view at opacity 0 still caught the finger meant for the field: the
 	// HUD, hidden over the pause screen, left the frost unable to open Get ready
-	it("takes no touch at all while hidden", () => {
-		const source = SOURCES["presentation/components/HUD.tsx"];
-		expect(source).toBeDefined();
-		const root = rootTag(source, openingTags(source));
-		expect(root).toMatch(/styles\.hidden/);
-		expect(pointerEventsOf(root ?? "")).toMatch(
-			/visible\s*\?\s*["']box-none["']\s*:\s*["']none["']/,
+	it.each(OVER_THE_FIELD)("%s takes no touch at all where it hides", (file) => {
+		const source = SOURCES[file];
+		expect(source, `${file} exists`).toBeDefined();
+		const hiding = hidingStyles(source);
+		const touchable = openingTags(source).filter(
+			(tag) => hiding.some((s) => new RegExp(`styles\\.${s}\\b`).test(tag)) && !takesNoTouch(tag),
 		);
+		expect(touchable).toEqual([]);
+	});
+
+	it("covers the HUD, hidden off play", () => {
+		expect(hidingStyles(SOURCES["presentation/components/HUD.tsx"])).not.toEqual([]);
 	});
 });
 
