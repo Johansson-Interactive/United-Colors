@@ -31,6 +31,43 @@ const GET_READY: FlowState = { ...PAUSED, over: { kind: "getReady" } };
 /** A step that only leaves the flow in `state`, showing its screen */
 const rests = (state: FlowState) => ({ state, screen: screenOf(state) });
 
+describe("score slivers at a run's end", () => {
+	const IN_AIR: FlowState = { ...RUNNING, sliversInAir: true };
+
+	it("keeps the HUD up after the run ends until the last sliver has arrived", () => {
+		const over = stepFlow(IN_AIR, { type: "phaseChanged", phase: "GAME_OVER" }, GAME);
+		expect(over.screen).toEqual({ kind: "hud" });
+		const landed = stepFlow(over.state, { type: "sliversChanged", inAir: false }, GAME);
+		expect(landed.state).toEqual({ ...INITIAL_FLOW, phase: "GAME_OVER" });
+		expect(landed.screen).toEqual({ kind: "gameOver" });
+	});
+
+	it("opens the game over at once when nothing is in the air", () => {
+		const over = stepFlow(RUNNING, { type: "phaseChanged", phase: "GAME_OVER" }, GAME);
+		expect(over.screen).toEqual({ kind: "gameOver" });
+	});
+
+	it("follows the slivers whatever the screen, a flood included", () => {
+		const flooding = { ...RUNNING, flooding: true };
+		const step = stepFlow(flooding, { type: "sliversChanged", inAir: true }, GAME);
+		expect(step.state).toEqual({ ...flooding, sliversInAir: true });
+		expect(step.screen).toEqual({ kind: "hud" });
+	});
+
+	it("never pauses the run on the held game over", () => {
+		const held = { ...IN_AIR, phase: "GAME_OVER" as const };
+		expect(stepFlow(held, { type: "fieldTouched", at: AT }, GAME)).toEqual({
+			state: held,
+			screen: { kind: "hud" },
+		});
+	});
+
+	it("keeps knowing what is in the air through a flood's cover", () => {
+		const covered = stepFlow({ ...IN_AIR, flooding: true }, { type: "covered" }, GAME);
+		expect(covered.state.sliversInAir).toBe(true);
+	});
+});
+
 describe("screen flow", () => {
 	it("a first PLAY opens the settle bowl in the play dot's colour instead of playing", () => {
 		const step = stepFlow(
@@ -598,6 +635,7 @@ describe("which screen shows", () => {
 						flooding,
 						bloom: null,
 						kioskStarted: false,
+						sliversInAir: false,
 					};
 					const expected = EXPECTED[phase][from ?? "none"][i];
 					const overName = over

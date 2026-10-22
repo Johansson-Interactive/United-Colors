@@ -39,8 +39,12 @@ _Avoid_: death, hit
 The running total a run earns from catches.
 _Avoid_: points
 
+**Score sliver**:
+One point of a catch, on its way into the score in play. A catch sends its score slivers one after another from where it happened, straight to the middle of the score at one steady speed, and the score counts each as it arrives, where it vanishes. A catch far from the score takes longer to count in than a near one, and a near catch can count in before an earlier, far one. Each wears its catch's colour. Score slivers in the air freeze with the run when it pauses, and the game over waits for the last of them to arrive.
+_Avoid_: point, sliver (on its own), particle, feed
+
 **Combo**:
-A run of catches, small dots and point dots alike, each within a split second of the one before. Every catch after the first in a combo is worth more than it would be alone, without limit. In play, each such catch rings a small amber circle where it landed, and the score turns amber while it counts the combo in.
+A run of catches, small dots and point dots alike, each within a split second of the one before. Every catch after the first in a combo is worth more than it would be alone, without limit. In play, each such catch rings a small amber circle where it landed, and the score turns amber as the combo's first score sliver arrives, until none of them is left in the air.
 _Avoid_: streak, chain, multiplier
 
 **Combo step**:

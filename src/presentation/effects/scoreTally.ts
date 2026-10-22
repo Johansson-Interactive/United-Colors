@@ -1,101 +1,97 @@
 import { layoutDotMatrix } from "../dotmatrix/layout";
-import {
-	fitBatch,
-	POP_DOT_CELL,
-	POP_DOT_PX,
-	POP_DOT_SPRITE,
-	POP_GLOW_CELL,
-	POP_GLOW_SPRITE,
-	type SpriteBatch,
-	type SpriteKit,
-	spriteBatch,
-} from "../dotSprites";
 import { COMBO_AMBER } from "../theme/theme";
 import { BURST_COLORS, NOT_STARTED } from "./burstFrames";
 import type { EffectReducer } from "./effectLane";
-import { SCORE_BUMP_MS, scoreBumpScale } from "./scoreBump";
+import { SCORE_BUMP_MS } from "./scoreBump";
 
 /**
- * Pure stepper behind the score meter: how the total takes a catch in. A catch no longer pops
- * where it landed; it goes to the top, where the total counts it in one point at a time, so
- * the catch is seen arriving and the total is seen growing: the catch's points queue up as a
- * ribbon of dots beside the total, in the catch's colour, and the total eats them front first,
- * the ribbon crawling in.
+ * Pure stepper behind the score meter: how the total takes a catch in. A catch sends its points
+ * to the total as score slivers (see GLOSSARY.md): one after another from where it happened,
+ * every `tick` ms (quicker for a big catch, so none takes much longer than DRAIN_MS), each
+ * flying straight at the total's middle at the stage's one steady speed (see sliverSpeed) and
+ * counted as it reaches the edge of the total's digits, where it vanishes. So a catch far from
+ * the total takes longer to count in than a near one, catches stream in side by side, and a
+ * near catch can count in before an earlier, far one. While a combo's slivers (those in combo
+ * amber, see payColor) count in, the total turns amber too: from the first of them arriving
+ * until none of them is left to arrive (see tallyInCombo).
  *
- * Each catch keeps its own schedule once stamped: it holds for a beat, then drains one point
- * every `tick` ms (quicker for a big catch, so none takes much longer than DRAIN_MS), after
- * the catch before it has drained. Each point flies to the total's last digit and is counted
- * when it lands, with a small bump; a catch's last point bumps the total hard. A catch past
- * MAX_PENDING is counted at once, so a long combo never queues further than the eye follows.
- * While a combo's catches (those in combo amber, see payColor) count in, the total turns amber
- * too, from the first of their points leaving until the last has landed (see tallyInCombo).
+ * The tally's time is its effect lane's, which stands still while the run is paused (see
+ * effectLane.ts), so slivers in the air freeze with the field and fly on once play resumes.
  *
  * The list lives on the UI thread, as the bursts do (see burstFrames.ts): the JS thread queues
- * a catch (withCatch), the UI thread stamps and schedules it on its first frame and drops it
- * when it is done (advanceTally), and packs each frame's dots (packTally).
+ * a catch (withCatch), the UI thread stamps it on its first frame, aiming its slivers at the
+ * total as it then stands, and drops it when it is done (advanceTally). What a frame draws is
+ * tallyPack.ts's.
  */
 
-/** The total's dot spacing (px) and its dot radius as a fraction of it, as the HUD had it */
+/** The total's dot spacing (px) */
 export const SCORE_PITCH = 7;
-const SCORE_DOT_SCALE = 0.38;
-/** The meter's offset below the stage's top (px), and the room it keeps above the total for its glow and its bump */
+/** The total's offset below the stage's top (px), and the room it keeps above it for its glow and its bump */
 export const SCORE_TOP = 10;
 const SCORE_PAD = 10;
-/** The total's centre line below the meter's top (px) */
-export const SCORE_METER_CY = SCORE_PAD + (SCORE_PITCH * 7) / 2;
-/**
- * The meter's height: the total with SCORE_PAD above and below it, room enough for its glow at
- * the peak of its bump; the feed's ribbon and its points in the air stay within the total's rows
- */
-export const SCORE_METER_HEIGHT = 2 * SCORE_METER_CY;
 /** The total's centre line below the stage's top (px), where the paused score returns to */
-export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_METER_CY;
-/** The feed's ribbon: its dot spacing, how many rows, its gap from the total, its dot radius */
-export const FEED_PITCH = 5;
-export const FEED_ROWS = 3;
-const FEED_GAP = 12;
-const FEED_DOT_SCALE = 0.42;
-/** How long a catch is seen before it drains (ms) */
-export const HOLD_MS = 140;
-/** About how long a catch takes to drain, and the bounds on the time between its points (ms) */
+export const SCORE_CENTRE_Y = SCORE_TOP + SCORE_PAD + (SCORE_PITCH * 7) / 2;
+/** About how long a catch takes to send its slivers, and the bounds on the time between them (ms) */
 export const DRAIN_MS = 480;
 export const TICK_MIN_MS = 24;
 export const TICK_MAX_MS = 60;
-/** How long a point is in the air (ms) */
-export const FLIGHT_MS = 120;
-/** How long a dot takes to pop in (ms), and the feed's stagger between dots */
-const POP_IN_MS = 110;
-const FEED_APPEAR_MS = 8;
-/** A point's bump, as a fraction of a catch's last */
-const POINT_BUMP = 0.35;
-/** Catches queued at once; one more counts the oldest at once */
-export const MAX_PENDING = 8;
+/** How long a sliver takes from the stage's far bottom corner to the total (ms); sets the speed */
+export const FAR_FLIGHT_MS = 600;
 /** The combo's amber, by index into BURST_COLORS */
-const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
-/** Rows of a glyph */
-const GLYPH_ROWS = 7;
+export const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
+/** Rows and columns of a glyph */
+export const GLYPH_ROWS = 7;
 const GLYPH_COLS = 5;
-const DIGIT_CELLS = GLYPH_COLS + 1;
+/** Columns a digit takes, its gap included */
+export const DIGIT_CELLS = GLYPH_COLS + 1;
 
 /** Each digit's dots as (col, row) pairs within its 5x7 cell */
-const DIGIT_DOTS: readonly (readonly number[])[] = "0123456789".split("").map((digit) => {
+export const DIGIT_DOTS: readonly (readonly number[])[] = "0123456789".split("").map((digit) => {
 	const dots: number[] = [];
 	for (const dot of layoutDotMatrix(digit).dots) dots.push(dot.col, dot.row);
 	return dots;
 });
 
+/** The columns a number takes in the dot alphabet, gaps included */
+export function digitCols(value: number): number {
+	"worklet";
+	const digits = value < 10 ? 1 : value < 100 ? 2 : value < 1000 ? 3 : String(value).length;
+	return digits * DIGIT_CELLS - 1;
+}
+
+/** Where the total stands: its centre (stage px), and the slivers' speed (px/ms, see sliverSpeed) */
+export interface TallyGeometry {
+	cx: number;
+	cy: number;
+	speed: number;
+}
+
+/**
+ * Where the total stands on a stage `width` by `height`: at the top centre, its slivers at
+ * the one speed that brings one from the far bottom corner to its centre in FAR_FLIGHT_MS
+ */
+export function placeTotal(width: number, height: number): TallyGeometry {
+	const cy = SCORE_CENTRE_Y;
+	return { cx: width / 2, cy, speed: Math.hypot(width / 2, height - cy) / FAR_FLIGHT_MS };
+}
+
 /** One catch on its way into the total */
 export interface TallyCatch {
-	id: number;
 	value: number;
 	/** Index into BURST_COLORS */
 	color: number;
-	/** The UI frame time it was first drawn at, or NOT_STARTED */
-	at: number;
-	/** When its first point leaves (set with `at`) */
-	start: number;
-	/** The time between its points (ms) */
+	/** Where it happened (stage px), which its slivers leave from */
+	x: number;
+	y: number;
+	/** The time between its slivers (ms) */
 	tick: number;
+	/** The lane time it was first drawn at, which its first sliver leaves at, or NOT_STARTED */
+	at: number;
+	/** Where its slivers vanish, on the edge of the total's digits (set with `at`) */
+	toX: number;
+	toY: number;
+	/** How long each of its slivers is in the air (ms, set with `at`) */
+	flight: number;
 }
 
 /** The score as the meter shows it */
@@ -104,109 +100,112 @@ export interface Tally {
 	settled: number;
 	/** The catches still on their way, oldest first */
 	catches: TallyCatch[];
-	/** When the last point of a dropped catch landed, so its bump plays out (NOT_STARTED before any) */
+	/** When the last sliver of a dropped catch landed, so its bump plays out (NOT_STARTED before any) */
 	lastLand: number;
+	/** A dropped catch was in combo amber and amber catches are still on their way (see tallyInCombo) */
+	amberLit: boolean;
+	/** Where the total stands, which a new catch aims its slivers at */
+	geometry: TallyGeometry;
 }
 
-export function createTally(score: number): Tally {
-	return { settled: score, catches: [], lastLand: NOT_STARTED };
+/** Where the total stands before the stage is laid out: slivers from anywhere count at once */
+export const UNPLACED: TallyGeometry = { cx: 0, cy: 0, speed: Number.POSITIVE_INFINITY };
+
+export function createTally(score: number, geometry: TallyGeometry): Tally {
+	"worklet";
+	return { settled: score, catches: [], lastLand: NOT_STARTED, amberLit: false, geometry };
 }
 
-/** The time between a catch's points: DRAIN_MS spread over them, within the bounds */
+/** `tally` started over at a new run's `score`, standing where it stood */
+export function resetTally(tally: Tally, score: number): Tally {
+	"worklet";
+	return createTally(score, tally.geometry);
+}
+
+/** `tally` with the total standing at `geometry`, for the catches still to be stamped */
+export function withGeometry(tally: Tally, geometry: TallyGeometry): Tally {
+	"worklet";
+	return { ...tally, geometry };
+}
+
+/** The time between a catch's slivers: DRAIN_MS spread over them, within the bounds */
 export function tickFor(value: number): number {
 	return Math.max(TICK_MIN_MS, Math.min(TICK_MAX_MS, DRAIN_MS / Math.max(1, value)));
 }
 
-/** A catch to queue, before the UI thread stamps it */
-export function newCatch(id: number, value: number, color: string): TallyCatch {
+/** A catch worth `value` in `color` at (`x`, `y`), to queue before the UI thread stamps it */
+export function newCatch(value: number, color: string, x: number, y: number): TallyCatch {
 	const index = BURST_COLORS.indexOf(color);
 	return {
-		id,
 		value,
 		color: index < 0 ? BURST_COLORS.length - 1 : index,
-		at: NOT_STARTED,
-		start: 0,
+		x,
+		y,
 		tick: tickFor(value),
+		at: NOT_STARTED,
+		toX: x,
+		toY: y,
+		flight: 0,
 	};
 }
 
-/** `tally` with `c` queued at the end; past MAX_PENDING the oldest is counted at once */
+/** `tally` with `c` queued at the end */
 export function withCatch(tally: Tally, c: TallyCatch): Tally {
 	"worklet";
-	let settled = tally.settled;
-	const catches: TallyCatch[] = [];
-	const drop = Math.max(0, tally.catches.length - (MAX_PENDING - 1));
-	for (let i = 0; i < tally.catches.length; i++) {
-		if (i < drop) settled += tally.catches[i].value;
-		else catches.push(tally.catches[i]);
-	}
 	// A copy made here, so the thread that stamps it owns it
-	catches.push({
-		id: c.id,
-		value: c.value,
-		color: c.color,
-		at: c.at,
-		start: c.start,
-		tick: c.tick,
-	});
-	return { settled, catches, lastLand: tally.lastLand };
-}
-
-/** When catch `c`'s last point leaves */
-function lastDepart(c: TallyCatch): number {
-	"worklet";
-	return c.start + (c.value - 1) * c.tick;
-}
-
-/** When catch `c` is over: its last point has landed */
-function endOf(c: TallyCatch): number {
-	"worklet";
-	return lastDepart(c) + FLIGHT_MS;
-}
-
-/** How many of `c`'s points have left by `now` */
-function departed(c: TallyCatch, now: number): number {
-	"worklet";
-	if (c.at === NOT_STARTED || now < c.start) return 0;
-	return Math.min(c.value, Math.floor((now - c.start) / c.tick) + 1);
-}
-
-/** How many of `c`'s points have landed by `now` */
-function landed(c: TallyCatch, now: number): number {
-	"worklet";
-	return departed(c, now - FLIGHT_MS);
+	return { ...tally, catches: [...tally.catches, { ...c }] };
 }
 
 /**
- * Advance the tally to frame time `now`: a catch not yet drawn starts now, scheduled after the
- * one before it (stamped in place), and a catch that is over is dropped into the settled score.
- * Returns `tally` itself unless one was dropped.
+ * Aim `c` at a total of `score` standing at `geometry`: its slivers fly straight toward the
+ * total's centre and vanish where that line meets the edge of the digits, at the geometry's
+ * speed. None fly from inside the digits.
  */
-export function advanceTally(tally: Tally, now: number): Tally {
+export function aimCatch(c: TallyCatch, score: number, geometry: TallyGeometry): void {
 	"worklet";
-	const list = tally.catches;
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		if (c.at !== NOT_STARTED) continue;
-		c.at = now;
-		const after = i > 0 ? lastDepart(list[i - 1]) + list[i - 1].tick : now;
-		c.start = Math.max(now + HOLD_MS, after);
-	}
-	let over = 0;
-	while (over < list.length && now >= endOf(list[over])) over++;
-	if (over === 0) return tally;
-	let settled = tally.settled;
-	let lastLand = tally.lastLand;
-	for (let i = 0; i < over; i++) {
-		settled += list[i].value;
-		lastLand = lastDepart(list[i]) + FLIGHT_MS;
-	}
-	const catches: TallyCatch[] = [];
-	for (let i = over; i < list.length; i++) catches.push(list[i]);
-	return { settled, catches, lastLand };
+	const dx = c.x - geometry.cx;
+	const dy = c.y - geometry.cy;
+	const distance = Math.hypot(dx, dy);
+	const halfWidth = (digitCols(score) * SCORE_PITCH) / 2;
+	const halfHeight = (GLYPH_ROWS * SCORE_PITCH) / 2;
+	// How far from the centre the line to the catch leaves the digits' box
+	const inside = Math.min(
+		dx === 0 ? Number.POSITIVE_INFINITY : (halfWidth * distance) / Math.abs(dx),
+		dy === 0 ? Number.POSITIVE_INFINITY : (halfHeight * distance) / Math.abs(dy),
+	);
+	const way = Math.max(0, distance - inside);
+	const share = distance === 0 ? 0 : way / distance;
+	c.toX = c.x - dx * share;
+	c.toY = c.y - dy * share;
+	c.flight = way / geometry.speed;
 }
 
-/** The score the meter shows at `now`: every point that has landed */
+/** When catch `c`'s last sliver leaves */
+function lastDepart(c: TallyCatch): number {
+	"worklet";
+	return c.at + (c.value - 1) * c.tick;
+}
+
+/** When catch `c` is over: its last sliver has landed */
+function endOf(c: TallyCatch): number {
+	"worklet";
+	return lastDepart(c) + c.flight;
+}
+
+/** How many of `c`'s slivers have left by `now` */
+export function departed(c: TallyCatch, now: number): number {
+	"worklet";
+	if (c.at === NOT_STARTED || now < c.at) return 0;
+	return Math.min(c.value, Math.floor((now - c.at) / c.tick) + 1);
+}
+
+/** How many of `c`'s slivers have landed by `now` */
+export function landed(c: TallyCatch, now: number): number {
+	"worklet";
+	return departed(c, now - c.flight);
+}
+
+/** The score the meter shows at `now`: every sliver that has landed */
 export function shownScore(tally: Tally, now: number): number {
 	"worklet";
 	let shown = tally.settled;
@@ -215,20 +214,55 @@ export function shownScore(tally: Tally, now: number): number {
 }
 
 /**
- * Whether the total shows in combo amber at `now`: while the catch counting in, the first
- * with a point still to land, is in amber and its first point has left. A combo's catches
- * drain back to back, so the total stays amber across them, and turns back as the last
- * point of the combo's last catch lands, or as a catch outside the combo starts to count.
+ * Advance the tally to lane time `now`: a catch not yet drawn starts now, aimed at the total as
+ * it stands (stamped in place), and a catch that is over is dropped into the settled score.
+ * Returns `tally` itself unless one was dropped.
  */
-export function tallyInCombo(tally: Tally, now: number): boolean {
+export function advanceTally(tally: Tally, now: number): Tally {
 	"worklet";
 	const list = tally.catches;
 	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		if (landed(c, now) >= c.value) continue;
-		return c.color === AMBER && departed(c, now) > 0;
+		if (list[i].at !== NOT_STARTED) continue;
+		list[i].at = now;
+		aimCatch(list[i], shownScore(tally, now), tally.geometry);
 	}
-	return false;
+	let settled = tally.settled;
+	let lastLand = tally.lastLand;
+	let amberLit = tally.amberLit;
+	let amberLeft = false;
+	const catches: TallyCatch[] = [];
+	for (let i = 0; i < list.length; i++) {
+		const c = list[i];
+		if (now >= endOf(c)) {
+			settled += c.value;
+			lastLand = Math.max(lastLand, endOf(c));
+			if (c.color === AMBER) amberLit = true;
+		} else {
+			catches.push(c);
+			if (c.color === AMBER) amberLeft = true;
+		}
+	}
+	if (catches.length === list.length) return tally;
+	return { ...tally, settled, catches, lastLand, amberLit: amberLit && amberLeft };
+}
+
+/**
+ * Whether the total shows in combo amber at `now`: from the first amber sliver arriving until
+ * no amber sliver is left to arrive. Slivers of catches outside the combo may land in between;
+ * the total stays amber across them.
+ */
+export function tallyInCombo(tally: Tally, now: number): boolean {
+	"worklet";
+	let arrived = tally.amberLit;
+	let left = false;
+	for (let i = 0; i < tally.catches.length; i++) {
+		const c = tally.catches[i];
+		if (c.color !== AMBER) continue;
+		const n = landed(c, now);
+		if (n > 0) arrived = true;
+		if (n < c.value) left = true;
+	}
+	return arrived && left;
 }
 
 /** Whether nothing is moving at `now`, so the frame clock may stop */
@@ -240,304 +274,15 @@ export function tallyIdle(tally: Tally, now: number): boolean {
 	);
 }
 
+/** Whether any sliver is still to arrive, so the game over waits (see screenFlow.ts) */
+export function sliversInAir(tally: Tally): boolean {
+	"worklet";
+	return tally.catches.length > 0;
+}
+
 /** The score meter's effect lane: catches queued on the JS thread, counted into the total on the UI thread */
 export const TALLY: EffectReducer<Tally, TallyCatch> = {
 	add: withCatch,
 	advance: advanceTally,
 	idle: tallyIdle,
 };
-
-/** Where the meter draws: the total's centre */
-export interface TallyGeometry {
-	cx: number;
-	cy: number;
-}
-
-/** A dot's fields in TallyFrame.dots */
-export const DOT_STRIDE = 5;
-
-/** Everything the meter draws in a frame, rewritten in place each frame */
-export interface TallyFrame {
-	/** The score drawn */
-	shown: number;
-	/** Whether the total shows in combo amber (see tallyInCombo) */
-	combo: boolean;
-	/** The total's dots: x, y, radius per dot */
-	total: number[];
-	/** The feed's dots: x, y, radius, colour index (BURST_COLORS), alpha per dot */
-	dots: number[];
-}
-
-export function tallyFrame(): TallyFrame {
-	"worklet";
-	return { shown: 0, combo: false, total: [], dots: [] };
-}
-
-/** Out-quad: quick off the mark, settling in */
-function easeOut(t: number): number {
-	"worklet";
-	const left = 1 - Math.min(1, Math.max(0, t));
-	return 1 - left * left;
-}
-
-/** In-out: a point leaves gently and arrives with purpose */
-function easeInOut(t: number): number {
-	"worklet";
-	const u = Math.min(1, Math.max(0, t));
-	return u * u * (3 - 2 * u);
-}
-
-/** The columns a number takes in the dot alphabet, gaps included */
-function digitCols(value: number): number {
-	"worklet";
-	const digits = value < 10 ? 1 : value < 100 ? 2 : value < 1000 ? 3 : String(value).length;
-	return digits * DIGIT_CELLS - 1;
-}
-
-/**
- * Lay the digits of `value` into `out` at `pitch`, the text's box with its left at `left` and
- * its vertical centre at `cy`, scaled by `scale` about (`ox`, `oy`), each dot of radius `radius`
- */
-function layDigits(
-	out: number[],
-	value: number,
-	pitch: number,
-	left: number,
-	cy: number,
-	radius: number,
-	scale: number,
-	ox: number,
-	oy: number,
-): void {
-	"worklet";
-	const text = String(value);
-	const top = cy - (GLYPH_ROWS / 2) * pitch;
-	for (let i = 0; i < text.length; i++) {
-		const dots = DIGIT_DOTS[text.charCodeAt(i) - 48];
-		const cellLeft = left + i * DIGIT_CELLS * pitch;
-		for (let k = 0; k < dots.length; k += 2) {
-			const x = cellLeft + (dots[k] + 0.5) * pitch;
-			const y = top + (dots[k + 1] + 0.5) * pitch;
-			out.push(ox + (x - ox) * scale, oy + (y - oy) * scale, radius * scale);
-		}
-	}
-}
-
-/** A point in the air from (`sx`, `sy`) to (`lx`, `ly`), `age` ms after leaving, in `color` */
-function layFlight(
-	out: number[],
-	sx: number,
-	sy: number,
-	lx: number,
-	ly: number,
-	age: number,
-	radius: number,
-	color: number,
-): void {
-	"worklet";
-	const e = easeInOut(age / FLIGHT_MS);
-	out.push(sx + (lx - sx) * e, sy + (ly - sy) * e, radius * (1 - 0.4 * e), color, 1);
-}
-
-/**
- * The feed: every pending point in a ribbon FEED_ROWS high to the right of the total, point
- * `g` of the queue in row `g % FEED_ROWS` of column `g / FEED_ROWS`, the whole ribbon crawling
- * toward the total by one point per tick, so a column slides in as its points leave
- */
-function packFeed(
-	list: readonly TallyCatch[],
-	now: number,
-	totalRight: number,
-	cy: number,
-	landX: number,
-	landY: number,
-	out: number[],
-): void {
-	"worklet";
-	const x0 = totalRight + FEED_GAP;
-	const radius = FEED_PITCH * FEED_DOT_SCALE;
-	// How far the ribbon has crawled: the points gone, and the way toward the next to go
-	let gone = 0;
-	let crawl = 0;
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		const d = departed(c, now);
-		gone += d;
-		if (d < c.value) {
-			const next = c.at === NOT_STARTED ? Number.POSITIVE_INFINITY : c.start + d * c.tick;
-			crawl = gone + Math.max(0, 1 - (next - now) / c.tick);
-			break;
-		}
-	}
-	if (crawl === 0) crawl = gone;
-	let g = 0;
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		const d = departed(c, now);
-		const l = landed(c, now);
-		for (let k = 0; k < c.value; k++, g++) {
-			const row = g % FEED_ROWS;
-			const col = Math.floor(g / FEED_ROWS);
-			const y = cy + (row - (FEED_ROWS - 1) / 2) * FEED_PITCH;
-			if (k < l) continue;
-			if (k < d) {
-				// Left from where its column stood as it went
-				const sx = x0 + (col - (g + 1) / FEED_ROWS) * FEED_PITCH;
-				layFlight(out, sx, y, landX, landY, now - (c.start + k * c.tick), radius, c.color);
-				continue;
-			}
-			if (c.at === NOT_STARTED) continue;
-			const since = now - (c.at + k * FEED_APPEAR_MS);
-			if (since < 0) continue;
-			const x = x0 + (col - crawl / FEED_ROWS) * FEED_PITCH;
-			out.push(x, y, radius * easeOut(since / POP_IN_MS), c.color, 1);
-		}
-	}
-}
-
-/**
- * Pack what the meter draws at frame time `now` into `out`, with the total centred at the
- * geometry's (cx, cy)
- */
-export function packTally(
-	tally: Tally,
-	now: number,
-	geometry: TallyGeometry,
-	out: TallyFrame,
-): void {
-	"worklet";
-	const { cx, cy } = geometry;
-	const list = tally.catches;
-	out.total.length = 0;
-	out.dots.length = 0;
-
-	// The total, bumped by the newest landing: hard for a catch's last point, lightly otherwise
-	const shown = shownScore(tally, now);
-	out.shown = shown;
-	out.combo = tallyInCombo(tally, now);
-	let bumpAt = tally.lastLand;
-	let bumpFinal = true;
-	for (let i = 0; i < list.length; i++) {
-		const c = list[i];
-		const n = landed(c, now);
-		if (n === 0) continue;
-		const at = c.start + (n - 1) * c.tick + FLIGHT_MS;
-		if (at > bumpAt) {
-			bumpAt = at;
-			bumpFinal = n === c.value;
-		}
-	}
-	let scale = 1;
-	if (bumpAt !== NOT_STARTED) {
-		const swell = scoreBumpScale((now - bumpAt) / SCORE_BUMP_MS) - 1;
-		scale = 1 + swell * (bumpFinal ? 1 : POINT_BUMP);
-	}
-	const totalWidth = digitCols(shown) * SCORE_PITCH;
-	const totalLeft = cx - totalWidth / 2;
-	const totalRight = cx + totalWidth / 2;
-	layDigits(
-		out.total,
-		shown,
-		SCORE_PITCH,
-		totalLeft,
-		cy,
-		SCORE_PITCH * SCORE_DOT_SCALE,
-		scale,
-		cx,
-		cy,
-	);
-	// Where a point lands: the last digit's centre
-	const landX = totalRight - (GLYPH_COLS / 2) * SCORE_PITCH;
-	const landY = cy;
-
-	packFeed(list, now, totalRight, cy, landX, landY, out.dots);
-}
-
-/** The meter's dots as sprites, for two tinted drawAtlas calls (see dotSprites.ts) */
-export interface TallySprites<P, R> {
-	/** Every dot's glow, then every dot, tinted by its colour */
-	glows: SpriteBatch<P, R>;
-	dots: SpriteBatch<P, R>;
-	/** The glow and dot cells (see POP_GLOW_SPRITE, POP_DOT_SPRITE) */
-	glowCell: R;
-	dotCell: R;
-	/** One tint per dot drawn, rewritten each frame; grown as a frame needs */
-	tints: Float32Array[];
-}
-
-/** Fresh buffers to pack into, for the thread that draws the meter (see SpriteKit) */
-export function tallySprites<P, R>(kit: SpriteKit<P, R>): TallySprites<P, R> {
-	"worklet";
-	return {
-		glows: spriteBatch(kit),
-		dots: spriteBatch(kit),
-		glowCell: kit.rect(POP_GLOW_SPRITE),
-		dotCell: kit.rect(POP_DOT_SPRITE),
-		tints: [],
-	};
-}
-
-/**
- * Pack a packed frame's dots as sprites into `out`: the total in `scoreColor`, or in combo
- * amber while the frame says so, every other
- * dot in its colour from `colors` (BURST_COLORS as Skia colours) at its alpha
- */
-export function packTallySprites<P, R>(
-	frame: TallyFrame,
-	colors: readonly Float32Array[],
-	scoreColor: Float32Array,
-	out: TallySprites<P, R>,
-): void {
-	"worklet";
-	const totalCount = frame.total.length / 3;
-	const dotCount = frame.dots.length / DOT_STRIDE;
-	const n = totalCount + dotCount;
-	const { glows, dots, tints } = out;
-	while (tints.length < n) tints.push(new Float32Array(4));
-	fitBatch(glows, n, out.glowCell, colors[0]);
-	fitBatch(dots, n, out.dotCell, colors[0]);
-	const glowCells = glows.cells[n];
-	const glowColors = glows.colors[n];
-	const dotCells = dots.cells[n];
-	const dotColors = dots.colors[n];
-	const glowHalf = POP_GLOW_CELL / 2;
-	const dotHalf = POP_DOT_CELL / 2;
-	const totalColor = frame.combo ? colors[AMBER] : scoreColor;
-	let d = 0;
-	for (let i = 0; i < n; i++) {
-		let x: number;
-		let y: number;
-		let radius: number;
-		const tint = tints[i];
-		if (i < totalCount) {
-			const o = i * 3;
-			x = frame.total[o];
-			y = frame.total[o + 1];
-			radius = frame.total[o + 2];
-			tint[0] = totalColor[0];
-			tint[1] = totalColor[1];
-			tint[2] = totalColor[2];
-			tint[3] = totalColor[3];
-		} else {
-			const o = (i - totalCount) * DOT_STRIDE;
-			x = frame.dots[o];
-			y = frame.dots[o + 1];
-			radius = frame.dots[o + 2];
-			const color = colors[frame.dots[o + 3]];
-			tint[0] = color[0];
-			tint[1] = color[1];
-			tint[2] = color[2];
-			tint[3] = color[3] * frame.dots[o + 4];
-		}
-		// Both cells scale about their centres, which land on the dot's; the glow cell is the
-		// dot cell's glow, so one scale sizes both
-		const s = radius / POP_DOT_PX;
-		glows.place[d](s, 0, x - s * glowHalf, y - s * glowHalf);
-		glowCells[d] = out.glowCell;
-		glowColors[d] = tint;
-		dots.place[d](s, 0, x - s * dotHalf, y - s * dotHalf);
-		dotCells[d] = out.dotCell;
-		dotColors[d] = tint;
-		d++;
-	}
-}
