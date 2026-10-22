@@ -1,11 +1,12 @@
 import { createEffectLane, type EffectReducer } from "../../presentation/effects/effectLane";
 import {
 	createTally,
+	freezeTally,
 	newCatch,
 	shownScore,
 	TALLY,
 	type Tally,
-	type TallyCatch,
+	type TallyItem,
 } from "../../presentation/effects/scoreTally";
 import { WHITE } from "../../presentation/theme/theme";
 
@@ -261,7 +262,7 @@ describe("effect lane", () => {
 
 /** Frames 16 ms apart from `from` while the clock runs, up to `until`; the last frame's time */
 function runFrames(
-	{ frame, flush, running }: ReturnType<typeof setup<Tally, TallyCatch>>,
+	{ frame, flush, running }: ReturnType<typeof setup<Tally, TallyItem>>,
 	from: number,
 	until = from + 10_000,
 ): number {
@@ -276,11 +277,14 @@ function runFrames(
 	return now;
 }
 
+/** The meter's geometry on a 400 by 800 stage */
+const GEOMETRY = { cx: 200, cy: 40, speed: 1 };
+
 describe("score tally lane", () => {
 	it("counts each catch into the total completely, then stops the clock", () => {
 		const meter = setup(TALLY, createTally(40));
-		meter.lane.add((id) => newCatch(id, 3, WHITE));
-		meter.lane.add((id) => newCatch(id, 5, WHITE));
+		meter.lane.add((id) => newCatch(id, 3, WHITE, 200, 400, 48, GEOMETRY));
+		meter.lane.add((id) => newCatch(id, 5, WHITE, 100, 600, 48, GEOMETRY));
 		const end = runFrames(meter, 1000);
 		expect(meter.running()).toBe(false);
 		expect(meter.drawn().catches).toEqual([]);
@@ -289,7 +293,7 @@ describe("score tally lane", () => {
 
 	it("still stops the clock after a reset to a new run's score mid-count", () => {
 		const meter = setup(TALLY, createTally(40));
-		meter.lane.add((id) => newCatch(id, 9, WHITE));
+		meter.lane.add((id) => newCatch(id, 9, WHITE, 200, 400, 49, GEOMETRY));
 		runFrames(meter, 1000, 1100);
 		expect(meter.running()).toBe(true);
 		meter.replace(createTally(0));
@@ -300,9 +304,23 @@ describe("score tally lane", () => {
 
 	it("gives each catch the lane's id", () => {
 		const meter = setup(TALLY, createTally(0));
-		meter.lane.add((id) => newCatch(id, 1, WHITE));
-		meter.lane.add((id) => newCatch(id, 1, WHITE));
+		meter.lane.add((id) => newCatch(id, 1, WHITE, 200, 400, 1, GEOMETRY));
+		meter.lane.add((id) => newCatch(id, 1, WHITE, 200, 400, 1, GEOMETRY));
 		meter.frame(1000);
 		expect(meter.drawn().catches.map((c) => c.id)).toEqual([0, 1]);
+	});
+
+	it("stops the clock while frozen and runs it again to fly the slivers home", () => {
+		const meter = setup(TALLY, createTally(0));
+		meter.lane.add((id) => newCatch(id, 3, WHITE, 200, 400, 3, GEOMETRY));
+		runFrames(meter, 1000, 1100);
+		meter.lane.add(() => freezeTally(true));
+		runFrames(meter, 1116);
+		expect(meter.running()).toBe(false);
+		expect(meter.drawn().catches).toHaveLength(1);
+		meter.lane.add(() => freezeTally(false));
+		const end = runFrames(meter, 9000);
+		expect(meter.running()).toBe(false);
+		expect(shownScore(meter.drawn(), end)).toBe(3);
 	});
 });

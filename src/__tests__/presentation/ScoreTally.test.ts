@@ -7,19 +7,22 @@ import {
 	createTally,
 	DOT_STRIDE,
 	DRAIN_MS,
-	FEED_PITCH,
-	FEED_ROWS,
-	FLIGHT_MS,
-	HOLD_MS,
-	MAX_PENDING,
+	FAR_FLIGHT_MS,
+	flightFor,
+	freezeTally,
 	newCatch,
 	packTally,
 	packTallySprites,
-	SCORE_METER_CY,
-	SCORE_METER_HEIGHT,
+	resetTally,
+	SCORE_CENTRE_Y,
 	SCORE_PITCH,
+	SCORE_TOP,
+	SLIVER_RADIUS,
 	shownScore,
+	sliverSpeed,
+	sliversInAir,
 	type Tally,
+	type TallyCatch,
 	type TallyFrame,
 	TICK_MAX_MS,
 	TICK_MIN_MS,
@@ -28,19 +31,35 @@ import {
 	tallyInCombo,
 	tallySprites,
 	tickFor,
-	withCatch,
+	withItem,
 } from "../../presentation/effects/scoreTally";
 import { COMBO_AMBER, WHITE } from "../../presentation/theme/theme";
 
 const PINK = BURST_COLORS[0];
 const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
-const GEOMETRY = { cx: 200, cy: 40 };
+/** One px per ms, so a sliver's flight in ms is its way to the digits' edge in px */
+const GEOMETRY = { cx: 200, cy: 40, speed: 1 };
+/** Half the height of the total's digits */
+const HALF_HEIGHT = (7 * SCORE_PITCH) / 2;
 
-/** A tally of `score` with `catches` queued, advanced at `now` so each is stamped */
-function tallyWith(score: number, catches: [value: number, color?: string][], now: number): Tally {
+/** A catch straight below the total, `distance` px beyond its digits' bottom edge */
+function catchBelow(id: number, value: number, color: string, distance: number) {
+	const y = GEOMETRY.cy + HALF_HEIGHT + distance;
+	return newCatch(id, value, color, GEOMETRY.cx, y, 0, GEOMETRY);
+}
+
+/**
+ * A tally of `score` with `catches` queued, each straight below the total at its distance
+ * (100 px unless given), advanced to `now` so each is stamped
+ */
+function tallyWith(
+	score: number,
+	catches: [value: number, color?: string, distance?: number][],
+	now: number,
+): Tally {
 	let tally = createTally(score);
-	catches.forEach(([value, color], i) => {
-		tally = withCatch(tally, newCatch(i, value, color ?? PINK));
+	catches.forEach(([value, color, distance], i) => {
+		tally = withItem(tally, catchBelow(i, value, color ?? PINK, distance ?? 100));
 	});
 	return advanceTally(tally, now);
 }
@@ -51,7 +70,7 @@ function pack(tally: Tally, now: number): TallyFrame {
 	return out;
 }
 
-/** The packed dots as objects */
+/** The packed slivers as objects */
 function dotsOf(frame: TallyFrame) {
 	const dots = [];
 	for (let o = 0; o < frame.dots.length; o += DOT_STRIDE) {
@@ -71,55 +90,92 @@ function totalOf(frame: TallyFrame) {
 	return dots;
 }
 
+/** The catch inside a queued item */
+function catchOf(item: ReturnType<typeof newCatch>): TallyCatch {
+	if (item.kind !== "catch") throw new Error("not a catch");
+	return item.catch;
+}
+
 describe("a catch's tick", () => {
-	it("spreads the drain over the catch's points, within the bounds", () => {
+	it("spreads the drain over the catch's slivers, within the bounds", () => {
 		expect(tickFor(1)).toBe(TICK_MAX_MS);
 		expect(tickFor(10)).toBe(DRAIN_MS / 10);
 		expect(tickFor(100)).toBe(TICK_MIN_MS);
 	});
 });
 
-describe("queuing a catch", () => {
-	it("takes its colour from the burst colours, white for any other", () => {
-		expect(newCatch(0, 5, COMBO_AMBER).color).toBe(AMBER);
-		expect(newCatch(0, 5, "#123456").color).toBe(BURST_COLORS.indexOf(WHITE));
+describe("a sliver's flight", () => {
+	it("brings a sliver from the stage's far bottom corner to the total in FAR_FLIGHT_MS", () => {
+		const speed = sliverSpeed(400, 800, SCORE_CENTRE_Y);
+		const geometry = { cx: 200, cy: SCORE_CENTRE_Y, speed };
+		const far = Math.hypot(200, 800 - SCORE_CENTRE_Y) / speed;
+		expect(far).toBeCloseTo(FAR_FLIGHT_MS);
+		// Its flight ends at the digits' edge, a little short of the centre
+		const flight = flightFor(0, 800, 0, geometry);
+		expect(flight).toBeLessThan(FAR_FLIGHT_MS);
+		expect(flight).toBeGreaterThan(FAR_FLIGHT_MS * 0.9);
+	});
+
+	it("flies at one steady speed, so twice as far takes twice as long", () => {
+		const near = catchOf(catchBelow(0, 1, PINK, 100)).flight;
+		const far = catchOf(catchBelow(0, 1, PINK, 200)).flight;
+		expect(near).toBeCloseTo(100);
+		expect(far).toBeCloseTo(2 * near);
+	});
+
+	it("ends at the side of the digits for a catch level with the total, wider digits sooner", () => {
+		const x = GEOMETRY.cx + 150;
+		const one = flightFor(x, GEOMETRY.cy, 7, GEOMETRY);
+		const three = flightFor(x, GEOMETRY.cy, 777, GEOMETRY);
+		expect(one).toBeCloseTo(150 - (5 * SCORE_PITCH) / 2);
+		expect(three).toBeCloseTo(150 - (17 * SCORE_PITCH) / 2);
+	});
+
+	it("takes no time from inside the digits", () => {
+		expect(flightFor(GEOMETRY.cx, GEOMETRY.cy, 5, GEOMETRY)).toBe(0);
+		expect(flightFor(GEOMETRY.cx + 1, GEOMETRY.cy + 2, 5, GEOMETRY)).toBe(0);
+	});
+});
+
+describe("queuing", () => {
+	it("takes a catch's colour from the burst colours, white for any other", () => {
+		expect(catchOf(catchBelow(0, 5, COMBO_AMBER, 10)).color).toBe(AMBER);
+		expect(catchOf(catchBelow(0, 5, "#123456", 10)).color).toBe(BURST_COLORS.indexOf(WHITE));
 	});
 
 	it("queues a copy the UI thread may stamp, leaving the queued catch unstamped", () => {
-		const c = newCatch(0, 5, PINK);
-		const tally = withCatch(createTally(0), c);
-		expect(tally.catches[0]).toEqual(c);
-		expect(tally.catches[0]).not.toBe(c);
-		expect(c.at).toBe(NOT_STARTED);
+		const item = catchBelow(0, 5, PINK, 10);
+		const tally = withItem(createTally(0), item);
+		expect(tally.catches[0]).toEqual(catchOf(item));
+		expect(tally.catches[0]).not.toBe(catchOf(item));
+		expect(catchOf(item).at).toBe(NOT_STARTED);
 	});
 
-	it("counts the oldest at once when more than MAX_PENDING would queue", () => {
+	it("queues every catch, however many are on their way", () => {
 		let tally = createTally(10);
-		for (let i = 0; i <= MAX_PENDING; i++) tally = withCatch(tally, newCatch(i, i + 1, PINK));
-		expect(tally.catches).toHaveLength(MAX_PENDING);
-		expect(tally.catches[0].id).toBe(1);
-		expect(tally.settled).toBe(11);
+		for (let i = 0; i < 20; i++) tally = withItem(tally, catchBelow(i, 1, PINK, 10));
+		expect(tally.catches).toHaveLength(20);
+		expect(tally.settled).toBe(10);
+	});
+
+	it("starts over at a new run's score, dropping everything on its way", () => {
+		const tally = withItem(tallyWith(10, [[5]], 1000), resetTally(0));
+		expect(tally.catches).toEqual([]);
+		expect(shownScore(tally, 2000)).toBe(0);
+		expect(sliversInAir(tally)).toBe(false);
 	});
 });
 
 describe("advancing the tally", () => {
-	it("stamps a new catch to hold a beat before its first point leaves", () => {
+	it("sends a catch's first sliver the moment it is first drawn", () => {
 		const tally = tallyWith(0, [[5]], 1000);
 		expect(tally.catches[0].at).toBe(1000);
-		expect(tally.catches[0].start).toBe(1000 + HOLD_MS);
 	});
 
-	it("schedules a catch after the one before it has drained", () => {
-		const tally = tallyWith(0, [[5], [3]], 1000);
-		const [first, second] = tally.catches;
-		expect(second.start).toBe(first.start + 5 * first.tick);
-	});
-
-	it("lets a catch that arrives late hold its own beat", () => {
-		let tally = tallyWith(0, [[9]], 1000);
-		tally = withCatch(tally, newCatch(1, 2, PINK));
-		tally = advanceTally(tally, 1500);
-		expect(tally.catches[1].start).toBe(1500 + HOLD_MS);
+	it("sends the slivers of catches side by side, none waiting on another", () => {
+		const tally = tallyWith(0, [[9], [3]], 1000);
+		expect(tally.catches.map((c) => c.at)).toEqual([1000, 1000]);
+		expect(dotsOf(pack(tally, 1001))).toHaveLength(2);
 	});
 
 	it("returns the same tally while nothing is over", () => {
@@ -127,34 +183,86 @@ describe("advancing the tally", () => {
 		expect(advanceTally(tally, 1001)).toBe(tally);
 	});
 
-	it("drops a catch once its last point has landed", () => {
+	it("drops a catch once its last sliver has landed", () => {
 		const tally = tallyWith(10, [[5]], 1000);
-		const c = tally.catches[0];
-		const lastDepart = c.start + 4 * c.tick;
-		const over = lastDepart + FLIGHT_MS;
+		const { tick } = tally.catches[0];
+		const over = 1000 + 4 * tick + 100;
 		expect(advanceTally(tally, over - 1).catches).toHaveLength(1);
 		const dropped = advanceTally(tally, over);
 		expect(dropped.catches).toHaveLength(0);
 		expect(dropped.settled).toBe(15);
-		expect(dropped.lastLand).toBe(lastDepart + FLIGHT_MS);
+		expect(dropped.lastLand).toBe(over);
 	});
 });
 
 describe("the score shown", () => {
-	it("counts a point in as it lands, and the whole catch once its last has", () => {
+	it("counts a sliver in as it reaches the total, and the whole catch once its last has", () => {
 		const tally = tallyWith(10, [[5]], 1000);
-		const { start, tick } = tally.catches[0];
-		expect(shownScore(tally, start)).toBe(10);
-		expect(shownScore(tally, start + FLIGHT_MS - 1)).toBe(10);
-		expect(shownScore(tally, start + FLIGHT_MS)).toBe(11);
-		expect(shownScore(tally, start + 2 * tick + FLIGHT_MS)).toBe(13);
-		expect(shownScore(tally, start + 4 * tick + FLIGHT_MS)).toBe(15);
-		expect(shownScore(tally, start + 40 * tick)).toBe(15);
+		const { tick } = tally.catches[0];
+		expect(shownScore(tally, 1099)).toBe(10);
+		expect(shownScore(tally, 1100)).toBe(11);
+		expect(shownScore(tally, 1100 + 2 * tick)).toBe(13);
+		expect(shownScore(tally, 1100 + 4 * tick)).toBe(15);
+		expect(shownScore(tally, 9999)).toBe(15);
+	});
+
+	it("counts a near catch in before an earlier, far one", () => {
+		const tally = tallyWith(
+			0,
+			[
+				[1, PINK, 400],
+				[1, PINK, 50],
+			],
+			1000,
+		);
+		expect(shownScore(tally, 1050)).toBe(1);
+		expect(shownScore(tally, 1399)).toBe(1);
+		expect(shownScore(tally, 1400)).toBe(2);
 	});
 
 	it("is the score alone before a catch is stamped", () => {
-		const tally = withCatch(createTally(7), newCatch(0, 5, PINK));
+		const tally = withItem(createTally(7), catchBelow(0, 5, PINK, 10));
 		expect(shownScore(tally, 99999)).toBe(7);
+	});
+
+	it("knows a sliver is on its way until the last has landed", () => {
+		expect(sliversInAir(createTally(3))).toBe(false);
+		const tally = tallyWith(0, [[2]], 1000);
+		expect(sliversInAir(tally)).toBe(true);
+		expect(sliversInAir(advanceTally(tally, 5000))).toBe(false);
+	});
+});
+
+describe("freezing with the run", () => {
+	/** A catch of 3 sent at 1000, frozen at 1050 and thawed at 5050 */
+	const frozen = () => advanceTally(withItem(tallyWith(0, [[3]], 1000), freezeTally(true)), 1050);
+	const thawed = () => advanceTally(withItem(frozen(), freezeTally(false)), 5050);
+
+	it("stands the slivers still in the air while frozen", () => {
+		const tally = frozen();
+		expect(dotsOf(pack(tally, 3000))).toEqual(dotsOf(pack(tally, 1050)));
+		expect(shownScore(tally, 3000)).toBe(0);
+		expect(advanceTally(tally, 3000).catches).toHaveLength(1);
+	});
+
+	it("flies them on from where they stood once thawed", () => {
+		const tally = thawed();
+		expect(dotsOf(pack(tally, 5050))).toEqual(dotsOf(pack(frozen(), 1050)));
+		// The first sliver had 50 ms left to fly
+		expect(shownScore(tally, 5099)).toBe(0);
+		expect(shownScore(tally, 5100)).toBe(1);
+	});
+
+	it("idles while frozen, but not while a freeze or a thaw waits for the next frame", () => {
+		const asked = withItem(tallyWith(0, [[3]], 1000), freezeTally(true));
+		expect(tallyIdle(asked, 1050)).toBe(false);
+		expect(tallyIdle(frozen(), 1050)).toBe(true);
+		expect(tallyIdle(withItem(frozen(), freezeTally(false)), 2000)).toBe(false);
+	});
+
+	it("keeps a freeze through a reset", () => {
+		const tally = withItem(frozen(), resetTally(0));
+		expect(tally.freeze).toBe(true);
 	});
 });
 
@@ -182,12 +290,12 @@ describe("packing the total", () => {
 		expect(total[0].radius).toBeCloseTo(SCORE_PITCH * 0.38);
 	});
 
-	it("bumps the total as a point lands, and harder as a catch's last does", () => {
+	it("bumps the total as a sliver lands, and harder as a catch's last does", () => {
 		const tally = tallyWith(0, [[3]], 1000);
-		const { start, tick } = tally.catches[0];
-		const rest = totalOf(pack(tally, start))[0].radius;
-		const point = totalOf(pack(tally, start + FLIGHT_MS + 40))[0].radius;
-		const last = totalOf(pack(tally, start + 2 * tick + FLIGHT_MS + 40))[0].radius;
+		const { tick } = tally.catches[0];
+		const rest = totalOf(pack(tally, 1000))[0].radius;
+		const point = totalOf(pack(tally, 1100 + 40))[0].radius;
+		const last = totalOf(pack(tally, 1100 + 2 * tick + 40))[0].radius;
 		expect(point).toBeGreaterThan(rest);
 		expect(last).toBeGreaterThan(point);
 	});
@@ -199,137 +307,108 @@ describe("packing the total", () => {
 		expect(bumped).toBeGreaterThan(rested);
 	});
 
-	it("keeps the total's glow inside the meter at the peak of its hard bump", () => {
-		// The total as the meter centres it, a catch's last point just landed, the next one queued
-		const geometry = { cx: 200, cy: SCORE_METER_CY };
-		let tally = advanceTally(tallyWith(0, [[1]], 1000), 5000);
-		tally = advanceTally(withCatch(tally, newCatch(1, 9, PINK)), tally.lastLand + 70);
+	it("keeps the total's glow on the stage at the peak of its hard bump", () => {
+		const geometry = { ...GEOMETRY, cy: SCORE_CENTRE_Y };
+		const tally = advanceTally(tallyWith(0, [[1]], 1000), 5000);
 		const out = tallyFrame();
 		packTally(tally, tally.lastLand + 70, geometry, out);
-		const dots = [...totalOf(out), ...dotsOf(out)];
-		expect(dots.length).toBeGreaterThan(totalOf(out).length);
-		expect(Math.min(...dots.map((d) => d.y - d.radius * GLOW_SCALE))).toBeGreaterThanOrEqual(0);
-		expect(Math.max(...dots.map((d) => d.y + d.radius * GLOW_SCALE))).toBeLessThanOrEqual(
-			SCORE_METER_HEIGHT,
+		const total = totalOf(out);
+		expect(Math.min(...total.map((d) => d.y - d.radius * GLOW_SCALE))).toBeGreaterThanOrEqual(
+			SCORE_TOP,
 		);
 	});
 });
 
-describe("the feed", () => {
-	it("queues a catch's points as a ribbon beside the total, in the catch's colour", () => {
-		const tally = tallyWith(0, [[7, COMBO_AMBER]], 1000);
-		const dots = dotsOf(pack(tally, 1000 + 100));
-		expect(dots).toHaveLength(7);
-		expect(new Set(dots.map((d) => d.color))).toEqual(new Set([AMBER]));
-		const totalRight = Math.max(...totalOf(pack(tally, 1100)).map((d) => d.x));
-		expect(Math.min(...dots.map((d) => d.x))).toBeGreaterThan(totalRight);
-		// FEED_ROWS rows, a column per FEED_ROWS points
-		expect(new Set(dots.map((d) => d.y.toFixed(3))).size).toBe(FEED_ROWS);
-		expect(new Set(dots.map((d) => d.x.toFixed(3))).size).toBe(Math.ceil(7 / FEED_ROWS));
-		expect(dots[FEED_ROWS].x - dots[0].x).toBeCloseTo(FEED_PITCH);
+describe("the slivers", () => {
+	it("leave from where the catch happened, one after another, in the catch's colour", () => {
+		const tally = withItem(createTally(0), newCatch(0, 5, COMBO_AMBER, 50, 300, 0, GEOMETRY));
+		const sent = advanceTally(tally, 1000);
+		const { tick } = sent.catches[0];
+		const first = dotsOf(pack(sent, 1000));
+		expect(first).toHaveLength(1);
+		expect(first[0]).toMatchObject({
+			x: 50,
+			y: 300,
+			radius: SLIVER_RADIUS,
+			color: AMBER,
+			alpha: 1,
+		});
+		expect(dotsOf(pack(sent, 1000 + 2 * tick))).toHaveLength(3);
 	});
 
-	it("pops each point in a little after the one before", () => {
-		const tally = tallyWith(0, [[7]], 1000);
-		expect(dotsOf(pack(tally, 1000))).toHaveLength(1);
-		const early = dotsOf(pack(tally, 1000 + 30));
-		expect(early.length).toBeGreaterThan(1);
-		expect(early[0].radius).toBeGreaterThan(early[early.length - 1].radius);
-	});
-
-	it("shows nothing for a catch not yet stamped", () => {
-		const tally = withCatch(createTally(0), newCatch(0, 5, PINK));
-		expect(dotsOf(pack(tally, 1000))).toHaveLength(0);
-	});
-
-	it("crawls the ribbon toward the total as its points leave", () => {
-		const tally = tallyWith(0, [[9]], 1000);
-		const { start, tick } = tally.catches[0];
-		const before = dotsOf(pack(tally, start - tick));
-		const later = dotsOf(pack(tally, start + 2 * tick + 1));
-		// Three points are in the air; the rest have moved in by a column
-		expect(later).toHaveLength(9);
-		expect(later[FEED_ROWS].x).toBeCloseTo(before[FEED_ROWS].x - FEED_PITCH, 0);
-	});
-
-	it("flies a point from the front of the ribbon to the total's last digit", () => {
-		const tally = tallyWith(5, [[3]], 1000);
-		const { start } = tally.catches[0];
-		const total = totalOf(pack(tally, start + 1));
-		const landX = Math.max(...total.map((d) => d.x)) - 2 * SCORE_PITCH;
-		const leaving = dotsOf(pack(tally, start + 1))[0];
-		const landing = dotsOf(pack(tally, start + FLIGHT_MS - 1))[0];
-		expect(leaving.x).toBeGreaterThan(landing.x);
-		expect(landing.x).toBeCloseTo(landX, 0);
-		expect(landing.y).toBeCloseTo(GEOMETRY.cy, 0);
-		expect(landing.radius).toBeLessThan(leaving.radius);
-	});
-
-	it("lines a later catch's points up behind the first's", () => {
-		const tally = tallyWith(
-			0,
-			[
-				[3, PINK],
-				[3, COMBO_AMBER],
-			],
+	it("fly straight at the total's middle at the steady speed", () => {
+		const sent = advanceTally(
+			withItem(createTally(0), newCatch(0, 1, PINK, 50, 300, 0, GEOMETRY)),
 			1000,
 		);
-		const dots = dotsOf(pack(tally, 1100));
-		expect(dots.map((d) => d.color)).toEqual([0, 0, 0, AMBER, AMBER, AMBER]);
-		expect(dots[3].x - dots[0].x).toBeCloseTo(FEED_PITCH);
+		const [dot] = dotsOf(pack(sent, 1100));
+		expect(Math.hypot(dot.x - 50, dot.y - 300)).toBeCloseTo(100);
+		// On the line to the centre
+		const across = (dot.x - 50) * (GEOMETRY.cy - 300) - (dot.y - 300) * (GEOMETRY.cx - 50);
+		expect(across).toBeCloseTo(0);
+	});
+
+	it("shrink a little on the way, and vanish as they reach the digits' edge", () => {
+		const tally = tallyWith(0, [[1]], 1000);
+		const [late] = dotsOf(pack(tally, 1099));
+		expect(late.radius).toBeLessThan(SLIVER_RADIUS);
+		expect(late.y).toBeCloseTo(GEOMETRY.cy + HALF_HEIGHT + 1);
+		expect(dotsOf(pack(tally, 1100))).toHaveLength(0);
+	});
+
+	it("show nothing for a catch not yet stamped", () => {
+		const tally = withItem(createTally(0), catchBelow(0, 5, PINK, 10));
+		expect(dotsOf(pack(tally, 1000))).toHaveLength(0);
 	});
 });
 
 describe("the total in a combo", () => {
-	// A plain catch, then a combo's two: points land 1260; 1320, 1380, 1440; 1500 to 1740
-	const combo = () =>
-		tallyWith(
-			10,
-			[
-				[1, PINK],
-				[3, COMBO_AMBER],
-				[5, COMBO_AMBER],
-			],
-			1000,
-		);
-
-	it("stays in the score colour while a catch outside a combo counts in", () => {
-		expect(tallyInCombo(combo(), 1000)).toBe(false);
-		expect(tallyInCombo(combo(), 1259)).toBe(false);
-		expect(pack(combo(), 1259).combo).toBe(false);
+	it("stays in the score colour while only a catch outside a combo counts in", () => {
+		const tally = tallyWith(0, [[2, PINK]], 1000);
+		expect(tallyInCombo(tally, 1100)).toBe(false);
 	});
 
-	it("turns amber as the combo's points count in, and stays amber across its catches", () => {
-		for (const now of [1260, 1380, 1440, 1441, 1500, 1739]) {
-			expect(tallyInCombo(combo(), now)).toBe(true);
-		}
-		expect(pack(combo(), 1400).combo).toBe(true);
-		// Still amber once the catches before have been dropped
-		expect(tallyInCombo(advanceTally(combo(), 1600), 1600)).toBe(true);
+	it("turns amber as the combo's first sliver arrives, not as it leaves", () => {
+		const tally = tallyWith(0, [[3, COMBO_AMBER]], 1000);
+		expect(tallyInCombo(tally, 1099)).toBe(false);
+		expect(tallyInCombo(tally, 1100)).toBe(true);
+		expect(pack(tally, 1100).combo).toBe(true);
 	});
 
-	it("turns back as the combo's last point lands", () => {
-		expect(tallyInCombo(combo(), 1740)).toBe(false);
-		expect(tallyInCombo(advanceTally(combo(), 1900), 1900)).toBe(false);
-	});
-
-	it("turns back as a catch outside the combo starts to count in", () => {
+	it("stays amber across slivers outside the combo landing in between", () => {
 		const tally = tallyWith(
 			0,
 			[
-				[3, COMBO_AMBER],
-				[2, PINK],
+				[3, COMBO_AMBER, 50],
+				[3, PINK, 60],
 			],
 			1000,
 		);
-		expect(tallyInCombo(tally, 1379)).toBe(true);
-		expect(tallyInCombo(tally, 1380)).toBe(false);
+		for (const now of [1050, 1060, 1120, 1169]) expect(tallyInCombo(tally, now)).toBe(true);
 	});
 
-	it("waits for the combo's first point to leave before turning amber", () => {
+	it("stays amber while another amber catch is on its way after one is dropped", () => {
+		const tally = tallyWith(
+			0,
+			[
+				[1, COMBO_AMBER, 50],
+				[1, COMBO_AMBER, 300],
+			],
+			1000,
+		);
+		const dropped = advanceTally(tally, 1100);
+		expect(dropped.catches).toHaveLength(1);
+		expect(tallyInCombo(dropped, 1100)).toBe(true);
+		expect(tallyInCombo(dropped, 1299)).toBe(true);
+	});
+
+	it("turns back as the last amber sliver arrives", () => {
 		const tally = tallyWith(0, [[3, COMBO_AMBER]], 1000);
-		expect(tallyInCombo(tally, 1000 + HOLD_MS - 1)).toBe(false);
-		expect(tallyInCombo(tally, 1000 + HOLD_MS)).toBe(true);
+		const { tick } = tally.catches[0];
+		const end = 1100 + 2 * tick;
+		expect(tallyInCombo(tally, end - 1)).toBe(true);
+		expect(tallyInCombo(tally, end)).toBe(false);
+		expect(tallyInCombo(advanceTally(tally, end), end)).toBe(false);
 	});
 });
 
@@ -344,15 +423,15 @@ describe("packing the sprites", () => {
 
 	it("places a glow and a dot per dot, the total in the score colour, the rest tinted", () => {
 		const tally = tallyWith(42, [[3, COMBO_AMBER]], 1000);
-		// Before its first point leaves, so the total is not yet in the combo
-		const frame = pack(tally, 1100);
+		// Before its first sliver arrives, so the total is not yet in the combo; two in the air
+		const frame = pack(tally, 1070);
 		const out = tallySprites(plainKit());
 		const colors = BURST_COLORS.map((_, i) => Float32Array.of(i, i, i, 1));
 		const score = Float32Array.of(9, 9, 9, 1);
 		packTallySprites(frame, colors, score, out);
 		const totalCount = frame.total.length / 3;
-		expect(out.glows.count).toBe(totalCount + 3);
-		expect(out.dots.count).toBe(totalCount + 3);
+		expect(out.glows.count).toBe(totalCount + 2);
+		expect(out.dots.count).toBe(totalCount + 2);
 		expect(out.dots.colors[out.dots.count][0]).toEqual(score);
 		expect(out.dots.colors[out.dots.count][totalCount]).toEqual(
 			Float32Array.of(AMBER, AMBER, AMBER, 1),

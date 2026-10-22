@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useEffectEvent, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +24,7 @@ import { FieldTouch } from "./components/FieldTouch";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
+import { ScoreMeter } from "./components/ScoreMeter";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import type { Point } from "./effects/frost";
 import type { MenuOpening } from "./flow/screenFlow";
@@ -82,7 +83,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 }) => {
 	const insets = useSafeAreaInsets();
 	const tilt = useTilt();
-	// Phase only: the HUD and the game over read their own score, dots never go through React
+	// Phase only: the score meter and the game over read their own score, dots never go through React
 	const phase = useStore(store, (s) => s.frame.phase);
 	const highScore = useStore(store, (s) => s.highScore);
 	// The colour as play switches it, on the UI thread; React sees it only once the run stops
@@ -180,6 +181,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
 	const inPlay = screen.kind === "hud" || screen.kind === "frosting";
 
+	// The score meter's slivers hold the game over until the last arrives, and the paused score
+	// shows what it had counted as the run froze
+	const handleSliversInAir = useCallback(
+		(inAir: boolean) => dispatch({ type: "sliversChanged", inAir }),
+		[dispatch],
+	);
+	const [frozenScore, setFrozenScore] = useState<number | null>(null);
+
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
 	useEffect(() => bindAppLeave(watchAppActive, () => handleAppLeave()), [watchAppActive]);
@@ -267,6 +276,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					/>
 				)}
 
+				{/* The score and its slivers, across the whole field; it outlives the HUD through a pause */}
+				<ScoreMeter
+					store={store}
+					color={playerColor}
+					visible={inPlay}
+					onSliversInAir={handleSliversInAir}
+					onFrozenScore={setFrozenScore}
+				/>
+
 				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
 					<View style={styles.stage} pointerEvents="box-none">
 						{/* The title's and the pause's corner menus read and change their settings here */}
@@ -318,18 +336,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						)}
 
 						{/* The paused score and run time, sinking in from the HUD's spot and rising back */}
-						<PausedScore store={store} color={playerColor} screen={screen.kind} />
+						<PausedScore
+							store={store}
+							color={playerColor}
+							screen={screen.kind}
+							frozenScore={frozenScore}
+						/>
 
 						<PauseHint store={store} screen={screen.kind} fieldPauses={!devTouch} />
 
-						{inPlay && (
-							<HUD
-								store={store}
-								color={playerColor}
-								onPause={devTouch ? handlePause : undefined}
-								corners={corners}
-							/>
-						)}
+						{inPlay && <HUD onPause={devTouch ? handlePause : undefined} corners={corners} />}
 					</View>
 				</View>
 

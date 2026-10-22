@@ -34,6 +34,11 @@ interface PausedScoreProps {
 	color: SharedValue<string>;
 	/** The screen showing; its changes play the sink, the rise and the fades (see scoreSink.ts) */
 	screen: ScoreScreen;
+	/**
+	 * The score as the meter froze with the run, without the score slivers still in the air
+	 * (see ScoreMeter); null until it has frozen, when the run's own score stands in
+	 */
+	frozenScore: number | null;
 }
 
 const SINK_EASING = Easing.inOut(Easing.cubic);
@@ -46,12 +51,14 @@ const FADE_EASING = Easing.out(Easing.quad);
  * mounted, clear, on every other screen, so it sees each change; its text is read only while
  * the run is paused, so a catch in play re-records nothing here.
  */
-export const PausedScore: React.FC<PausedScoreProps> = ({ store, color, screen }) => {
+export const PausedScore: React.FC<PausedScoreProps> = ({ store, color, screen, frozenScore }) => {
 	const { width, height } = useStageBox();
 	const insets = useSafeAreaInsets();
 	// The stage's own height: the interface layer keeps clear of the home indicator
 	const stageHeight = height - insets.bottom;
-	const score = useStore(store, (s) => (s.frame.phase === "PAUSED" ? s.frame.score : 0));
+	// What the meter showed as the run froze, so nothing jumps between the two
+	const runScore = useStore(store, (s) => (s.frame.phase === "PAUSED" ? s.frame.score : 0));
+	const score = runScore === 0 ? 0 : Math.min(runScore, frozenScore ?? runScore);
 	const ticks = useStore(store, (s) => (s.frame.phase === "PAUSED" ? s.frame.runTicks : 0));
 	const pitch = useMemo(() => middlePitch(score, width), [score, width]);
 	const text = String(score);
