@@ -27,3 +27,26 @@ export function pauseHintShown(
 ): boolean {
 	return fieldPauses && screen === "hud" && (runTicks * 1000) / GAME_HERTZ < PAUSE_HINT_MS;
 }
+
+/** How the hint shows: its opacity, and how long it takes to get there (ms) */
+export interface PauseHintLook {
+	opacity: 0 | 1;
+	over: number;
+}
+
+const FADE_IN_MS = 400;
+const FADE_OUT_MS = 600;
+
+/**
+ * How the hint shows (see pauseHintShown): it fades in, and fades out as the run grows old, but
+ * a finger landing on the field takes it away at once, so no caption floats over the portal
+ * opening at the seat. An early lift brings it back by the same rule that showed it.
+ */
+export function pauseHintLook(
+	screen: Screen["kind"],
+	runTicks: number,
+	fieldPauses: boolean,
+): PauseHintLook {
+	if (pauseHintShown(screen, runTicks, fieldPauses)) return { opacity: 1, over: FADE_IN_MS };
+	return { opacity: 0, over: screen === "frosting" ? 0 : FADE_OUT_MS };
+}
