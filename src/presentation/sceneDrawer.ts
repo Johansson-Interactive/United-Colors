@@ -54,16 +54,15 @@ import {
 	burstSprites,
 	packBursts,
 } from "./effects/burstFrames";
+import type { Tally } from "./effects/scoreTally";
 import {
 	packTally,
 	packTallySprites,
-	type Tally,
 	type TallyFrame,
-	type TallyGeometry,
 	type TallySprites,
 	tallyFrame,
 	tallySprites,
-} from "./effects/scoreTally";
+} from "./effects/tallyPack";
 import {
 	MERGE_PACKED_LENGTH,
 	MERGE_SKSL,
@@ -323,19 +322,13 @@ function tallyBuffers(): { frame: TallyFrame; sprites: TallySprites<SkRSXform, S
 }
 
 /**
- * Draw the score meter (see scoreTally.ts) at frame time `now`: every dot's glow, then every
+ * Draw the score meter (see tallyPack.ts) at lane time `now`: every dot's glow, then every
  * dot, as sprites, the total in `scoreColor`
  */
-export function drawTally(
-	canvas: SkCanvas,
-	tally: Tally,
-	now: number,
-	geometry: TallyGeometry,
-	scoreColor: Float32Array,
-) {
+export function drawTally(canvas: SkCanvas, tally: Tally, now: number, scoreColor: Float32Array) {
 	"worklet";
 	const { frame, sprites } = tallyBuffers();
-	packTally(tally, now, geometry, frame);
+	packTally(tally, now, frame);
 	packTallySprites(frame, BURST_FILLS, scoreColor, sprites);
 	drawSprites(canvas, sprites.glows, true);
 	drawSprites(canvas, sprites.dots, true);

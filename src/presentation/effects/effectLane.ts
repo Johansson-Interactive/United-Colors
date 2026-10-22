@@ -11,6 +11,10 @@
  *   stop    On the JS thread: switch the clock off only if no newer id was handed out since.
  *           A stop sent before a newer item reached the UI thread is for an older one, and
  *           taking it would leave the newer item frozen on its first frame.
+ *   freeze  On the JS thread: stand the lane's time still, as a paused run stands its field
+ *           still. The next step takes it and stops the clock; a thaw switches the clock back
+ *           on, and its first step picks the time up where it stood, the frozen gap left out,
+ *           so the reducer never sees the pause.
  *
  * The ids are kept here, outside any hook: the React Compiler once compiled `ref.current++` in
  * a hook as a pre-increment, so every item got the id one past the newest the stop was checked
@@ -38,14 +42,28 @@ interface LaneCell<V> {
 	modify(update: (value: V) => V): void;
 }
 
+/**
+ * Whether the lane's time stands still, whether a thaw waits for the next step, and how far
+ * the lane's time lags the frame clock's for the time it stood
+ */
+export interface LaneFreeze {
+	frozen: boolean;
+	thawing: boolean;
+	lag: number;
+}
+
+export const RUNNING_LANE: LaneFreeze = { frozen: false, thawing: false, lag: 0 };
+
 /** What a lane touches outside itself; in the app, shared values, a frame callback and scheduleOnRN */
 export interface LanePorts<S> {
 	/** The lane's state, as drawing reads it */
 	state: LaneCell<S>;
 	/** The newest id the UI thread has seen; starts at -1 */
 	seen: LaneCell<number>;
-	/** The time of the latest frame, which drawing reads the state at */
+	/** The lane's time at the latest frame, which drawing reads the state at */
 	time: LaneCell<number>;
+	/** Whether the lane's time stands still (see LaneFreeze); starts as RUNNING_LANE */
+	freeze: LaneCell<LaneFreeze>;
 	/** The frame clock that runs `step`, switched on and off from the JS thread */
 	clock: { setActive(active: boolean): void };
 	/** Run `call` with `seen` on the JS thread, from the UI thread */
@@ -55,6 +73,8 @@ export interface LanePorts<S> {
 export interface EffectLane<T> {
 	/** Add the item `make` builds under the lane's next id (JS thread) */
 	add(make: (id: number) => T): void;
+	/** Stand the lane's time still, or let it run on from where it stood (JS thread) */
+	setFrozen(frozen: boolean): void;
 	/** The frame clock's callback (a worklet) */
 	step(frame: { timestamp: number }): void;
 	/**
@@ -66,10 +86,12 @@ export interface EffectLane<T> {
 
 export function createEffectLane<S, T>(
 	reducer: EffectReducer<S, T>,
-	{ state, seen, time, clock, toJS }: LanePorts<S>,
+	{ state, seen, time, freeze, clock, toJS }: LanePorts<S>,
 ): EffectLane<T> {
 	let next = 0;
 	let open = true;
+	// Whether the JS thread last asked for a freeze; the UI thread takes it at its next step
+	let asked = false;
 	const stop = (seenId: number) => {
 		if (open && seenId === next - 1) clock.setActive(false);
 	};
@@ -86,13 +108,33 @@ export function createEffectLane<S, T>(
 			});
 			clock.setActive(true);
 		},
+		setFrozen(frozen) {
+			if (frozen === asked) return;
+			asked = frozen;
+			freeze.modify((current) => {
+				"worklet";
+				return { frozen, thawing: !frozen, lag: current.lag };
+			});
+			// A thaw needs a step to take it; a freeze is taken by the next step there is
+			if (!frozen && open) clock.setActive(true);
+		},
 		step(frame) {
 			"worklet";
+			let { frozen, thawing, lag } = freeze.get();
+			if (frozen) {
+				toJS(stop, seen.get());
+				return;
+			}
+			if (thawing) {
+				lag = frame.timestamp - time.get();
+				freeze.set({ frozen, thawing: false, lag });
+			}
+			const now = frame.timestamp - lag;
 			const current = state.get();
-			const advanced = reducer.advance(current, frame.timestamp);
+			const advanced = reducer.advance(current, now);
 			if (advanced !== current) state.set(advanced);
-			time.set(frame.timestamp);
-			if (reducer.idle(advanced, frame.timestamp)) toJS(stop, seen.get());
+			time.set(now);
+			if (reducer.idle(advanced, now)) toJS(stop, seen.get());
 		},
 		dispose() {
 			open = false;

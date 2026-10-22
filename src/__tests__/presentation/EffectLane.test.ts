@@ -1,12 +1,16 @@
-import { createEffectLane, type EffectReducer } from "../../presentation/effects/effectLane";
+import {
+	createEffectLane,
+	type EffectReducer,
+	RUNNING_LANE,
+} from "../../presentation/effects/effectLane";
 import {
 	createTally,
-	freezeTally,
 	newCatch,
+	resetTally,
 	shownScore,
 	TALLY,
 	type Tally,
-	type TallyItem,
+	type TallyCatch,
 } from "../../presentation/effects/scoreTally";
 import { WHITE } from "../../presentation/theme/theme";
 
@@ -55,6 +59,7 @@ function setup<S, T>(reducer: EffectReducer<S, T>, initial: S) {
 		state,
 		seen: cell(-1),
 		time,
+		freeze: cell(RUNNING_LANE),
 		clock: {
 			setActive: (active) => {
 				on = active;
@@ -258,11 +263,60 @@ describe("effect lane", () => {
 		flush();
 		expect(running()).toBe(false);
 	});
+
+	it("stands its time still while frozen, and stops the clock", () => {
+		const { lane, running, drawn, time, frame, flush } = setup(LIST, []);
+		lane.add(item(100));
+		frame(1000);
+		lane.setFrozen(true);
+		frame(1050);
+		flush();
+		expect(running()).toBe(false);
+		expect(time()).toBe(1000);
+		expect(drawn()).toEqual([{ id: 0, life: 100, start: 1000 }]);
+	});
+
+	it("thaws to run on from where its time stood, the frozen gap left out", () => {
+		const { lane, running, drawn, time, frame, flush } = setup(LIST, []);
+		lane.add(item(100));
+		frame(1000);
+		lane.setFrozen(true);
+		frame(1016);
+		flush();
+		lane.setFrozen(false);
+		expect(running()).toBe(true);
+		frame(5000);
+		expect(time()).toBe(1000);
+		frame(5099);
+		expect(drawn()).toHaveLength(1);
+		frame(5100);
+		expect(drawn()).toEqual([]);
+	});
+
+	it("takes a freeze asked twice, or a thaw never frozen, as nothing", () => {
+		const { lane, log } = setup(LIST, []);
+		lane.setFrozen(false);
+		lane.setFrozen(true);
+		lane.setFrozen(true);
+		expect(log).toEqual([]);
+	});
+
+	it("holds an item added while frozen until the thaw", () => {
+		const { lane, drawn, frame, flush } = setup(LIST, []);
+		lane.setFrozen(true);
+		lane.add(item(100));
+		frame(1000);
+		flush();
+		expect(drawn()).toEqual([{ id: 0, life: 100, start: -1 }]);
+		lane.setFrozen(false);
+		frame(2000);
+		expect(drawn()[0].start).toBeGreaterThanOrEqual(0);
+	});
 });
 
 /** Frames 16 ms apart from `from` while the clock runs, up to `until`; the last frame's time */
 function runFrames(
-	{ frame, flush, running }: ReturnType<typeof setup<Tally, TallyItem>>,
+	{ frame, flush, running }: ReturnType<typeof setup<Tally, TallyCatch>>,
 	from: number,
 	until = from + 10_000,
 ): number {
@@ -277,14 +331,14 @@ function runFrames(
 	return now;
 }
 
-/** The meter's geometry on a 400 by 800 stage */
+/** The total at the top of a 400 by 800 stage, its slivers at one px per ms */
 const GEOMETRY = { cx: 200, cy: 40, speed: 1 };
 
 describe("score tally lane", () => {
 	it("counts each catch into the total completely, then stops the clock", () => {
-		const meter = setup(TALLY, createTally(40));
-		meter.lane.add((id) => newCatch(id, 3, WHITE, 200, 400, 48, GEOMETRY));
-		meter.lane.add((id) => newCatch(id, 5, WHITE, 100, 600, 48, GEOMETRY));
+		const meter = setup(TALLY, createTally(40, GEOMETRY));
+		meter.lane.add(() => newCatch(3, WHITE, 200, 400));
+		meter.lane.add(() => newCatch(5, WHITE, 100, 600));
 		const end = runFrames(meter, 1000);
 		expect(meter.running()).toBe(false);
 		expect(meter.drawn().catches).toEqual([]);
@@ -292,35 +346,29 @@ describe("score tally lane", () => {
 	});
 
 	it("still stops the clock after a reset to a new run's score mid-count", () => {
-		const meter = setup(TALLY, createTally(40));
-		meter.lane.add((id) => newCatch(id, 9, WHITE, 200, 400, 49, GEOMETRY));
+		const meter = setup(TALLY, createTally(40, GEOMETRY));
+		meter.lane.add(() => newCatch(9, WHITE, 200, 400));
 		runFrames(meter, 1000, 1100);
 		expect(meter.running()).toBe(true);
-		meter.replace(createTally(0));
+		meter.replace(resetTally(meter.drawn(), 0));
 		const end = runFrames(meter, 1116);
 		expect(meter.running()).toBe(false);
 		expect(shownScore(meter.drawn(), end)).toBe(0);
 	});
 
-	it("gives each catch the lane's id", () => {
-		const meter = setup(TALLY, createTally(0));
-		meter.lane.add((id) => newCatch(id, 1, WHITE, 200, 400, 1, GEOMETRY));
-		meter.lane.add((id) => newCatch(id, 1, WHITE, 200, 400, 1, GEOMETRY));
-		meter.frame(1000);
-		expect(meter.drawn().catches.map((c) => c.id)).toEqual([0, 1]);
-	});
-
-	it("stops the clock while frozen and runs it again to fly the slivers home", () => {
-		const meter = setup(TALLY, createTally(0));
-		meter.lane.add((id) => newCatch(id, 3, WHITE, 200, 400, 3, GEOMETRY));
-		runFrames(meter, 1000, 1100);
-		meter.lane.add(() => freezeTally(true));
-		runFrames(meter, 1116);
+	it("freezes slivers in the air with the lane and flies them home on the thaw", () => {
+		const meter = setup(TALLY, createTally(0, GEOMETRY));
+		meter.lane.add(() => newCatch(3, WHITE, 200, 400));
+		const before = runFrames(meter, 1000, 1100);
+		const counted = shownScore(meter.drawn(), meter.time());
+		meter.lane.setFrozen(true);
+		runFrames(meter, before + 16, before + 5000);
 		expect(meter.running()).toBe(false);
-		expect(meter.drawn().catches).toHaveLength(1);
-		meter.lane.add(() => freezeTally(false));
-		const end = runFrames(meter, 9000);
+		expect(shownScore(meter.drawn(), meter.time())).toBe(counted);
+		meter.lane.setFrozen(false);
+		runFrames(meter, 9000);
 		expect(meter.running()).toBe(false);
-		expect(shownScore(meter.drawn(), end)).toBe(3);
+		expect(meter.drawn().catches).toEqual([]);
+		expect(shownScore(meter.drawn(), meter.time())).toBe(3);
 	});
 });
