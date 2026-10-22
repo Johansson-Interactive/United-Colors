@@ -6,14 +6,12 @@ import {
 	Paint,
 	Picture,
 	Rect,
-	rect,
-	rrect,
 	Shader,
 	Skia,
 	type SkPicture,
 } from "@shopify/react-native-skia";
 import type React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	type LayoutChangeEvent,
 	PanResponder,
@@ -30,8 +28,9 @@ import {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { ScreenSize } from "../domain/types";
+import { PlaySide, type PortalCut } from "./components/PlaySide";
 import type { Burst } from "./effects/burstFrames";
-import { FROST_MAX_DIM, type Portal, type PortalShape, portalShape } from "./effects/portal";
+import { FROST_MAX_DIM } from "./effects/portal";
 import { useStageBox } from "./layout/StageFrame";
 import { recordPicture } from "./recordPicture";
 import { ROOM_SKSL, type RoomUniforms, roomUniforms, stageCover } from "./room";
@@ -53,10 +52,16 @@ interface GameCanvasProps {
 	/** All dots to draw this frame (player last) as flat records, written every frame by the session */
 	scene: SharedValue<Float32Array>;
 	onLayout: (size: ScreenSize) => void;
-	/** 0 = live; 1 = fully frosted (blurred and dimmed) for pause / game over */
+	/** How frosted (blurred and dimmed) the play side itself is: 0 = live; the game over dims it */
 	frost: SharedValue<number>;
-	/** Where the frost stops (see portal.ts): all over, a clear window in it, or a frosted disc */
-	portal: SharedValue<Portal>;
+	/**
+	 * The pause world (the frozen field, frosted) is drawn under `pauseSide`, and the play side
+	 * over it is cut to the portal by `cut` (see stageLook.ts)
+	 */
+	pauseWorld: boolean;
+	cut: PortalCut;
+	/** What lies on the pause world, under the play side: the field's touch layer, the pause's content */
+	pauseSide: React.ReactNode;
 	/** Colour washed into the room's edges (the player's colour while playing) */
 	accent: SharedValue<string>;
 	/** How much of the stage (the scene) shows over the room, 0..1 */
@@ -126,8 +131,7 @@ interface SceneLayersProps {
 
 /**
  * The scene in layers with the wall drops and the liquid body between them (see
- * sceneDrawer.ts): drawn once under the frost, and again sharp through the frost window or
- * blurred inside the bloom's disc
+ * sceneDrawer.ts): drawn on the play side, and again, frozen and frosted, as the pause world
  */
 const SceneLayers: React.FC<SceneLayersProps> = ({ below, drops, dropGlares, body, above }) => {
 	const bodyX = useDerivedValue(() => body.get().x);
@@ -150,34 +154,51 @@ const SceneLayers: React.FC<SceneLayersProps> = ({ below, drops, dropGlares, bod
 	);
 };
 
+/** The pause world's frost: the frozen scene blurred this much, and dimmed by FROST_MAX_DIM */
+const PAUSE_WORLD_FROST = (
+	<Paint>
+		<Blur blur={FROST_MAX_SIGMA} />
+	</Paint>
+);
+
 /** A TextureView on Android, an opaque Metal layer on iOS (see GameCanvas) */
 const OPAQUE_CANVAS = Platform.OS !== "android";
 
 /**
- * The game canvas: the room (see room.ts), then the whole scene, drawn on the UI thread every
- * frame from the `scene` shared value with no React reconciliation per frame: recorded
- * pictures, with the wall drops and the liquid body as shader nodes between them; how the dots
- * are drawn is in sceneDrawer.ts. The light the room and the dots are lit
- * from follows the device tilt, and freezes while frosted. The frost is the scene blurred and
- * dimmed, up to its edge (see portal.ts): Get ready's window in it is the room and the scene
- * drawn again, sharp, clipped to the window's circle, so the field is clear there and frosted
- * around it; the bloom's disc is the scene drawn again blurred and dimmed, clipped to the disc,
- * over the sharp field. Either costs a second scene draw only while the edge is on the field.
+ * The stage: the room (see room.ts), then the whole scene, drawn on the UI thread every frame
+ * from the `scene` shared value with no React reconciliation per frame: recorded pictures, with
+ * the wall drops and the liquid body as shader nodes between them; how the dots are drawn is in
+ * sceneDrawer.ts. The light the room and the dots are lit from follows the device tilt, and
+ * stands still while the run is frozen or frosted.
  *
- * The canvas draws everything behind the interface itself, so it can be opaque. On iOS it is,
- * which saves a blend. On Android it stays a TextureView: an opaque canvas there is a
- * SurfaceView, whose every frame is a blocking hand-off to SurfaceFlinger on the main thread,
- * which Android 12 can hold for about 5 ms when it arrives early in the period (see
- * docs/android-performance-2026-10-15.md). The stage fade and the shake are drawn here, and so
- * are the bursts over the scene: they shake and fade with it but stay sharp while it frosts.
- * The blur layer, the dim and the edge's second draw only exist while frosted and the fade
- * cover only while fading, so a live scene pays for none of them.
+ * Pause and play open portals into each other (see portal.ts, ADR 0011), so the stage is in
+ * two worlds. The game canvas is the play side, always on top: the live field, sharp, with the
+ * bursts over it. While the run is not in play, the pause world lies under it: a second canvas
+ * draws the same scene, frozen, blurred and dimmed, with the pause's content (`pauseSide`, plain
+ * React Native views) over that, and the game canvas is cut to the portal so the pause shows
+ * where the portal leaves it. The pause world is drawn from the frozen frame's own pictures,
+ * which stand still while the run is frozen, so it is drawn as it mounts and then left alone:
+ * in effect a snapshot, with nothing read back from the screen. In play it is not mounted and
+ * the game canvas is not cut, so play pays for neither.
+ *
+ * The game canvas draws everything behind the interface itself, so in play it can be opaque. On
+ * iOS it asks to be, which saves a blend (the installed Skia keeps its layer clear either way).
+ * Over the pause world it must not be, or it would hide it. On Android it stays a TextureView: an
+ * opaque canvas there is a SurfaceView, whose every frame is a blocking hand-off to
+ * SurfaceFlinger on the main thread, which Android 12 can hold for about 5 ms when it arrives
+ * early in the period (see docs/android-performance-2026-10-15.md). The stage fade and the shake
+ * are drawn here, and so are the bursts over the scene: they shake and fade with it. The game
+ * over's blur layer and dim only exist while it is dimmed and the fade cover only while fading,
+ * so a live scene pays for none of them. The canvases take no touch: the field's touch layer
+ * under the play side gets it (see FieldTouch), except where touch steers the dot in play.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
 	scene,
 	onLayout,
 	frost,
-	portal,
+	pauseWorld,
+	cut,
+	pauseSide,
 	accent,
 	stageOpacity,
 	shake,
@@ -190,27 +211,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
 	const [frosted, setFrosted] = useState(false);
-	const [shape, setShape] = useState<PortalShape>("all");
 	const [fading, setFading] = useState(false);
+	const frozen = useSharedValue(pauseWorld);
+	useEffect(() => frozen.set(pauseWorld), [frozen, pauseWorld]);
 
-	// Only track the light while live: frosted scenes stay still even as the phone moves
+	// The frost on the play side itself (the game over's dim) is laid on only while it shows
 	useAnimatedReaction(
-		() => ({ x: tilt.x.get(), y: tilt.y.get(), frozen: frost.get() > 0.001 }),
+		() => frost.get() > 0.001,
 		(current, previous) => {
-			if (current.frozen !== previous?.frozen) scheduleOnRN(setFrosted, current.frozen);
-			if (current.frozen) return;
+			if (current !== previous) scheduleOnRN(setFrosted, current);
+		},
+	);
+
+	// Only track the light while live: frozen or frosted scenes stay still even as the phone moves
+	useAnimatedReaction(
+		() => ({
+			x: tilt.x.get(),
+			y: tilt.y.get(),
+			still: frozen.get() || frost.get() > 0.001,
+		}),
+		(current) => {
+			if (current.still) return;
 			lightX.set(current.x);
 			lightY.set(current.y);
 		},
 	);
-
-	useAnimatedReaction(
-		() => portalShape(portal.get()),
-		(current, previous) => {
-			if (current !== previous) scheduleOnRN(setShape, current);
-		},
-	);
-
 	useAnimatedReaction(
 		() => stageCover(stageOpacity.get()) > 0,
 		(current, previous) => {
@@ -287,86 +312,80 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
 	const frostSigma = useDerivedValue(() => frost.get() * FROST_MAX_SIGMA);
 	const frostDim = useDerivedValue(() => frost.get() * FROST_MAX_DIM);
-	const edgeClip = useDerivedValue(() => {
-		const { x, y, radius } = portal.get();
-		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
-	});
 	const shakeTransform = useDerivedValue(() => [{ translateX: shake.get() }]);
 	const cover = useDerivedValue(() => stageCover(stageOpacity.get()));
 
-	// When using drag, Canvas must not capture touches so the container gets them
-	const canvasPointerEvents = onDragDelta ? "none" : "auto";
-
-	// The whole scene is blurred and dimmed when the frost reaches past any window; inside the
-	// bloom's disc the scene stays sharp and a blurred copy is laid over it
-	const frostedAllOver = frosted && (shape === "all" || shape === "window");
-	const frostPaint = (
+	// Only where touch steers the dot does the stage take a touch; the field's touch layer, under
+	// the play side, gets it everywhere else
+	const scenePaint = frosted ? (
 		<Paint>
 			<Blur blur={frostSigma} />
 		</Paint>
-	);
+	) : undefined;
 
 	return (
-		<View style={styles.container} onLayout={handleLayout} {...(panResponder?.panHandlers ?? {})}>
-			<Canvas
-				style={StyleSheet.absoluteFill}
-				opaque={OPAQUE_CANVAS}
-				pointerEvents={canvasPointerEvents}
+		<>
+			{pauseWorld ? (
+				<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+					<Room uniforms={room} />
+					<Group layer={PAUSE_WORLD_FROST}>
+						<SceneLayers
+							below={below}
+							drops={drops}
+							dropGlares={dropGlares}
+							body={body}
+							above={above}
+						/>
+					</Group>
+					<Fill color={INK} opacity={FROST_MAX_DIM} />
+				</Canvas>
+			) : null}
+			{pauseSide}
+			<View
+				style={[styles.container, !pauseWorld && styles.inked]}
+				onLayout={handleLayout}
+				pointerEvents={panResponder ? "auto" : "none"}
+				{...(panResponder?.panHandlers ?? {})}
 			>
-				<Room uniforms={room} />
-				<Group transform={shakeTransform}>
-					<Group layer={frostedAllOver ? frostPaint : undefined}>
-						<SceneLayers
-							below={below}
-							drops={drops}
-							dropGlares={dropGlares}
-							body={body}
-							above={above}
-						/>
-					</Group>
-					<Picture picture={burstPicture} />
-				</Group>
-				{frostedAllOver ? <Fill color={INK} opacity={frostDim} /> : null}
-				{frosted && shape === "window" ? (
-					<Group clip={edgeClip}>
+				<Canvas
+					style={StyleSheet.absoluteFill}
+					opaque={OPAQUE_CANVAS && !pauseWorld}
+					pointerEvents="none"
+				>
+					<PlaySide cut={pauseWorld ? cut : null}>
 						<Room uniforms={room} />
-						<SceneLayers
-							below={below}
-							drops={drops}
-							dropGlares={dropGlares}
-							body={body}
-							above={above}
-						/>
-					</Group>
-				) : null}
-				{frosted && shape === "disc" ? (
-					<Group clip={edgeClip}>
-						<Group layer={frostPaint}>
-							<SceneLayers
-								below={below}
-								drops={drops}
-								dropGlares={dropGlares}
-								body={body}
-								above={above}
-							/>
+						<Group transform={shakeTransform}>
+							<Group layer={scenePaint}>
+								<SceneLayers
+									below={below}
+									drops={drops}
+									dropGlares={dropGlares}
+									body={body}
+									above={above}
+								/>
+							</Group>
+							<Picture picture={burstPicture} />
 						</Group>
-						<Fill color={INK} opacity={frostDim} />
-					</Group>
-				) : null}
-				{fading ? (
-					<Group layer={<Paint opacity={cover} />}>
-						<Room uniforms={room} />
-					</Group>
-				) : null}
-			</Canvas>
-		</View>
+						{frosted ? <Fill color={INK} opacity={frostDim} /> : null}
+						{fading ? (
+							<Group layer={<Paint opacity={cover} />}>
+								<Room uniforms={room} />
+							</Group>
+						) : null}
+					</PlaySide>
+				</Canvas>
+			</View>
+		</>
 	);
 };
 
 const styles = StyleSheet.create({
-	// The whole stage, under the interface
+	// The whole stage, over the pause world and its content
 	container: {
 		...StyleSheet.absoluteFill,
+	},
+	// In play nothing is under the stage, so it is inked until the canvas first draws
+	inked: {
 		backgroundColor: INK,
 	},
 });

@@ -7,6 +7,7 @@ import type { ScoreTally } from "../hooks/useScoreTally";
 import { cornerButton } from "../layout/cornerButton";
 import { useStageBox } from "../layout/StageFrame";
 import { IconDot } from "./IconDot";
+import type { PortalCut } from "./PlaySide";
 import { ScoreMeter } from "./ScoreMeter";
 
 interface HUDProps {
@@ -14,11 +15,17 @@ interface HUDProps {
 	score: ScoreTally;
 	/** The player's current colour; the score wears it so a switch is always visible */
 	color: SharedValue<string>;
-	/** Whether a run is in play; off play the HUD stays, hidden, so slivers frozen by a pause fly on */
+	/**
+	 * Whether the score shows: in play, and on the play side through a portal (the bloom's, Get
+	 * ready's). Elsewhere the HUD stays, hidden, so slivers frozen by a pause fly on
+	 */
 	visible: boolean;
+	/** The portal the score is cut to while the pause world is under the play side (see PlaySide) */
+	cut: PortalCut | null;
 	/**
 	 * Dev only: a pause dot in the top-right corner, for the control mode where touch steers
-	 * the dot and so cannot pause it (see useDevControlMode). Play pauses on any touch otherwise.
+	 * the dot and so cannot pause it (see useDevControlMode), given only while the run is in
+	 * play. Play pauses on any touch otherwise.
 	 */
 	onPause?: () => void;
 	/** How the frame rounds its corners; the corner dot keeps clear of the curve (null: square) */
@@ -34,7 +41,7 @@ const CORNER_OFFSET = { top: 12, right: 16 };
  * there is no button to reach for. It covers the whole stage, home indicator and all, so a
  * catch at the very bottom is seen leaving.
  */
-export const HUD: React.FC<HUDProps> = ({ score, color, visible, onPause, corners }) => {
+export const HUD: React.FC<HUDProps> = ({ score, color, visible, cut, onPause, corners }) => {
 	const { width, height } = useStageBox();
 	const cornerAt = useMemo(
 		() =>
@@ -45,9 +52,9 @@ export const HUD: React.FC<HUDProps> = ({ score, color, visible, onPause, corner
 	return (
 		<>
 			<View style={[styles.container, !visible && styles.hidden]} pointerEvents="none">
-				<ScoreMeter score={score} color={color} visible={visible} />
+				<ScoreMeter score={score} color={color} visible={visible} cut={cut} />
 			</View>
-			{visible && onPause ? (
+			{onPause ? (
 				<View style={[styles.corner, cornerAt]}>
 					<IconDot size={CORNER_SIZE} icon="pause" onPress={onPause} accessibilityLabel="Pause" />
 				</View>

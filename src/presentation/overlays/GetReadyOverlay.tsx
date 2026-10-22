@@ -3,6 +3,7 @@ import {
 	Canvas,
 	Circle,
 	Group,
+	RadialGradient,
 	Rect,
 	Shader,
 	Skia,
@@ -22,12 +23,13 @@ import { scheduleOnRN } from "react-native-worklets";
 import { playerDisc } from "../../application/sceneRecord";
 import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
+import { PlaySide, type PortalCut } from "../components/PlaySide";
 import { PortalRim } from "../components/PortalRim";
 import { PAUSE_ALL, type Portal } from "../effects/portal";
 import { useStageBox } from "../layout/StageFrame";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { WALL_DROP_EFFECT } from "../sceneDrawer";
-import { glass, INK, shade } from "../theme/theme";
+import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_RIM, glass, INK, shade } from "../theme/theme";
 import {
 	advanceGetReady,
 	closeGetReady,
@@ -52,6 +54,8 @@ interface GetReadyOverlayProps {
 	touch: SharedValue<FieldTouchState>;
 	/** The portal, which this opens at the seat and widens with the hold */
 	portal: SharedValue<Portal>;
+	/** How the play side is cut to the portal: all drawn here is on the play side (see PlaySide) */
+	cut: PortalCut;
 	/** Fired once, the moment the thaw clears the field */
 	onReady: () => void;
 	/** Fired once, when the window has shut after the finger lifted */
@@ -92,15 +96,16 @@ const COVER_MARGIN = 0.5;
  * waits on the seat until then, and then rolls around inside the cup with the tilt, with a
  * little weight to it, and presses into a wall as the player does in play. Rolling it home and
  * holding level widens the portal to the walls, and the moment the field is clear play resumes;
- * the window is left open, so the frost lifts behind it unseen. Lift the finger first and the
+ * the window is left open, so the pause world goes behind it unseen. Lift the finger first and the
  * portal drains back into the seat, and Get ready is over. Nothing here fades in; on resume all
  * that is left drawn is the dot copy on the seat, which fades into the real dot. Touches go
  * through to the field touch layer.
  *
  * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt and the
- * touch are, this takes one step of it and copies what it says to draw. The window itself is
- * cut by the game canvas, which this drives through `portal`; the seat and the dot are drawn
- * here over it.
+ * touch are, this takes one step of it and copies what it says to draw. It drives `portal`,
+ * which every canvas on the play side is cut to (see PlaySide), this one too: the field, the
+ * HUD's score and what is drawn here (the bowl's glass at the edge, the seat, the dot and the
+ * rim) show only inside the portal, over the pause world, and grow into view with it.
  */
 export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	scene,
@@ -109,6 +114,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	corners,
 	touch,
 	portal,
+	cut,
 	onReady,
 	onShut,
 }) => {
@@ -150,7 +156,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		if (now.shut) scheduleOnRN(onShut);
 	});
 
-	// Leaves the edge the stepper says on close: the window open once fired, frosted all over otherwise
+	// Leaves the portal the stepper says on close: the window open once fired, the pause all over otherwise
 	useEffect(
 		() => () => {
 			portal.set(closeGetReady(state.get(), portal.get()));
@@ -159,8 +165,6 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	);
 
 	const shown = useDerivedValue(() => (frame.get().drawn ? 1 : 0));
-	// The seat, the dot and its shade show as the cup opens, and go as it drains
-	const opened = useDerivedValue(() => frame.get().opened);
 	const seatCentre = useDerivedValue(() => vec(seat.get().x, seat.get().y));
 	const seatRadius = useDerivedValue(() => seat.get().radius);
 	// The frozen player is stretched along its jelly stretch, so its cover is too (see drawScene)
@@ -175,6 +179,8 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	const windowCentre = useDerivedValue(() => vec(frame.get().window.x, frame.get().window.y));
 	const windowRadius = useDerivedValue(() => frame.get().window.radius);
 	const rim = useDerivedValue(() => frame.get().rim);
+	const glassShows = useDerivedValue(() => frame.get().glass);
+	const glassRimRadius = useDerivedValue(() => Math.max(0, frame.get().window.radius - 1));
 
 	const shadeCentre = useDerivedValue(() => {
 		const { dot } = frame.get();
@@ -206,21 +212,38 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	const glareBlur = useDerivedValue(() => 0.3 * frame.get().body.radius);
 
 	return (
-		// Leaving on resume, only the dot copy is still drawn (the rim is gone past the walls), so
-		// this fades the copy into the real dot; leaving otherwise, the cup has drained already
+		// Leaving on resume, only the dot copy is still drawn (the rim and the glass are gone past
+		// the walls, and play shows all over), so this fades the copy into the real dot; leaving
+		// otherwise, the cup has drained already and nothing of it shows
 		<Animated.View
 			style={StyleSheet.absoluteFill}
 			exiting={FadeOut.duration(HANDOFF_MS)}
 			pointerEvents="none"
 		>
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-				<Group opacity={shown}>
-					{/* The rim on the portal's edge: the cup's as it opens, and outward with the thaw */}
-					<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
-					<Group opacity={opened}>
+				<PlaySide cut={cut}>
+					<Group opacity={shown}>
 						{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
 						<Group transform={coverTransform} origin={seatCentre}>
 							<Circle c={seatCentre} r={coverRadius} color={INK} />
+						</Group>
+						{/* The bowl's glass at the portal's edge, as the cup grows and while it is open */}
+						<Group opacity={glassShows}>
+							<Circle c={windowCentre} r={windowRadius}>
+								<RadialGradient
+									c={windowCentre}
+									r={windowRadius}
+									colors={BOWL_GLAZE}
+									positions={BOWL_GLAZE_STOPS}
+								/>
+							</Circle>
+							<Circle
+								c={windowCentre}
+								r={glassRimRadius}
+								color={BOWL_RIM}
+								style="stroke"
+								strokeWidth={1.5}
+							/>
 						</Group>
 						{/* The rolling dot: its shade, its body and its glare */}
 						<Group opacity={shadeOpacity}>
@@ -232,8 +255,10 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 						<Circle c={glareCentre} r={glareRadius} color={glass(0.5)}>
 							<BlurMask blur={glareBlur} style="normal" />
 						</Circle>
+						{/* The rim on the portal's edge: the cup's as it opens, and outward with the thaw */}
+						<PortalRim centre={windowCentre} radius={windowRadius} opacity={rim} color={color} />
 					</Group>
-				</Group>
+				</PlaySide>
 			</Canvas>
 		</Animated.View>
 	);

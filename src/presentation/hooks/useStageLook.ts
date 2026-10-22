@@ -1,3 +1,4 @@
+import { rect, rrect } from "@shopify/react-native-skia";
 import { useEffect } from "react";
 import {
 	type SharedValue,
@@ -6,30 +7,52 @@ import {
 	withDelay,
 	withTiming,
 } from "react-native-reanimated";
-import { PAUSE_ALL, type Portal } from "../effects/portal";
+import type { PortalCut } from "../components/PlaySide";
+import { PAUSE_ALL, PLAY_ALL, type Portal, playShows } from "../effects/portal";
 import { type StageMove, type StagePlace, stageLook } from "../effects/stageLook";
 import { INK_LIFT } from "../theme/theme";
 
 /**
- * Applies the field's look behind the screen (see stageLook.ts) to the shared values the game
- * canvas draws from. Each value starts its move only when the move itself changes, so a look
+ * Applies the field's look behind the screen (see stageLook.ts) to the shared values the
+ * canvases draw from. Each value starts its move only when the move itself changes, so a look
  * that stays the same restarts nothing: going between the pause and Get ready leaves alone
  * the portal Get ready has opened. This is the only writer of the stage opacity; the
  * portal is shared with the bloom and Get ready, which move it. A wash in the player's
  * colour follows `playerColor` on the UI thread, so a colour switch in play renders nothing.
+ *
+ * Every canvas on the play side cuts itself to the same portal while the pause world is under
+ * it: `portalClip` is the portal's circle and `clipsOut` whether the play side shows outside
+ * it rather than inside (see playShows). Both are worked out once a frame for all of the
+ * canvases, and only while the portal moves.
  */
 export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
-	const portal = useSharedValue<Portal>(PAUSE_ALL);
-	// Before the frost's move, so the edge is frosted all over as the pause's or the game over's frost comes on
+	const portal = useSharedValue<Portal>(PLAY_ALL);
 	useEffect(() => {
-		if (look.shutWindow) portal.set(PAUSE_ALL);
-	}, [look.shutWindow, portal]);
+		if (look.portal === "play") portal.set(PLAY_ALL);
+		else if (look.portal === "pause") portal.set(PAUSE_ALL);
+	}, [look.portal, portal]);
+	const portalClip = useDerivedValue(() => {
+		const { x, y, radius } = portal.get();
+		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
+	});
+	const clipsOut = useDerivedValue(() => {
+		const shows = playShows(portal.get());
+		return shows === "all" || shows === "outside";
+	});
 	const frost = useStageValue(0, look.frost);
 	const washInPlayer = look.accent === "player";
 	const accent = useDerivedValue(() => (washInPlayer ? playerColor.get() : INK_LIFT));
 	const stageOpacity = useStageValue(1, look.opacity);
-	return { frost, portal, accent, stageOpacity };
+	return {
+		pauseWorld: look.pauseWorld,
+		hudScore: look.hudScore,
+		frost,
+		portal,
+		cut: { clip: portalClip, out: clipsOut } satisfies PortalCut,
+		accent,
+		stageOpacity,
+	};
 }
 
 /**

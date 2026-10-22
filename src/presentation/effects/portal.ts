@@ -1,8 +1,8 @@
 /**
  * The portal between the pause and the play (see GLOSSARY.md): a circle around a point, with
- * the pause on one side of it and the play on the other. The frost look over the frozen field
- * (see stageLook.ts) is the pause side. The game canvas blurs and dims the scene by the frost
- * amount, and the portal decides where that frost stops. Two steps open the portal, in opposite
+ * the pause on one side of it and the play on the other. The pause world, the frozen field
+ * frosted, lies under the play side, and the portal decides which part of the play side shows
+ * over it (see playShows, stageLook.ts). Two steps open the portal, in opposite
  * directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
  * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the window
  * at the seat that thaws outward with the hold (see getReady.ts). Both grow from the same rest
@@ -25,8 +25,8 @@ export interface FieldSize {
 }
 
 /**
- * The portal: a circle in stage px, and which side of it is the pause. "play" at radius 0 is
- * the field frosted all over; "pause" at radius 0 is a clear field.
+ * The portal: a circle in stage px, and which world is inside it. "play" at radius 0 is the
+ * pause world all over; "pause" at radius 0 is play all over.
  */
 export interface Portal {
 	x: number;
@@ -35,19 +35,22 @@ export interface Portal {
 	inside: "pause" | "play";
 }
 
-/** The field frosted all over: the pause's rest state, with no window in it */
+/** The pause world all over: the pause screen, with no portal into play open */
 export const PAUSE_ALL: Portal = { x: 0, y: 0, radius: 0, inside: "play" };
+/** Play all over: a run in play, with no portal into the pause open */
+export const PLAY_ALL: Portal = { x: 0, y: 0, radius: 0, inside: "pause" };
 
 /**
- * What the canvas has to draw for a portal: the field frosted all over, a clear window in the
- * frost, a frosted disc on a clear field, or nothing frosted at all
+ * Where the play side shows for a portal. The play side is always drawn on top, over the pause
+ * world, and the portal only decides which part of it shows: all of it, outside the circle (the
+ * bloom), inside it (Get ready) or none of it (the pause screen).
  */
-export type PortalShape = "all" | "window" | "disc" | "none";
+export type PlayShows = "all" | "outside" | "inside" | "none";
 
-export function portalShape(portal: Portal): PortalShape {
+export function playShows(portal: Portal): PlayShows {
 	"worklet";
-	if (portal.inside === "play") return portal.radius > 0 ? "window" : "all";
-	return portal.radius > 0 ? "disc" : "none";
+	if (portal.inside === "play") return portal.radius > 0 ? "inside" : "none";
+	return portal.radius > 0 ? "outside" : "all";
 }
 
 /** How dark the frosted scene is dimmed at full frost (the ink laid over it) */

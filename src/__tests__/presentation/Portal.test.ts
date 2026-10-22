@@ -4,8 +4,9 @@ import {
 	edgeProgress,
 	edgeRadius,
 	PAUSE_ALL,
+	PLAY_ALL,
+	playShows,
 	portalReach,
-	portalShape,
 	restRadius,
 	rimFade,
 	smoothstep,
@@ -13,18 +14,25 @@ import {
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
 
-describe("the frost's edge", () => {
-	it("is the field frosted all over at rest, with no window in it", () => {
-		expect(portalShape(PAUSE_ALL)).toBe("all");
+describe("where the play side shows through the portal", () => {
+	it("shows all of play with the play world all over, as in play itself", () => {
+		expect(playShows(PLAY_ALL)).toBe("all");
 	});
 
-	it("is a clear window where the field is frosted outside a circle", () => {
-		expect(portalShape({ x: 10, y: 10, radius: 30, inside: "play" })).toBe("window");
+	it("shows none of play with the pause world all over, as on the pause screen", () => {
+		expect(playShows(PAUSE_ALL)).toBe("none");
 	});
 
-	it("is a frosted disc where the field is frosted inside a circle, and nothing at radius zero", () => {
-		expect(portalShape({ x: 10, y: 10, radius: 30, inside: "pause" })).toBe("disc");
-		expect(portalShape({ x: 10, y: 10, radius: 0, inside: "pause" })).toBe("none");
+	it("shows play outside the bloom's portal, the pause inside it", () => {
+		expect(playShows({ x: 10, y: 10, radius: 30, inside: "pause" })).toBe("outside");
+	});
+
+	it("shows play inside Get ready's portal, the pause outside it", () => {
+		expect(playShows({ x: 10, y: 10, radius: 30, inside: "play" })).toBe("inside");
+	});
+
+	it("shows all of play once a bloom's portal has drained to nothing", () => {
+		expect(playShows({ x: 10, y: 10, radius: 0, inside: "pause" })).toBe("all");
 	});
 });
 

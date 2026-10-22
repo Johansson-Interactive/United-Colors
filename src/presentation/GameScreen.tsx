@@ -1,7 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
-import { StyleSheet, View } from "react-native";
-import { useSharedValue } from "react-native-reanimated";
+import { type StyleProp, StyleSheet, View, type ViewStyle } from "react-native";
+import { type SharedValue, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
@@ -26,14 +26,14 @@ import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { pauseContent, pauseEntryFades } from "./flow/pauseContent";
-import type { MenuOpening } from "./flow/screenFlow";
+import type { MenuOpening, Screen } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
 import { useDevControlMode } from "./hooks/useDevControlMode";
 import { useGameBindings } from "./hooks/useGameBindings";
 import { playerColorOf, usePlayerColor, useRestingPlayerColor } from "./hooks/usePlayerColor";
-import { useScoreTally } from "./hooks/useScoreTally";
+import { type ScoreTally, useScoreTally } from "./hooks/useScoreTally";
 import { useScreenFlow } from "./hooks/useScreenFlow";
 import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
@@ -50,7 +50,7 @@ import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
 import { NO_ZERO } from "./tilt/tiltZero";
-import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
+import { FIELD_UNTOUCHED, type FieldTouchState } from "./touch/fieldTouch";
 
 interface GameScreenProps {
 	session: GameSession;
@@ -169,9 +169,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[session, corners, placeScore, dispatch],
 	);
 
-	// The frost, the edge wash and the stage fade follow the screen, shake and bursts react to
-	// the store; the flood is the transition
-	const { frost, portal, accent, stageOpacity } = useStageLook({ screen, phase }, playerColor);
+	// The pause world, the portal, the frost, the edge wash and the stage fade follow the screen,
+	// shake and bursts react to the store; the flood is the transition
+	const { pauseWorld, hudScore, frost, portal, cut, accent, stageOpacity } = useStageLook(
+		{ screen, phase },
+		playerColor,
+	);
 	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
@@ -188,8 +191,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
 	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
 	const inPlay = screen.kind === "hud" || screen.kind === "frosting";
-	// The pause's content is in place under the bloom and around Get ready, pressable only on the pause
-	const pauseShows = pauseContent(screen.kind);
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
@@ -230,73 +231,95 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 
 	const { sensitivity, setSensitivity } = useSensitivitySetting(store, storage, session);
+	// Dev only: where touch steers the dot in play, a drag on the stage moves it
+	const handleDrag = useCallback((dx: number, dy: number) => session.feedDelta(dx, dy), [session]);
 
 	// Everything lives in the stage frame, clear of the top inset (notch / Dynamic Island) and
 	// side insets, which stay black; the playfield runs under the home indicator, the
-	// interface layer keeps clear of it
+	// interface layer keeps clear of it. Bottom to top: the pause world and what lies on it (the
+	// field's touch layer, the pause's content), the play side cut to the portal (the game
+	// canvas, Get ready, the HUD's score) with the bloom's rim on the portal's edge, and then
+	// the interface over the stage, never cut: the title, the game over, the bowl, the speed
+	// view, the pause hint, and the flood over everything
+	const insetStyle = [styles.inset, { paddingBottom: insets.bottom }];
+	const dragSteers = devTouch && screen.kind === "hud";
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
-				<GameCanvas
-					scene={scene}
-					frost={frost}
-					portal={portal}
-					accent={accent}
-					stageOpacity={stageOpacity}
-					shake={shake}
-					bursts={bursts}
-					burstClock={burstClock}
-					onLayout={handleLayout}
-					onDragDelta={devTouch ? (dx, dy) => session.feedDelta(dx, dy) : undefined}
-				/>
-
-				<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={fieldTouchEnabled} />
-
-				{screen.kind === "frosting" && (
-					<BloomOverlay
+				{/* The title's and the pause's corner menus read and change their settings here */}
+				<CornerMenusProvider
+					store={store}
+					storage={storage}
+					sensitivity={sensitivity}
+					onLevel={handleLevelPress}
+					onSpeed={handleSpeedPress}
+				>
+					<GameCanvas
 						scene={scene}
-						color={restingColor}
-						start={screen.start}
-						touch={touch}
-						corners={corners}
-						portal={portal}
-						onCovered={handleBloomCovered}
-						onCleared={handleBloomCleared}
+						frost={frost}
+						pauseWorld={pauseWorld}
+						cut={cut}
+						accent={accent}
+						stageOpacity={stageOpacity}
+						shake={shake}
+						bursts={bursts}
+						burstClock={burstClock}
+						onLayout={handleLayout}
+						onDragDelta={dragSteers ? handleDrag : undefined}
+						pauseSide={
+							<PauseSide
+								touch={touch}
+								onTouch={handleFieldTouch}
+								fieldTouchEnabled={fieldTouchEnabled}
+								insetStyle={insetStyle}
+								screen={screen.kind}
+								store={store}
+								color={playerColor}
+								score={score}
+								onQuit={handleLeavePress}
+							/>
+						}
 					/>
-				)}
 
-				{screen.kind === "getReady" && (
-					<GetReadyOverlay
-						scene={scene}
-						color={restingColor}
-						sensitivity={sensitivity}
-						corners={corners}
-						touch={touch}
-						portal={portal}
-						onReady={handleReady}
-						onShut={handleReadyShut}
-					/>
-				)}
-
-				{/* The score and its slivers, across the whole field; hidden, not gone, off play */}
-				<HUD
-					score={score}
-					color={playerColor}
-					visible={inPlay}
-					onPause={devTouch ? handlePause : undefined}
-					corners={corners}
-				/>
-
-				<View style={[styles.inset, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
-					<View style={styles.stage} pointerEvents="box-none">
-						{/* The title's and the pause's corner menus read and change their settings here */}
-						<CornerMenusProvider
-							store={store}
-							storage={storage}
+					{screen.kind === "getReady" && (
+						<GetReadyOverlay
+							scene={scene}
+							color={restingColor}
 							sensitivity={sensitivity}
-							onLevel={handleLevelPress}
-							onSpeed={handleSpeedPress}
-						>
+							corners={corners}
+							touch={touch}
+							portal={portal}
+							cut={cut}
+							onReady={handleReady}
+							onShut={handleReadyShut}
+						/>
+					)}
+
+					{/* The score and its slivers, across the whole field; hidden, not gone, where no play side shows it */}
+					<HUD
+						score={score}
+						color={playerColor}
+						visible={hudScore}
+						cut={pauseWorld ? cut : null}
+						onPause={devTouch && inPlay ? handlePause : undefined}
+						corners={corners}
+					/>
+
+					{screen.kind === "frosting" && (
+						<BloomOverlay
+							scene={scene}
+							color={restingColor}
+							start={screen.start}
+							touch={touch}
+							corners={corners}
+							portal={portal}
+							onCovered={handleBloomCovered}
+							onCleared={handleBloomCleared}
+						/>
+					)}
+
+					<View style={insetStyle} pointerEvents="box-none">
+						<View style={styles.stage} pointerEvents="box-none">
 							{screen.kind === "title" && (
 								<KioskOverlay
 									highScore={highScore}
@@ -306,53 +329,91 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 								/>
 							)}
 
-							{pauseShows && (
-								<PauseOverlay
-									pressable={pauseShows.pressable}
-									fadesIn={pauseEntryFades(screen.kind)}
-									onQuit={handleLeavePress}
+							{screen.kind === "speed" && (
+								<SpeedOverlay
+									color={screen.color}
+									sensitivity={sensitivity}
+									onSelect={setSensitivity}
+									onBack={handleSpeedBack}
 								/>
 							)}
-						</CornerMenusProvider>
 
-						{screen.kind === "speed" && (
-							<SpeedOverlay
-								color={screen.color}
-								sensitivity={sensitivity}
-								onSelect={setSensitivity}
-								onBack={handleSpeedBack}
-							/>
-						)}
+							{screen.kind === "settle" && (
+								<SettleOverlay
+									color={screen.color}
+									onSettled={handleSettled}
+									onBack={handleSettleBack}
+									onSnap={handleSnap}
+								/>
+							)}
 
-						{screen.kind === "settle" && (
-							<SettleOverlay
-								color={screen.color}
-								onSettled={handleSettled}
-								onBack={handleSettleBack}
-								onSnap={handleSnap}
-							/>
-						)}
+							{screen.kind === "gameOver" && (
+								<GameOverOverlay
+									store={store}
+									color={restingColor}
+									audio={audio}
+									onRetry={handleRetryPress}
+									onBack={handleLeavePress}
+								/>
+							)}
 
-						{screen.kind === "gameOver" && (
-							<GameOverOverlay
-								store={store}
-								color={restingColor}
-								audio={audio}
-								onRetry={handleRetryPress}
-								onBack={handleLeavePress}
-							/>
-						)}
-
-						{/* The paused score and run time, still in the middle, with the pause's content */}
-						{pauseShows && <PausedScore store={store} color={playerColor} score={score} />}
-
-						<PauseHint store={store} screen={screen.kind} fieldPauses={!devTouch} />
+							<PauseHint store={store} screen={screen.kind} fieldPauses={!devTouch} />
+						</View>
 					</View>
-				</View>
+				</CornerMenusProvider>
 
 				<FloodOverlay flood={flood} />
 			</StageFrame>
 		</View>
+	);
+};
+
+interface PauseSideProps {
+	touch: SharedValue<FieldTouchState>;
+	onTouch: () => void;
+	fieldTouchEnabled: boolean;
+	insetStyle: StyleProp<ViewStyle>;
+	screen: Screen["kind"];
+	store: GameStore;
+	color: SharedValue<string>;
+	score: ScoreTally;
+	onQuit: (at: PressPoint) => void;
+}
+
+/**
+ * What lies on the pause world, under the play side (see GameCanvas): the field's touch layer,
+ * and the pause's content, plain views that are never cut by the portal. The content is in
+ * place under the bloom and around Get ready, pressable only on the pause (see pauseContent.ts).
+ */
+const PauseSide: React.FC<PauseSideProps> = ({
+	touch,
+	onTouch,
+	fieldTouchEnabled,
+	insetStyle,
+	screen,
+	store,
+	color,
+	score,
+	onQuit,
+}) => {
+	const shows = pauseContent(screen);
+	return (
+		<>
+			<FieldTouch touch={touch} onTouch={onTouch} enabled={fieldTouchEnabled} />
+			<View style={insetStyle} pointerEvents="box-none">
+				<View style={styles.stage} pointerEvents="box-none">
+					{shows && (
+						<PauseOverlay
+							pressable={shows.pressable}
+							fadesIn={pauseEntryFades(screen)}
+							onQuit={onQuit}
+						/>
+					)}
+					{/* The paused score and run time, still in the middle, with the pause's content */}
+					{shows && <PausedScore store={store} color={color} score={score} />}
+				</View>
+			</View>
+		</>
 	);
 };
 

@@ -21,8 +21,8 @@ const GLOW_SHARE = 0.4;
 
 /**
  * The rim on the portal (see portal.ts): a thin stroke in the player's colour over a soft
- * glow, drawn inside a Skia canvas. The bloom and Get ready draw the same rim, so the frost
- * closing over the field and opening from the seat read as one edge going two ways.
+ * glow, drawn inside a Skia canvas. The bloom and Get ready draw the same rim, so the pause
+ * world opening over the field and play opening from the seat read as one edge going two ways.
  */
 export const PortalRim: React.FC<PortalRimProps> = ({ centre, radius, opacity, color }) => {
 	const glow = useDerivedValue(() => opacity.get() * GLOW_SHARE);
