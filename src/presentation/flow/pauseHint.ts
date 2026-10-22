@@ -4,7 +4,7 @@
  * first few seconds of run time and then goes for good; a run resumed after that never brings
  * it back, and only a run started afresh does.
  *
- * Its pair, the resume hint, stands under PAUSED for the whole pause: the frost is the way
+ * Its pair, the resume hint, stands under PAUSED for the whole pause: the pause world is the way
  * back, and it takes a hold, not a tap, since lifting the finger shuts Get ready again.
  */
 

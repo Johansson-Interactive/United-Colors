@@ -11,10 +11,9 @@
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
  * field in play freezes the game at once and opens a portal into the pause at the seat; the
  * pause screen opens once the portal covers the field, and a finger lifted before then lets
- * play go on. On
- * the pause screen a finger on the frost opens Get ready and holds it open: the game stays
- * paused until the player has held level, then resumes with no flood; a finger lifted before
- * then shuts the window and the pause screen comes back.
+ * play go on. On the pause screen a finger held on the pause opens Get ready and holds it open:
+ * the game stays paused until the player has held level, then resumes with no flood; a finger
+ * lifted before then shuts the cup and the pause screen comes back.
  */
 
 import type { GamePhase, TiltZero } from "../../domain/types";
@@ -40,7 +39,7 @@ interface SettleRequest {
 /**
  * A screen in place of the title's or the pause's own: the speed view, opened from either, its
  * dot in the colour play takes; or, over the pause, Get ready, held open by the finger that
- * touched the frost, where the player holds level until play resumes
+ * touched the pause, where the player holds level until play resumes
  */
 type Over = { kind: "speed"; from: MenuOpening["from"]; color: string } | { kind: "getReady" };
 
@@ -96,7 +95,7 @@ export type Screen =
 export interface GameFacts {
 	/** A level pose is set, so PLAY needs no bowl first */
 	levelPoseSet: boolean;
-	/** There is tilt to hold level with, so a touch on the frost goes through Get ready */
+	/** There is tilt to hold level with, so a touch on the pause goes through Get ready */
 	tiltPresent: boolean;
 	/** The player's colour, which play from the pause or the game over keeps */
 	playerColor: string;
@@ -194,7 +193,7 @@ const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
  * screen they were opened from, and Get ready over the pause; anywhere else they cannot be
  * open, and the phase's own screen shows. A flood leaves the screen under it as it is until it
  * covers. The bloom keeps the HUD up over the run it is freezing, so the pause screen opens
- * only once the frost has covered the field, and a run's end keeps it up until the last of
+ * only once the portal has covered the field, and a run's end keeps it up until the last of
  * its score slivers has arrived, so the game over opens on the score complete.
  */
 export function screenOf(state: FlowState): Screen {
@@ -232,7 +231,7 @@ const GET_READY_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([
 ]);
 
 /**
- * What can still step the flow while the bloom frosts the field: leaving the app and the
+ * What can still step the flow while the bloom's portal grows over the field: leaving the app and the
  * bloom's own ends. The HUD has no buttons, and the finger is already down.
  */
 const BLOOM_EVENTS: ReadonlySet<FlowEvent["type"]> = new Set([

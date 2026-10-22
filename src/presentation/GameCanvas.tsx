@@ -315,8 +315,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	const shakeTransform = useDerivedValue(() => [{ translateX: shake.get() }]);
 	const cover = useDerivedValue(() => stageCover(stageOpacity.get()));
 
-	// Only where touch steers the dot does the stage take a touch; the field's touch layer, under
-	// the play side, gets it everywhere else
 	const scenePaint = frosted ? (
 		<Paint>
 			<Blur blur={frostSigma} />
@@ -344,6 +342,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 			<View
 				style={[styles.container, !pauseWorld && styles.inked]}
 				onLayout={handleLayout}
+				// Only where touch steers the dot does the stage take a touch; the field's touch
+				// layer, under the play side, gets it everywhere else
 				pointerEvents={panResponder ? "auto" : "none"}
 				{...(panResponder?.panHandlers ?? {})}
 			>

@@ -23,11 +23,11 @@ interface PauseOverlayProps {
 const fromPause = (): MenuOpening => ({ from: "pause" });
 
 /**
- * Paused: the scene frosts over, a calm place to look around, change settings or quit, with the
- * score and run time in the middle (see PausedScore). Its content is already in place as the
+ * Paused: the pause world, the frozen field frosted, a calm place to look around, change
+ * settings or quit, with the score and run time in the middle (see PausedScore). Its content is already in place as the
  * bloom's portal reveals it, and stays as it is around Get ready's (see pauseContent.ts); only
- * on the pause itself does it take a press. The frost is the way back: a finger held on it,
- * clear of the buttons, opens Get ready (see FieldTouch), so nothing here takes a touch but
+ * on the pause itself does it take a press. The pause world is the way back: a finger held on
+ * it, clear of the buttons, opens Get ready (see FieldTouch), so nothing here takes a touch but
  * the buttons, and the caption under PAUSED says so (see pauseHint.ts). The corners hold the
  * settings (level pose and tilt speed) and the sound.
  */
