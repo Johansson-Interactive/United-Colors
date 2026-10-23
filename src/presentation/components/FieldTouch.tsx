@@ -1,11 +1,14 @@
 import type React from "react";
 import { useCallback } from "react";
-import { View } from "react-native";
+import { type GestureResponderEvent, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
-import { FIELD_TOUCH_FRAME, type FieldTouchState } from "../touch/fieldTouch";
+import { FIELD_TOUCH_FRAME, type FieldTouchState, onStage } from "../touch/fieldTouch";
 
 interface FieldTouchProps {
-	/** Written as the finger lands and lifts, for the steppers on the UI thread to read each frame */
+	/**
+	 * Written as the finger lands, with where, and as it lifts, for the steppers on the UI
+	 * thread to read each frame
+	 */
 	touch: SharedValue<FieldTouchState>;
 	/** A finger landed on the field; the flow decides what that does */
 	onTouch: () => void;
@@ -18,17 +21,21 @@ interface FieldTouchProps {
  * canvas and under every button, so a touch clear of the buttons lands here, on every screen
  * alike. It stays mounted from play through the pause and Get ready, so the finger that opens
  * Get ready on the pause screen is the same touch whose lift is seen there, and the flow sees
- * one event per landing: whether the finger stays is the steppers' to follow through `touch`,
- * which they read on the UI thread without a render. It stops short of the grip band down each side, so a
+ * one event per landing: where it went and whether it stays is the steppers' to follow through
+ * `touch`, which they read on the UI thread without a render. It stops short of the grip band down each side, so a
  * finger landing there never reaches it.
  */
 export const FieldTouch: React.FC<FieldTouchProps> = ({ touch, onTouch, enabled }) => {
-	const handleGrant = useCallback(() => {
-		touch.set({ down: true });
-		onTouch();
-	}, [touch, onTouch]);
+	const handleGrant = useCallback(
+		(event: GestureResponderEvent) => {
+			const at = onStage({ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY });
+			touch.set({ down: true, ...at });
+			onTouch();
+		},
+		[touch, onTouch],
+	);
 	const handleEnd = useCallback(() => {
-		touch.set({ down: false });
+		touch.set({ ...touch.get(), down: false });
 	}, [touch]);
 	return (
 		<View

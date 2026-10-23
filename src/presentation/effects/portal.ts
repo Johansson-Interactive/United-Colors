@@ -3,10 +3,10 @@
  * the pause on one side of it and the play on the other. The pause world, the frozen field
  * frosted, lies under the play side, and the portal decides which part of the play side shows
  * over it while the bloom or Get ready moves it (see useStageLook). Two steps open the portal,
- * in opposite directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
- * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the cup
- * at the seat that widens to the walls with the hold (see getReady.ts). Both grow from the same rest
- * size through the same ease, wear the same rim and fade it at the same point, so here are
+ * in opposite directions: the bloom puts the pause inside the circle, growing out from under
+ * the finger as it holds the run paused (see bloom.ts), and Get ready puts the play inside it,
+ * the cup at the seat that widens to the walls with the hold (see getReady.ts). Both grow
+ * through the same ease, wear the same rim and fade it at the same point, so here are
  * the pieces they share, and how both step a frame. No React, so the canvas and the steppers
  * can use it.
  */
@@ -40,7 +40,7 @@ export interface Portal {
 
 /**
  * No portal open: play all over. Where the portal starts, until the bloom or Get ready opens
- * one at the seat; anywhere else the play side isn't cut to it (see useStageLook)
+ * one; anywhere else the play side isn't cut to it (see useStageLook)
  */
 export const NO_PORTAL: Portal = { x: 0, y: 0, radius: 0, inside: "pause" };
 
@@ -101,9 +101,9 @@ export function advanceEdge(progress: number, growing: boolean, dt: number, full
 }
 
 /**
- * Where the portals open: the seat, where the player dot froze, at its radius. The frozen scene
- * always has a player here; were it to have none, they open from the middle of the field, at no
- * size.
+ * Where Get ready's portal, and the dev pause dot's bloom, opens: the seat, where the player
+ * dot froze, at its radius. The frozen scene always has a player here; were it to have none,
+ * it opens from the middle of the field, at no size.
  */
 export function seatOf(player: StretchedDisc | null, field: FieldSize): StretchedDisc {
 	"worklet";

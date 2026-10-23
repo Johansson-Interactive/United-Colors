@@ -1,12 +1,12 @@
 /**
  * Pure state machine behind the bloom (see GLOSSARY.md): a finger held on the field in play
- * freezes the run at once and opens a portal into the pause at the seat, where the player dot
- * froze. It starts at the rest size around the dot, so the dot is gone on the first frame,
- * wears the rim and grows with the hold; once it has passed the walls the pause screen opens
- * (covered). A finger lifted before then drains the portal back into the dot, faster than it
- * grew, and play goes on from the frozen frame (cleared). The bloom is Get ready's portal
- * run the other way (see getReady.ts): the same rest size, ease, rim and fade, with the pause
- * inside the portal instead of the play.
+ * freezes the run at once and opens a portal into the pause from under the finger. It grows
+ * from the fingertip, wears the rim and grows with the hold; once it has passed the walls the
+ * pause screen opens (covered). A finger lifted before then drains the portal back into the
+ * fingertip, faster than it grew, and play goes on from the frozen frame (cleared). The bloom
+ * is Get ready's portal run the other way (see getReady.ts): the same ease, rim and fade, with
+ * the pause inside the portal instead of the play. The dev pause dot has no finger to open
+ * under, so its bloom opens at the seat instead, at the rest size around the player dot.
  *
  * Steps run on the UI thread, one a frame, with whether the bloom is held; the overlay only
  * copies what a frame says to draw.
@@ -25,6 +25,7 @@ import {
 	restRadius,
 	rimFade,
 } from "../effects/portal";
+import type { FieldTouchState } from "./fieldTouch";
 
 export interface BloomState {
 	/** How far the portal has grown from the rest size towards the walls, 0..1; the field is covered at 1 */
@@ -56,6 +57,16 @@ export function bloomHeld(start: BloomStart, fingerDown: boolean): boolean {
 	return start === "pauseDot" || fingerDown;
 }
 
+/**
+ * Where the bloom started by `start` opens, and around what size of dot: a finger's under the
+ * fingertip, from nothing, where `touch` says it landed; the pause dot's at `seat`, where the
+ * player dot froze, at the rest size around it
+ */
+export function bloomOrigin(start: BloomStart, touch: FieldTouchState, seat: Disc): Disc {
+	"worklet";
+	return start === "finger" ? { x: touch.x, y: touch.y, radius: 0 } : seat;
+}
+
 /** Advance one frame, with whether the bloom is still held; a lifted finger drains it faster than it grew */
 export function stepBloom(state: BloomState, held: boolean, dt: number): BloomState {
 	"worklet";
@@ -75,41 +86,41 @@ export interface BloomFrame {
 }
 
 /**
- * What `state` draws around `seat`, where the player dot froze, at its radius: the portal grows
- * from the rest size around the dot to the field's farthest corner from it, and the rim fades as
- * it passes the walls. Drained, the field is clear again and the dot shows.
+ * What `state` draws around `origin` (see bloomOrigin): the portal grows from the rest size
+ * around a dot of the origin's radius (none, under a finger) to the field's farthest corner from
+ * it, and the rim fades as it passes the walls. Drained, the field is clear again.
  */
-export function bloomFrame(state: BloomState, seat: Disc, field: FieldSize): BloomFrame {
+export function bloomFrame(state: BloomState, origin: Disc, field: FieldSize): BloomFrame {
 	"worklet";
 	const cleared = state.outcome === "cleared";
 	const radius = cleared
 		? 0
-		: edgeRadius(state.progress, restRadius(seat.radius), portalReach(seat, field));
+		: edgeRadius(state.progress, restRadius(origin.radius), portalReach(origin, field));
 	return {
-		portal: { x: seat.x, y: seat.y, radius, inside: "pause" },
+		portal: { x: origin.x, y: origin.y, radius, inside: "pause" },
 		rim: cleared ? 0 : RIM * rimFade(state.progress),
 	};
 }
 
-/** The bloom as it opens at `seat`: the portal at its rest size, so the dot is gone from the first frame */
+/** The bloom as it opens at `origin`: the portal at its rest size there */
 export function openBloom(
-	seat: Disc,
+	origin: Disc,
 	field: FieldSize,
 ): PortalStep<BloomState, BloomFrame, BloomEnd> {
 	"worklet";
-	return { state: OPEN_BLOOM, frame: bloomFrame(OPEN_BLOOM, seat, field), end: null };
+	return { state: OPEN_BLOOM, frame: bloomFrame(OPEN_BLOOM, origin, field), end: null };
 }
 
-/** One frame of the bloom at `seat`, as the overlay runs it: inert, with the same state, once it has ended */
+/** One frame of the bloom at `origin`, as the overlay runs it: inert, with the same state, once it has ended */
 export function advanceBloom(
 	state: BloomState,
 	held: boolean,
 	dt: number,
-	seat: Disc,
+	origin: Disc,
 	field: FieldSize,
 ): PortalStep<BloomState, BloomFrame, BloomEnd> {
 	"worklet";
 	const next = stepBloom(state, held, dt);
 	const end = next !== state && next.outcome !== null ? next.outcome : null;
-	return { state: next, frame: bloomFrame(next, seat, field), end };
+	return { state: next, frame: bloomFrame(next, origin, field), end };
 }

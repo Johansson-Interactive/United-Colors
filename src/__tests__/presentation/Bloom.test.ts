@@ -7,6 +7,7 @@ import {
 	type BloomState,
 	bloomFrame,
 	bloomHeld,
+	bloomOrigin,
 	OPEN_BLOOM,
 	openBloom,
 	stepBloom,
@@ -164,6 +165,41 @@ describe("what the bloom draws", () => {
 			portal: { x: SEAT.x, y: SEAT.y, radius: 0, inside: "pause" },
 			rim: 0,
 		});
+	});
+});
+
+describe("where the bloom opens", () => {
+	/** Where the finger landed, well away from the seat */
+	const LANDED = { down: true, x: 120, y: 200 };
+
+	it("opens a finger's bloom where the finger landed, from nothing", () => {
+		expect(bloomOrigin("finger", LANDED, SEAT)).toEqual({ x: 120, y: 200, radius: 0 });
+	});
+
+	it("opens the dev pause dot's bloom at the seat, which no finger marks", () => {
+		expect(bloomOrigin("pauseDot", { down: false, x: 0, y: 0 }, SEAT)).toBe(SEAT);
+	});
+
+	it("grows a finger's portal from the fingertip to the farthest corner from it", () => {
+		const origin = bloomOrigin("finger", LANDED, SEAT);
+		expect(bloomFrame(OPEN_BLOOM, origin, field).portal).toEqual({
+			x: 120,
+			y: 200,
+			radius: 0,
+			inside: "pause",
+		});
+		const covered = bloomFrame(run(OPEN_BLOOM, true, BLOOM_MS * 2), origin, field);
+		// The finger is at (120, 200) on a 400 x 800 field: the far corner is the bottom right
+		expect(covered.portal.radius).toBeCloseTo(Math.hypot(280, 600), 9);
+	});
+
+	it("drains a finger's portal back into the fingertip", () => {
+		const origin = bloomOrigin("finger", LANDED, SEAT);
+		const draining = frames(run(OPEN_BLOOM, true, BLOOM_MS / 2), false, BLOOM_MS);
+		const last = draining.filter((s) => s.outcome === null).pop() as BloomState;
+		const atTip = bloomFrame(last, origin, field).portal;
+		expect(atTip).toMatchObject({ x: 120, y: 200 });
+		expect(atTip.radius).toBeLessThan(5);
 	});
 });
 

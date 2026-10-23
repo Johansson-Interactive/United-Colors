@@ -9,7 +9,7 @@
  * or the speed view is open over the title the kiosk halts.
  *
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
- * field in play freezes the game at once and opens a portal into the pause at the seat; the
+ * field in play freezes the game at once and opens a portal into the pause under it; the
  * pause screen opens once the portal covers the field, and a finger lifted before then lets
  * play go on. On the pause screen a finger held on the pause opens Get ready and holds it open:
  * the game stays paused until the player has held level, then resumes with no flood; a finger
@@ -134,7 +134,7 @@ export type FlowEvent =
 	| { type: "leavePressed"; at: PressPoint }
 	/**
 	 * A finger landed on the field, clear of any button: in play it freezes the run and opens
-	 * the bloom at the seat; on the pause screen it opens Get ready, held
+	 * the bloom under it; on the pause screen it opens Get ready, held
 	 */
 	| { type: "fieldTouched" }
 	/** The bloom's portal covers the field: the pause screen opens */
@@ -377,7 +377,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "startKiosk" } });
 		case "fieldTouched": {
 			const screen = screenOf(state);
-			// The run freezes the moment the finger lands; the portal then opens at the seat
+			// The run freezes the moment the finger lands; the portal then opens under it
 			if (screen.kind === "hud" && state.phase === "RUNNING") {
 				return { state: { ...state, bloom: "finger" }, act: PAUSE };
 			}

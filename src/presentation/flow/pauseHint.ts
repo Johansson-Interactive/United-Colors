@@ -40,7 +40,7 @@ const FADE_OUT_MS = 600;
 /**
  * How the hint shows (see pauseHintShown): it fades in, and fades out as the run grows old, but
  * a finger landing on the field takes it away at once, so no caption floats over the portal
- * opening at the seat. An early lift brings it back by the same rule that showed it.
+ * opening under it. An early lift brings it back by the same rule that showed it.
  */
 export function pauseHintLook(
 	screen: Screen["kind"],

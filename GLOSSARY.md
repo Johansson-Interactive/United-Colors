@@ -75,14 +75,14 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause at the seat, swallowing the player dot on the first frame. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the dot, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0012.
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause from under the finger. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the fingertip, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0012.
 _Avoid_: long press, hold to pause, pause gesture
 
 **Grip band**:
 The strip 24 dp wide down the field's left and right edges where a finger is taken for the hand holding the phone, not the player: a phone whose glass curves round its sides is gripped there. A finger landing in it does nothing, on any screen, until it lifts. It is not drawn. In code it is `GRIP_BAND`; see ADR 0008.
 
 **Portal**:
-The circle between the pause and play, opening from the seat, with one world inside it, the other outside, and the rim on its edge: the pause inside for the bloom, play inside for Get ready. Both grow through the same ease, and the rim fades the same way once the portal is past sixty percent of the way to the walls. In code it is `Portal` in `portal.ts`; see ADR 0012.
+The circle between the pause and play, with one world inside it, the other outside, and the rim on its edge: the pause inside for the bloom, play inside for Get ready. Both grow through the same ease, and the rim fades the same way once the portal is past sixty percent of the way to the walls. In code it is `Portal` in `portal.ts`; see ADR 0012.
 _Avoid_: frost edge, mask, clip, cutout, window
 
 **Rim**:
@@ -94,7 +94,7 @@ The step between the pause and play, held open by a finger on the pause: a porta
 _Avoid_: calibrate, level gate, resume screen, roll it home
 
 **Seat**:
-Where the player dot froze when the run paused, and where both portals open from; shown in Get ready as the dot's dimple inside the cup. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
+Where the player dot froze when the run paused, and where Get ready's portal opens from; shown in Get ready as the dot's dimple inside the cup. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
 _Avoid_: socket, target, home position
 
 **Cup**:
