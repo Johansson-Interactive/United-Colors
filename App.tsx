@@ -24,6 +24,7 @@ import { ScriptedTiltSensor } from "./src/infrastructure/ScriptedTiltSensor";
 import { pinMainThreadToFastCores } from "./src/infrastructure/threadAffinity";
 import { watchAppActive, watchAppForeground } from "./src/infrastructure/watchAppActive";
 import { GameScreen } from "./src/presentation/GameScreen";
+import { MotionProbe } from "./src/presentation/probe/MotionProbe";
 import { TiltProvider } from "./src/presentation/tilt/TiltProvider";
 import { versionTag } from "./src/presentation/versionTag";
 
@@ -42,6 +43,12 @@ const BENCH_COLOR = "#E91E63";
  * src/application/pilot.ts); shipped builds never set it
  */
 const CAPTURE = process.env.EXPO_PUBLIC_CAPTURE === "1";
+/**
+ * A probe build (built with EXPO_PUBLIC_MOTION_PROBE=1) shows the phone's motion over the game,
+ * to measure on a real phone how a turn on the spot differs from a wrist roll (see
+ * src/presentation/probe/probeReadout.ts); shipped builds never set it
+ */
+const MOTION_PROBE = process.env.EXPO_PUBLIC_MOTION_PROBE === "1";
 
 const store = createGameStore();
 const storage = new AsyncStorageRepository();
@@ -133,6 +140,7 @@ export default function App() {
 					autoStart={BENCH ? BENCH_COLOR : undefined}
 				/>
 			</TiltProvider>
+			{MOTION_PROBE && <MotionProbe sensor={sensor} />}
 		</SafeAreaProvider>
 	);
 }
