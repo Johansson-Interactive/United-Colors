@@ -6,18 +6,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
 import type { GameStore } from "../application/GameStore";
-import type {
-	GameAudio,
-	GameHaptics,
-	SensorPort,
-	SensorSample,
-	StoragePort,
-	WatchAppActive,
-} from "../application/ports";
+import type { GameAudio, GameHaptics, StoragePort, WatchAppActive } from "../application/ports";
+import type { TiltReading, TiltSource } from "../application/TiltSource";
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
-import { bindTiltZero } from "../application/useCases/BindTiltZero";
 import { calibrateTilt } from "../application/useCases/CalibrateTilt";
-import type { Corners, ScreenSize, TiltZero } from "../domain/types";
+import type { Corners, Gravity, PoseSide, ScreenSize } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
 import { FieldTouch } from "./components/FieldTouch";
@@ -50,7 +43,6 @@ import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import { useTilt } from "./tilt/TiltProvider";
-import { NO_ZERO } from "./tilt/tiltZero";
 import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
 
 interface GameScreenProps {
@@ -60,7 +52,7 @@ interface GameScreenProps {
 	audio: GameAudio;
 	haptics: GameHaptics;
 	/** Shared with the interface tilt, which starts and stops it; the game only listens */
-	sensor: SensorPort;
+	tiltSource: TiltSource;
 	watchAppActive: WatchAppActive;
 	/** How the phone's glass rounds its corners, once known; the arena follows (null: square) */
 	corners: Corners | null;
@@ -76,7 +68,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	storage,
 	audio,
 	haptics,
-	sensor,
+	tiltSource,
 	watchAppActive,
 	corners,
 	versionTag,
@@ -98,28 +90,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	useGameBindings(store, audio, haptics, storage);
 
-	// The level pose reaches the game and the interface together, so the dot in the game and
-	// the dots on the menus rest in the same hand position
-	useEffect(
-		() =>
-			bindTiltZero(store, (zero: TiltZero | null, zeroDown: TiltZero | null) => {
-				session.setTiltZero(zero, zeroDown);
-				tilt.zero.set(zero ?? NO_ZERO);
-				tilt.zeroDown.set(zeroDown ?? NO_ZERO);
-			}),
-		[session, tilt, store],
-	);
-
-	// Reads the latest control mode without resubscribing the sensor when it changes
-	const handleSensorSample = useEffectEvent((sample: SensorSample) => {
+	// Reads the latest control mode without resubscribing to the tilt when it changes
+	const handleTiltReading = useEffectEvent((reading: TiltReading) => {
 		// Dev: skip feeding the game while touch is active
 		if (devTouch) return;
 		onGyroSample();
-		session.feedTilt(sample);
+		session.feedTilt(reading);
 	});
 
-	// Samples arrive on every screen; the game only moves the player while a run is on
-	useEffect(() => sensor.onSample((sample) => handleSensorSample(sample)), [sensor]);
+	// The game reads the same tilt as the interface, so the dot in the game and the dots on the
+	// menus rest in the same hand position. Readings arrive on every screen; the game only moves
+	// the player while a run is on.
+	useEffect(() => tiltSource.onReading((reading) => handleTiltReading(reading)), [tiltSource]);
 
 	// The arena is the laid-out stage with the glass's corners, which may arrive after it
 	const stageSizeRef = useRef<ScreenSize | null>(null);
@@ -141,9 +123,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		haltKiosk: () => session.halt(),
 		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
-		calibrate: (zero, facingDown) => void calibrateTilt(zero, store, storage, facingDown),
+		calibrate: (pose, side) => void calibrateTilt(pose, side, store, storage),
+		zeroSwivel: () => tiltSource.zeroSwivel(),
 		facts: () => ({
-			levelPoseSet: store.getState().settings.tiltZero !== null,
+			levelPoseSet: store.getState().settings.levelPoses.up !== null,
 			tiltPresent: tilt.available.get(),
 			playerColor: playerColorOf(store.getState()),
 		}),
@@ -205,8 +188,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		[dispatch],
 	);
 	const handleSettled = useCallback(
-		(zero: TiltZero, facingDown: boolean, at: PressPoint) =>
-			dispatch({ type: "settled", zero, facingDown, at }),
+		(pose: Gravity, side: PoseSide, at: PressPoint) =>
+			dispatch({ type: "settled", pose, side, at }),
 		[dispatch],
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);

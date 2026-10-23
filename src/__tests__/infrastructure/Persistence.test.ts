@@ -49,8 +49,7 @@ describe("Persistence roundtrip", () => {
 			soundEnabled: false,
 			musicEnabled: true,
 			tiltSensitivity: 1,
-			tiltZero: { x: 0.25, y: -0.5 },
-			tiltZeroDown: null,
+			levelPoses: { up: { x: 0.6, y: 0, z: -0.8 }, down: null },
 		};
 		await repo.saveSettings(saved);
 		expect(await repo.loadSettings()).toEqual(saved);
@@ -74,8 +73,7 @@ describe("Persistence roundtrip", () => {
 			soundEnabled: false,
 			musicEnabled: true,
 			tiltSensitivity: 1,
-			tiltZero: null,
-			tiltZeroDown: null,
+			levelPoses: { up: null, down: null },
 		});
 		const settings = await repo.loadSettings();
 		expect(settings.soundEnabled).toBe(false);
@@ -84,30 +82,60 @@ describe("Persistence roundtrip", () => {
 });
 
 describe("Persisted settings are validated before use", () => {
-	it("drops a tilt zero that is not a pose", async () => {
-		const settings = await loadStored({ ...DEFAULT_SETTINGS, tiltZero: "0.5,0.3" });
-		expect(settings.tiltZero).toBeNull();
+	/** Settings stored with these level poses */
+	const withPoses = (up: unknown, down: unknown) => ({
+		...DEFAULT_SETTINGS,
+		levelPoses: { up, down },
 	});
 
-	it("drops a tilt zero with a non-finite coordinate", async () => {
+	it("drops a level pose that is not a pose", async () => {
+		const settings = await loadStored(withPoses("0.5,0.3", null));
+		expect(settings.levelPoses.up).toBeNull();
+		const unshaped = await loadStored({ ...DEFAULT_SETTINGS, levelPoses: "up" });
+		expect(unshaped.levelPoses).toEqual({ up: null, down: null });
+	});
+
+	it("drops a level pose with a non-finite coordinate", async () => {
 		// JSON has no NaN; a hand-edited or buggy writer leaves null, a string or Infinity-as-null
-		const settings = await loadStored({
-			...DEFAULT_SETTINGS,
-			tiltZero: { x: null, y: 0.3 },
-			tiltZeroDown: { x: 0.1, y: "NaN" },
-		});
-		expect(settings.tiltZero).toBeNull();
-		expect(settings.tiltZeroDown).toBeNull();
+		const settings = await loadStored(
+			withPoses({ x: null, y: 0.3, z: -1 }, { x: 0.1, y: 0.2, z: "NaN" }),
+		);
+		expect(settings.levelPoses).toEqual({ up: null, down: null });
 	});
 
-	it("drops a tilt zero missing a coordinate and keeps the other pose", async () => {
+	it("drops a level pose missing a coordinate or of no length, and keeps the other pose", async () => {
+		const settings = await loadStored(withPoses({ x: 0.5 }, { x: 0, y: 0.6, z: 0.8 }));
+		expect(settings.levelPoses).toEqual({ up: null, down: { x: 0, y: 0.6, z: 0.8 } });
+		const empty = await loadStored(withPoses({ x: 0, y: 0, z: 0 }, null));
+		expect(empty.levelPoses.up).toBeNull();
+	});
+
+	it("reads a pose back at unit length", async () => {
+		const settings = await loadStored(withPoses({ x: 0, y: -3, z: -4 }, null));
+		expect(settings.levelPoses.up).toEqual({ x: 0, y: -0.6, z: -0.8 });
+	});
+
+	it("reads the poses as builds saved them before they were kept together", async () => {
+		const { levelPoses: _, ...rest } = DEFAULT_SETTINGS;
 		const settings = await loadStored({
-			...DEFAULT_SETTINGS,
-			tiltZero: { x: 0.5 },
+			...rest,
+			tiltZero: { x: 0, y: -3, z: -4 },
+			tiltZeroDown: { x: 0, y: 0.6, z: 0.8 },
+		});
+		expect(settings.levelPoses).toEqual({
+			up: { x: 0, y: -0.6, z: -0.8 },
+			down: { x: 0, y: 0.6, z: 0.8 },
+		});
+	});
+
+	it("drops a pose saved as two angles, as poses were before they were gravity", async () => {
+		const { levelPoses: _, ...rest } = DEFAULT_SETTINGS;
+		const settings = await loadStored({
+			...rest,
+			tiltZero: { x: 0.25, y: -0.5 },
 			tiltZeroDown: { x: 0.1, y: 0.2 },
 		});
-		expect(settings.tiltZero).toBeNull();
-		expect(settings.tiltZeroDown).toEqual({ x: 0.1, y: 0.2 });
+		expect(settings.levelPoses).toEqual({ up: null, down: null });
 	});
 
 	it("drops unknown keys instead of carrying them into the settings", async () => {

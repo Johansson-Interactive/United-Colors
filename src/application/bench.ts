@@ -1,8 +1,9 @@
 import { DOT_LIMIT, GAME_HERTZ } from "../domain/constants";
 import { BenchSpawner } from "../domain/engine/BenchSpawner";
+import { attitudeAt, FLAT_ATTITUDES } from "../domain/levelPose";
 import { seededRandom } from "../domain/random";
+import type { Attitude } from "../domain/types";
 import type { GameSessionOptions } from "./GameSession";
-import type { SensorSample } from "./ports";
 
 /**
  * The bench run: a late run played by itself, the same every time, so performance traces of
@@ -46,11 +47,14 @@ const TILT_AMPLITUDE = 0.14;
 const PERIOD_X_S = 6.1;
 const PERIOD_Y_S = 4.3;
 
-/** The tilt the bench run steers with, `seconds` after it starts */
-export function benchTilt(seconds: number): SensorSample {
-	return {
+/**
+ * The reading the bench run steers with, `seconds` after it starts: tilted from flat, with no
+ * swivel, so the path reads the same whatever zeroes the swivel
+ */
+export function benchTilt(seconds: number): Attitude {
+	const tilt = {
 		x: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_X_S),
 		y: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_Y_S),
-		facingDown: false,
 	};
+	return attitudeAt(tilt, FLAT_ATTITUDES.up);
 }

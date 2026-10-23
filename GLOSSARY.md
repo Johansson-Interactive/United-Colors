@@ -23,6 +23,22 @@ _Avoid_: "points" (when meaning the dot), bonus dot, switch-color dot
 
 ### Play
 
+**Playing field**:
+The 9:16 box the whole game is played and shown in, eight player widths across and the same on every phone, so no device gives a player more room or a different view. It sits at the bottom of the screen, as wide as fits, with any height left over black above it; its four corners follow the curve of the phone's glass. "Field" on its own means the playing field.
+_Avoid_: arena, stage, playfield, board, screen
+
+**Level pose**:
+The way the player holds the phone for the dot to lie still. There are two, screen up and turned over.
+_Avoid_: calibration, zero, neutral
+
+**Tilt**:
+How far the phone has turned from the level pose, as the hand turns it: about its long axis and about its short axis.
+_Avoid_: angle, orientation, attitude
+
+**Swivel**:
+The part of the tilt that is a turn about the vertical, as in a swivel chair, which gravity cannot see. It has no zero but where the level pose was last taken or held.
+_Avoid_: heading, yaw, compass, azimuth
+
 **Run**:
 One game, from its start until the refusal that ends it.
 _Avoid_: round, session
@@ -59,14 +75,14 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause at the seat, swallowing the player dot on the first frame. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the dot, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0011.
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause at the seat, swallowing the player dot on the first frame. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the dot, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0012.
 _Avoid_: long press, hold to pause, pause gesture
 
 **Grip band**:
 The strip 24 dp wide down the field's left and right edges where a finger is taken for the hand holding the phone, not the player: a phone whose glass curves round its sides is gripped there. A finger landing in it does nothing, on any screen, until it lifts. It is not drawn. In code it is `GRIP_BAND`; see ADR 0008.
 
 **Portal**:
-The circle between the pause and play, opening from the seat, with one world inside it, the other outside, and the rim on its edge: the pause inside for the bloom, play inside for Get ready. Both grow through the same ease, and the rim fades the same way once the portal is past sixty percent of the way to the walls. In code it is `Portal` in `portal.ts`; see ADR 0011.
+The circle between the pause and play, opening from the seat, with one world inside it, the other outside, and the rim on its edge: the pause inside for the bloom, play inside for Get ready. Both grow through the same ease, and the rim fades the same way once the portal is past sixty percent of the way to the walls. In code it is `Portal` in `portal.ts`; see ADR 0012.
 _Avoid_: frost edge, mask, clip, cutout, window
 
 **Rim**:

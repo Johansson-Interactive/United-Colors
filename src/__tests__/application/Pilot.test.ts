@@ -1,14 +1,15 @@
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import { createPilot, pilotStep } from "../../application/pilot";
-import type { Clock, SensorSample } from "../../application/ports";
+import type { Clock } from "../../application/ports";
+import { FLAT_ATTITUDES, wholeTilt } from "../../domain/levelPose";
 import { seededRandom } from "../../domain/random";
-import type { DotView, RenderFrame } from "../../domain/types";
+import type { DotView, RenderFrame, TiltAngles } from "../../domain/types";
 
 const SCREEN = { width: 402, height: 874 };
 const PINK = "#E91E63";
 const BLUE = "#2196F3";
-const LEVEL: SensorSample = { x: 0, y: 0, facingDown: false };
+const LEVEL: TiltAngles = { x: 0, y: 0 };
 
 function dot(partial: Partial<DotView> & Pick<DotView, "kind" | "x" | "y" | "color">): DotView {
 	return { id: "d", radius: 20, prevRadius: 20, vx: 0, vy: 0, ...partial };
@@ -55,7 +56,7 @@ function pilotedRun(seconds: number, seed: number) {
 	session.start(PINK);
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(pilot());
+		session.feedTilt(wholeTilt(pilot(), FLAT_ATTITUDES.up));
 		clock.step();
 		const frame = store.getState().frame;
 		frames.push(frame);
@@ -66,7 +67,7 @@ function pilotedRun(seconds: number, seed: number) {
 
 describe("pilot", () => {
 	it("holds the phone level off play", () => {
-		const leaning = { x: 0.1, y: -0.1, facingDown: false };
+		const leaning = { x: 0.1, y: -0.1 };
 		const kiosk = { ...running([player]), phase: "KIOSK" as const };
 		expect(pilotStep(kiosk, SCREEN, 1, leaning)).toEqual(LEVEL);
 		const paused = { ...running([player]), phase: "PAUSED" as const };

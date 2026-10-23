@@ -1,6 +1,6 @@
 /**
  * Pure rules behind how the field looks behind each screen (see screenFlow.ts), and how it
- * gets there. Pause and play open portals into each other (see portal.ts, ADR 0011): the play
+ * gets there. Pause and play open portals into each other (see portal.ts, ADR 0012): the play
  * side, the live field, is always drawn on top, and under it, only while the run is not in
  * play, the pause world: the frozen field, frosted, with the pause's content over it. The
  * portal decides which part of the play side shows. The bloom and Get ready move it; the look

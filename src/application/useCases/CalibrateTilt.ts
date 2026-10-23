@@ -1,21 +1,21 @@
-import type { TiltZero } from "../../domain/types";
+import type { Gravity, PoseSide } from "../../domain/types";
 import type { GameStore } from "../GameStore";
 import type { StoragePort } from "../ports";
 import { updateSettings } from "./UpdateSettings";
 
 /**
- * Adopt `zero` as the level pose for the side the screen faced while it was set, and persist
- * it with the other settings; the other side's pose is kept
+ * Adopt `pose`, as the gravity it reads, in place of the level pose on `side`, the one in use
+ * while it was set, and persist it with the other settings; the other pose is kept
  */
 export function calibrateTilt(
-	zero: TiltZero,
+	pose: Gravity,
+	side: PoseSide,
 	store: GameStore,
 	storage: StoragePort,
-	facingDown = false,
 ): Promise<void> {
 	const settings = store.getState().settings;
 	return updateSettings(
-		facingDown ? { ...settings, tiltZeroDown: zero } : { ...settings, tiltZero: zero },
+		{ ...settings, levelPoses: { ...settings.levelPoses, [side]: pose } },
 		store,
 		storage,
 	);

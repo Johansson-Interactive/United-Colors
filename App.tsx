@@ -6,6 +6,7 @@ import { type BenchRun, benchSessionOptions, benchTilt } from "./src/application
 import { GameSession } from "./src/application/GameSession";
 import { createGameStore } from "./src/application/GameStore";
 import { createPilot } from "./src/application/pilot";
+import { TiltSource } from "./src/application/TiltSource";
 import { bindPersonalBest } from "./src/application/useCases/BindPersonalBest";
 import { bindRunInPlay } from "./src/application/useCases/BindRunInPlay";
 import type { Corners } from "./src/domain/types";
@@ -67,6 +68,9 @@ const sensor = BENCH
 			)
 		: new DeviceMotionAdapter();
 
+/** The tilt from the level pose in use, read once per sample for the interface and the game */
+const tiltSource = new TiltSource(sensor, store);
+
 const audio = new AudioService(
 	{
 		collect: require("./assets/sounds/collect-small.m4a"),
@@ -115,14 +119,14 @@ export default function App() {
 	return (
 		<SafeAreaProvider>
 			<StatusBar style="light" hidden />
-			<TiltProvider sensor={sensor}>
+			<TiltProvider source={tiltSource}>
 				<GameScreen
 					session={session}
 					store={store}
 					storage={storage}
 					audio={audio}
 					haptics={haptics}
-					sensor={sensor}
+					tiltSource={tiltSource}
 					watchAppActive={watchAppActive}
 					corners={corners}
 					versionTag={VERSION_TAG}

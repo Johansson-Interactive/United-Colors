@@ -3,6 +3,7 @@ import { createGameStore } from "../../application/GameStore";
 import type { ClockFactory } from "../../application/ports";
 import { dotCount, findPlayer, readDot, sceneDot } from "../../application/sceneRecord";
 import { GAME_COLORS } from "../../domain/constants";
+import type { TiltAngles } from "../../domain/types";
 import { scriptedSpawner, smallDotAt } from "../domain/stage";
 
 /** A clock cranked by hand: the test decides when a tick or a frame happens */
@@ -37,6 +38,11 @@ function manualClock() {
 }
 
 const SCREEN = { width: 300, height: 600 };
+
+/** A tilt of `x`, `y` from the level pose */
+function tilted(x: number, y: number): TiltAngles {
+	return { x, y };
+}
 
 /** A session on a hand-cranked clock; `staged` spawns only the dots a test queues on `small` */
 function setup({ staged = false } = {}) {
@@ -128,38 +134,14 @@ describe("GameSession", () => {
 
 	it("tilt before the game exists is dropped; once running it moves the player on the next frame", () => {
 		const { session, clock, player } = setup();
-		session.feedTilt({ x: 0.5, y: 0, facingDown: false });
+		session.feedTilt(tilted(0.5, 0));
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
 		const before = player()?.x ?? 0;
-		session.feedTilt({ x: 0.5, y: 0, facingDown: false });
+		session.feedTilt(tilted(0.5, 0));
 		clock.frame(100, 0);
 		clock.tick();
 		expect(player()?.x).toBeGreaterThan(before);
-	});
-
-	it("tilt is measured from the level pose, even one set before the game exists", () => {
-		const { session, clock, player } = setup();
-		session.setTiltZero({ x: 0.5, y: 0 }, null);
-		session.startKiosk();
-		session.start(GAME_COLORS[0]);
-		const before = player()?.x ?? 0;
-		session.feedTilt({ x: 0.5, y: 0, facingDown: false });
-		clock.frame(100, 0);
-		clock.tick();
-		expect(player()?.x).toBe(before);
-	});
-
-	it("the level pose for the screen facing down is its own", () => {
-		const { session, clock, player } = setup();
-		session.startKiosk();
-		session.start(GAME_COLORS[0]);
-		session.setTiltZero({ x: 0, y: 0 }, { x: 0.5, y: 0 });
-		const before = player()?.x ?? 0;
-		session.feedTilt({ x: 0.5, y: 0, facingDown: true });
-		clock.frame(100, 0);
-		clock.tick();
-		expect(player()?.x).toBe(before);
 	});
 
 	it("the sensitivity scales the player's speed, even one set before the game exists", () => {
@@ -168,7 +150,7 @@ describe("GameSession", () => {
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
 		const from = player()?.x ?? 0;
-		session.feedTilt({ x: 0.1, y: 0, facingDown: false });
+		session.feedTilt(tilted(0.1, 0));
 		clock.frame(100, 0);
 		clock.tick();
 		const doubled = (player()?.x ?? 0) - from;
@@ -221,7 +203,7 @@ describe("GameSession", () => {
 		const { session, clock, scenes } = setup();
 		session.startKiosk();
 		session.start(GAME_COLORS[0]);
-		session.feedTilt({ x: -1, y: 0, facingDown: false });
+		session.feedTilt(tilted(-1, 0));
 		for (let i = 0; i < 120; i++) clock.frame(16, 0);
 		const scene = scenes[scenes.length - 1];
 		const player = readDot(scene, findPlayer(scene), sceneDot());

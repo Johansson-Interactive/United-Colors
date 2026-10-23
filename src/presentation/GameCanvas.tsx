@@ -172,7 +172,7 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * sceneDrawer.ts. The light the room and the dots are lit from follows the device tilt, and
  * stands still while the run is frozen or frosted.
  *
- * Pause and play open portals into each other (see portal.ts, ADR 0011), so the stage is in
+ * Pause and play open portals into each other (see portal.ts, ADR 0012), so the stage is in
  * two worlds. The game canvas is the play side, always on top: the live field, sharp, with the
  * bursts over it. While the run is not in play, the pause world lies under it: a second canvas
  * draws the same scene, frozen, blurred and dimmed, with the pause's content (`pauseSide`, plain

@@ -1,22 +1,16 @@
-import type { GameSettings } from "../domain/types";
-
-/** Raw tilt reading from the device, in radians from flat */
-export interface SensorSample {
-	x: number;
-	y: number;
-	/** The screen faces the ground; tilt is then measured from flat screen down */
-	facingDown: boolean;
-}
+import type { Attitude, GameSettings } from "../domain/types";
 
 /**
- * Device tilt. One source can feed several listeners; whoever owns it starts and stops it,
- * the others only subscribe.
+ * The device's motion sensor, reporting the phone's whole attitude, swivel included, so tilt
+ * can be measured as the whole turn from a level pose (ADR 0010); its gravity follows from it.
+ * One source can feed several listeners; whoever owns it starts and stops it, the others only
+ * subscribe.
  */
 export interface SensorPort {
 	start(): void;
 	stop(): void;
 	/** Returns a function that removes this listener */
-	onSample(listener: (sample: SensorSample) => void): () => void;
+	onSample(listener: (attitude: Attitude) => void): () => void;
 }
 
 /** Persistent storage for the high score and settings */

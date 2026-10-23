@@ -2,7 +2,7 @@
 
 _Amended by ADR 0008: Get ready now opens from a finger held on the frost rather than the play dot, its window runs from the finger to the seat, and it stays open only while the finger is down. The frost window described here became the frost edge._
 
-_Amended by ADR 0011: the frost edge became the portal, and the cup now opens with the finger's hold, at the bloom's speed; the cup being fully open replaces the arming delay._
+_Amended by ADR 0012: the frost edge became the portal, and the cup now opens with the finger's hold, at the bloom's speed; the cup being fully open replaces the arming delay._
 
 Get ready (ADR 0004) used to lift the pause's frost and draw a hollow outline of the player dot that slid with the tilt, with a ring around the dot contracting as the hold filled. It worked, but it was a cursor and a progress ring: nothing in it belonged to the game's language of liquid dots, frost, pulses and catches, and the unfrosted field looked as if play had already begun.
 
