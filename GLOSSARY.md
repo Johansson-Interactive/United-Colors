@@ -75,8 +75,8 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause from under the finger. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the fingertip, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0012.
-_Avoid_: long press, hold to pause, pause gesture
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause from under the finger. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the fingertip, faster than it grew, and play goes on from the frozen frame. A finger landing again within a second of that lift opens the pause whole, held or not: a portal still draining grows again from where it is, and once play has gone on, a new one opens under the finger. In code it is `touch/bloom.ts`, screen `frosting`; see ADRs 0012 and 0015.
+_Avoid_: long press, hold to pause, pause gesture, double tap, cooldown, debounce
 
 **Grip band**:
 The strip 24 dp wide down the field's left and right edges where a finger is taken for the hand holding the phone, not the player: a phone whose glass curves round its sides is gripped there. A finger landing in it does nothing, on any screen, until it lifts. It is not drawn. In code it is `GRIP_BAND`; see ADR 0008.

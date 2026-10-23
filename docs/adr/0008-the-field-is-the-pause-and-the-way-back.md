@@ -1,5 +1,7 @@
 # The field is the pause, and the way back: a held touch, with Get ready held open
 
+_Amended by ADR 0015: a finger landing again within a second of an early lift opens the pause whole, so the slip grace below (a finger that lands again before the bloom has drained picks up the hold) is gone._
+
 _Amended by ADR 0012: the bloom now opens from the seat, not under the finger, and drains back into the dot. The frost edge became the portal, shared by both worlds. Get ready's cup opens with the hold, at the bloom's speed, and its being fully open replaces the arming delay._
 
 Play had a pause dot in the top-right corner, and the pause screen had a play dot in the same spot that opened Get ready (ADR 0005). In a tilt game the thumbs hold the phone by its lower half; the corner needed an awkward reach while steering, and on the pause screen the play dot crowded PAUSED and was far from the thumb. Players also had to learn where the dot was before they could pause at all.
