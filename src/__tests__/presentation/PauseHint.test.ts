@@ -43,14 +43,14 @@ describe("the pause hint around a finger on the field", () => {
 	const running = { ...INITIAL_FLOW, phase: "RUNNING" as const };
 
 	it("is gone the moment a finger lands, with no fade over the opening portal", () => {
-		const touched = stepFlow(running, { type: "fieldTouched" }, GAME);
+		const touched = stepFlow(running, { type: "fieldTouched", landedAt: 0 }, GAME);
 		expect(pauseHintLook(touched.screen.kind, young, true)).toEqual({ opacity: 0, over: 0 });
 	});
 
 	it("comes back after an early lift while the run is still young", () => {
-		const touched = stepFlow(running, { type: "fieldTouched" }, GAME).state;
+		const touched = stepFlow(running, { type: "fieldTouched", landedAt: 0 }, GAME).state;
 		const paused = stepFlow(touched, { type: "phaseChanged", phase: "PAUSED" }, GAME).state;
-		const cleared = stepFlow(paused, { type: "bloomCleared" }, GAME).state;
+		const cleared = stepFlow(paused, { type: "bloomCleared", liftedAt: 0 }, GAME).state;
 		const resumed = stepFlow(cleared, { type: "phaseChanged", phase: "RUNNING" }, GAME);
 		expect(resumed.screen.kind).toBe("hud");
 		expect(pauseHintLook(resumed.screen.kind, young, true).opacity).toBe(1);

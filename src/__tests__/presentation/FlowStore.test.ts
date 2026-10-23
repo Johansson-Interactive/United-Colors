@@ -82,7 +82,7 @@ describe("flow store", () => {
 	it("a finger on the field pauses the game at once and keeps the HUD up, frosting", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("RUNNING");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		expect(calls).toEqual(["pause"]);
 		publish("PAUSED");
 		expect(screen()).toEqual({ kind: "frosting", start: "finger" });
@@ -93,9 +93,9 @@ describe("flow store", () => {
 	it("a finger lifted before the frost covers resumes the game, and the HUD is back as it reports play", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("RUNNING");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "bloomCleared" });
+		flow.getState().dispatch({ type: "bloomCleared", liftedAt: 0 });
 		expect(calls).toEqual(["pause", "resume"]);
 		publish("RUNNING");
 		expect(screen()).toEqual({ kind: "hud" });
@@ -113,7 +113,7 @@ describe("flow store", () => {
 	it("a finger on the pause opens Get ready when there is tilt, zeroing the swivel", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		expect(screen()).toEqual({ kind: "getReady" });
 		expect(calls).toEqual(["zeroSwivel"]);
 	});
@@ -122,7 +122,7 @@ describe("flow store", () => {
 		const { flow, calls, answers, publish, screen } = setup();
 		answers.tiltPresent = false;
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		expect(calls).toEqual(["resume"]);
 		expect(screen()).toEqual({ kind: "pause" });
 	});
@@ -130,7 +130,7 @@ describe("flow store", () => {
 	it("Get ready's hold resumes at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		flow.getState().dispatch({ type: "readyHeld" });
 		expect(calls).toEqual(["zeroSwivel", "resume"]);
 	});
@@ -138,7 +138,7 @@ describe("flow store", () => {
 	it("Get ready's cup shutting brings the pause screen back, touching nothing", () => {
 		const { flow, calls, publish, screen } = setup();
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "fieldTouched" });
+		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		calls.length = 0;
 		flow.getState().dispatch({ type: "readyShut" });
 		expect(calls).toEqual([]);

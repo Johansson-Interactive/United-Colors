@@ -2,18 +2,29 @@ import type { Point } from "../effects/portal";
 import type { Screen } from "../flow/screenFlow";
 
 /**
- * Whether a finger is on the field, and where it landed (stage px). The field touch layer
- * (see FieldTouch) writes it as the finger lands and lifts; the bloom and Get ready read it on
- * the UI thread each frame, so a lift reaches them without a render. The bloom opens where the
- * finger landed; Get ready opens at the seat.
+ * Whether a finger is on the field, where it landed (stage px), and when it last lifted. The
+ * field touch layer (see FieldTouch) writes it as the finger lands and lifts; the bloom and Get
+ * ready read it on the UI thread each frame, so a lift reaches them without a render. The bloom
+ * opens where the finger landed; Get ready opens at the seat. A drained bloom hands the lift's
+ * time to the flow, which counts a second touch's second from it (see fieldTime).
  */
 export interface FieldTouchState {
 	down: boolean;
 	x: number;
 	y: number;
+	/** When the finger last lifted, on fieldTime's clock (ms); 0 before any lift */
+	liftedAt: number;
 }
 
-export const FIELD_UNTOUCHED: FieldTouchState = { down: false, x: 0, y: 0 };
+export const FIELD_UNTOUCHED: FieldTouchState = { down: false, x: 0, y: 0, liftedAt: 0 };
+
+/**
+ * The clock a finger's landing and lifting are timed on (ms): monotonic wall time, so the second
+ * after an early lift runs on through the frozen drain and into play alike
+ */
+export function fieldTime(): number {
+	return performance.now();
+}
 
 /** The grip down each side of a curved phone (dp); see ADR 0008, GLOSSARY.md: Grip band */
 const GRIP_BAND = 24;

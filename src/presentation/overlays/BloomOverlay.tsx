@@ -25,7 +25,10 @@ interface BloomOverlayProps {
 	scene: SharedValue<Float32Array>;
 	/** The player's colour, which the rim wears */
 	color: string;
-	/** What started the bloom: a finger, whose hold it follows, or the dev pause dot */
+	/**
+	 * What started the bloom: a finger, whose hold it follows, or a second touch or the dev
+	 * pause dot, which play out whole
+	 */
 	start: BloomStart;
 	/** Where the finger landed and whether it is still down, as the field touch layer keeps it */
 	touch: SharedValue<FieldTouchState>;

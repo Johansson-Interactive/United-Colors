@@ -2,16 +2,16 @@ import type React from "react";
 import { useCallback } from "react";
 import { type GestureResponderEvent, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
-import { FIELD_TOUCH_FRAME, type FieldTouchState, onStage } from "../touch/fieldTouch";
+import { FIELD_TOUCH_FRAME, type FieldTouchState, fieldTime, onStage } from "../touch/fieldTouch";
 
 interface FieldTouchProps {
 	/**
-	 * Written as the finger lands, with where, and as it lifts, for the steppers on the UI
-	 * thread to read each frame
+	 * Written as the finger lands, with where, and as it lifts, with when, for the steppers on
+	 * the UI thread to read each frame
 	 */
 	touch: SharedValue<FieldTouchState>;
-	/** A finger landed on the field; the flow decides what that does */
-	onTouch: () => void;
+	/** A finger landed on the field at `landedAt` (see fieldTime); the flow decides what that does */
+	onTouch: (landedAt: number) => void;
 	/** Off, the layer lets every touch through (dev: the field steers the dot by drag) */
 	enabled: boolean;
 }
@@ -29,13 +29,13 @@ export const FieldTouch: React.FC<FieldTouchProps> = ({ touch, onTouch, enabled 
 	const handleGrant = useCallback(
 		(event: GestureResponderEvent) => {
 			const at = onStage({ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY });
-			touch.set({ down: true, ...at });
-			onTouch();
+			touch.set({ ...touch.get(), down: true, ...at });
+			onTouch(fieldTime());
 		},
 		[touch, onTouch],
 	);
 	const handleEnd = useCallback(() => {
-		touch.set({ ...touch.get(), down: false });
+		touch.set({ ...touch.get(), down: false, liftedAt: fieldTime() });
 	}, [touch]);
 	return (
 		<View

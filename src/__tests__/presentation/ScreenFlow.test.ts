@@ -1,5 +1,6 @@
 import type { GamePhase } from "../../domain/types";
 import {
+	type FlowEvent,
 	type FlowState,
 	type GameFacts,
 	INITIAL_FLOW,
@@ -63,7 +64,7 @@ describe("score slivers at a run's end", () => {
 
 	it("never pauses the run on the held game over", () => {
 		const held = { ...IN_AIR, phase: "GAME_OVER" as const };
-		expect(stepFlow(held, { type: "fieldTouched" }, GAME)).toEqual({
+		expect(stepFlow(held, { type: "fieldTouched", landedAt: 0 }, GAME)).toEqual({
 			state: held,
 			screen: { kind: "hud" },
 		});
@@ -301,7 +302,7 @@ describe("screen flow", () => {
 	});
 
 	it("a finger on the field in play freezes the run at once and opens the portal into the pause, held by the finger", () => {
-		expect(stepFlow(RUNNING, { type: "fieldTouched" }, GAME)).toEqual({
+		expect(stepFlow(RUNNING, { type: "fieldTouched", landedAt: 0 }, GAME)).toEqual({
 			state: { ...RUNNING, bloom: "finger" },
 			screen: { kind: "frosting", start: "finger" },
 			act: { kind: "pause" },
@@ -309,7 +310,7 @@ describe("screen flow", () => {
 	});
 
 	it("the bloom keeps the HUD up while the game reports the pause it asked for", () => {
-		const frosting = stepFlow(RUNNING, { type: "fieldTouched" }, GAME).state;
+		const frosting = stepFlow(RUNNING, { type: "fieldTouched", landedAt: 0 }, GAME).state;
 		const paused = stepFlow(frosting, { type: "phaseChanged", phase: "PAUSED" }, GAME);
 		expect(paused.state).toEqual(FROSTING);
 		expect(paused.screen).toEqual({ kind: "frosting", start: "finger" });
@@ -323,16 +324,14 @@ describe("screen flow", () => {
 	});
 
 	it("a finger lifted before the frost covers the field lets play go on from the frozen frame", () => {
-		expect(stepFlow(FROSTING, { type: "bloomCleared" }, GAME)).toEqual({
-			state: PAUSED,
-			screen: { kind: "pause" },
-			act: { kind: "resume" },
-		});
+		const cleared = stepFlow(FROSTING, { type: "bloomCleared", liftedAt: 0 }, GAME);
+		expect(cleared.screen).toEqual({ kind: "pause" });
+		expect(cleared.act).toEqual({ kind: "resume" });
 	});
 
 	it("under the bloom there are no buttons to press, and a second finger starts nothing", () => {
 		for (const event of [
-			{ type: "fieldTouched" },
+			{ type: "fieldTouched", landedAt: 0 },
 			{ type: "leavePressed", at: AT },
 			{ type: "levelPressed", from: "pause" },
 			{ type: "speedPressed", from: "pause" },
@@ -345,14 +344,14 @@ describe("screen flow", () => {
 	});
 
 	it("a run that ends under the bloom takes the bloom with it", () => {
-		const frosting = stepFlow(RUNNING, { type: "fieldTouched" }, GAME).state;
+		const frosting = stepFlow(RUNNING, { type: "fieldTouched", landedAt: 0 }, GAME).state;
 		const over = stepFlow(frosting, { type: "phaseChanged", phase: "GAME_OVER" }, GAME);
 		expect(over.state).toEqual({ ...INITIAL_FLOW, phase: "GAME_OVER" });
 		expect(over.screen).toEqual({ kind: "gameOver" });
 	});
 
 	it("a finger on the pause screen opens Get ready, held, zeroing the swivel as the cup opens", () => {
-		expect(stepFlow(PAUSED, { type: "fieldTouched" }, GAME)).toEqual({
+		expect(stepFlow(PAUSED, { type: "fieldTouched", landedAt: 0 }, GAME)).toEqual({
 			state: GET_READY,
 			screen: { kind: "getReady" },
 			zeroSwivel: true,
@@ -360,7 +359,9 @@ describe("screen flow", () => {
 	});
 
 	it("with no tilt to hold level with, a finger on the frost resumes the game straight away", () => {
-		expect(stepFlow(PAUSED, { type: "fieldTouched" }, { ...GAME, tiltPresent: false })).toEqual({
+		expect(
+			stepFlow(PAUSED, { type: "fieldTouched", landedAt: 0 }, { ...GAME, tiltPresent: false }),
+		).toEqual({
 			state: PAUSED,
 			screen: { kind: "pause" },
 			act: { kind: "resume" },
@@ -383,7 +384,7 @@ describe("screen flow", () => {
 			{ ...PAUSED, over: { kind: "speed", from: "pause", color: PINK } },
 		];
 		for (const state of elsewhere) {
-			expect(stepFlow(state, { type: "fieldTouched" }, GAME)).toEqual(rests(state));
+			expect(stepFlow(state, { type: "fieldTouched", landedAt: 0 }, GAME)).toEqual(rests(state));
 		}
 	});
 
@@ -466,7 +467,7 @@ describe("screen flow", () => {
 			{ type: "readyHeld" },
 			{ type: "readyShut" },
 			{ type: "bloomCovered" },
-			{ type: "bloomCleared" },
+			{ type: "bloomCleared", liftedAt: 0 },
 		] as const) {
 			expect(stepFlow(PAUSED, event, GAME)).toEqual(rests(PAUSED));
 			expect(stepFlow(RUNNING, event, GAME)).toEqual(rests(RUNNING));
@@ -476,7 +477,11 @@ describe("screen flow", () => {
 	it("after QUIT starts the flood, a finger on the frost does nothing; the flood still lands on the title", () => {
 		const quit = stepFlow(PAUSED, { type: "leavePressed", at: AT }, GAME);
 		expect(quit.state.flooding).toBe(true);
-		const resume = stepFlow(quit.state, { type: "fieldTouched" }, { ...GAME, tiltPresent: false });
+		const resume = stepFlow(
+			quit.state,
+			{ type: "fieldTouched", landedAt: 0 },
+			{ ...GAME, tiltPresent: false },
+		);
 		expect(resume).toEqual(rests(quit.state));
 		const covered = stepFlow(resume.state, { type: "covered" }, GAME);
 		expect(covered.state).toEqual(PAUSED);
@@ -497,7 +502,7 @@ describe("screen flow", () => {
 	it("screen-changing taps are ignored while a flood runs, until it covers the screen", () => {
 		const flooding = stepFlow(INITIAL_FLOW, { type: "leavePressed", at: AT }, GAME).state;
 		for (const event of [
-			{ type: "fieldTouched" },
+			{ type: "fieldTouched", landedAt: 0 },
 			{ type: "appLeft" },
 			{ type: "speedPressed", from: "menu", color: PINK },
 			{ type: "levelPressed", from: "pause" },
@@ -625,6 +630,7 @@ describe("which screen shows", () => {
 						over,
 						flooding,
 						bloom: null,
+						earlyLift: null,
 						kioskStarted: false,
 						sliversInAir: false,
 					};
@@ -660,6 +666,125 @@ describe("the bloom's screen", () => {
 		});
 		expect(screenOf({ ...INITIAL_FLOW, phase: "GAME_OVER", bloom: "finger" })).toEqual({
 			kind: "gameOver",
+		});
+	});
+});
+
+describe("a second touch soon after an early lift", () => {
+	/** When the finger lifted early */
+	const LIFT = 50_000;
+
+	/** Events in turn from `state`, as the game reports its phases back; the last step */
+	const steps = (state: FlowState, events: FlowEvent[], game = GAME) =>
+		events.reduce((step, event) => stepFlow(step.state, event, game), rests(state));
+
+	const touch = (landedAt: number): FlowEvent => ({ type: "fieldTouched", landedAt });
+	const phase = (to: GamePhase): FlowEvent => ({ type: "phaseChanged", phase: to });
+
+	/** A run back in play after a finger landed and lifted early at LIFT, its portal drained */
+	const afterLift = steps(RUNNING, [
+		touch(LIFT - 120),
+		phase("PAUSED"),
+		{ type: "bloomCleared", liftedAt: LIFT },
+		phase("RUNNING"),
+	]).state;
+
+	it("opens the pause whole, from under the finger, when the finger lands within the second", () => {
+		expect(stepFlow(afterLift, touch(LIFT + 999), GAME)).toMatchObject({
+			screen: { kind: "frosting", start: "secondTouch" },
+			act: { kind: "pause" },
+		});
+	});
+
+	it("counts the second from the lift, however long the first touch held", () => {
+		const longHold = steps(RUNNING, [
+			touch(LIFT - 800),
+			phase("PAUSED"),
+			{ type: "bloomCleared", liftedAt: LIFT },
+			phase("RUNNING"),
+			touch(LIFT + 999),
+		]);
+		expect(longHold.screen).toEqual({ kind: "frosting", start: "secondTouch" });
+	});
+
+	it.each([1000, 1001, 5000])(
+		"is an ordinary bloom, following the hold, %i ms after the lift",
+		(ms) => {
+			expect(stepFlow(afterLift, touch(LIFT + ms), GAME)).toMatchObject({
+				screen: { kind: "frosting", start: "finger" },
+				act: { kind: "pause" },
+			});
+		},
+	);
+
+	it("leaves the dev pause dot's bloom as it was", () => {
+		expect(stepFlow(afterLift, { type: "pausePressed" }, GAME).screen).toEqual({
+			kind: "frosting",
+			start: "pauseDot",
+		});
+	});
+
+	it("leaves nothing behind once its bloom covers: Get ready resumes into an ordinary bloom", () => {
+		const resumed = steps(afterLift, [
+			touch(LIFT + 100),
+			phase("PAUSED"),
+			{ type: "bloomCovered" },
+			touch(LIFT + 300),
+			{ type: "readyHeld" },
+			phase("RUNNING"),
+		]);
+		expect(resumed.screen).toEqual({ kind: "hud" });
+		expect(stepFlow(resumed.state, touch(LIFT + 600), GAME).screen).toEqual({
+			kind: "frosting",
+			start: "finger",
+		});
+	});
+
+	it("leaves nothing behind once its bloom covers, on a device without tilt either", () => {
+		const noTilt = { ...GAME, tiltPresent: false };
+		const resumed = steps(
+			afterLift,
+			[
+				touch(LIFT + 100),
+				phase("PAUSED"),
+				{ type: "bloomCovered" },
+				touch(LIFT + 300),
+				phase("RUNNING"),
+			],
+			noTilt,
+		);
+		expect(stepFlow(resumed.state, touch(LIFT + 600), noTilt).screen).toEqual({
+			kind: "frosting",
+			start: "finger",
+		});
+	});
+
+	it("is forgotten when the run ends, so the next run starts clean", () => {
+		const nextRun = steps(afterLift, [
+			phase("REJECTING"),
+			phase("GAME_OVER"),
+			{ type: "retryPressed", at: AT },
+			{ type: "covered" },
+			phase("RUNNING"),
+		]);
+		expect(stepFlow(nextRun.state, touch(LIFT + 600), GAME).screen).toEqual({
+			kind: "frosting",
+			start: "finger",
+		});
+	});
+
+	it("is forgotten on leaving the app, which lands on the pause as before", () => {
+		const away = stepFlow(afterLift, { type: "appLeft" }, GAME);
+		expect(away.act).toEqual({ kind: "pause" });
+		const back = steps(away.state, [
+			phase("PAUSED"),
+			touch(LIFT + 200),
+			{ type: "readyHeld" },
+			phase("RUNNING"),
+		]);
+		expect(stepFlow(back.state, touch(LIFT + 400), GAME).screen).toEqual({
+			kind: "frosting",
+			start: "finger",
 		});
 	});
 });
