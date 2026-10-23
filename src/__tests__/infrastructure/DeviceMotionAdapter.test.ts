@@ -22,7 +22,6 @@ vi.mock("expo-sensors", () => ({
 	},
 }));
 
-import { gravityOf, turnBetween } from "../../domain/levelPose";
 import { DeviceMotionAdapter } from "../../infrastructure/DeviceMotionAdapter";
 
 function emit(beta: number, gamma: number, alpha = 0) {
@@ -56,7 +55,7 @@ describe("DeviceMotionAdapter", () => {
 		sensor.stop();
 	});
 
-	it("reports the attitude of the three angles, its gravity the old formula's", async () => {
+	it("reports the gravity of the device rotation", async () => {
 		const sensor = new DeviceMotionAdapter();
 		const listener = vi.fn();
 		sensor.onSample(listener);
@@ -65,24 +64,24 @@ describe("DeviceMotionAdapter", () => {
 		// Top edge raised 0.7, right edge lowered 0.4, swivelled 2 radians
 		emit(0.7, 0.4, 2);
 
-		const g = gravityOf(listener.mock.calls[0][0]);
+		const g = listener.mock.calls[0][0];
 		expect(g.x).toBeCloseTo(Math.cos(0.7) * Math.sin(0.4));
 		expect(g.y).toBeCloseTo(-Math.sin(0.7));
 		expect(g.z).toBeCloseTo(-Math.cos(0.7) * Math.cos(0.4));
 	});
 
-	it("keeps the swivel gravity cannot see", async () => {
+	it("reports the same sample whichever way the player faces, so turning on the spot never steers", async () => {
 		const sensor = new DeviceMotionAdapter();
 		const listener = vi.fn();
 		sensor.onSample(listener);
 		await started(sensor);
 
-		// Upright, then turned 0.3 about the vertical
-		emit(Math.PI / 2, 0, 0);
-		emit(Math.PI / 2, 0, 0.3);
+		// Reclined, then turned on the spot about the vertical
+		emit(Math.PI / 4, 0.2, 0);
+		emit(Math.PI / 4, 0.2, Math.PI / 2);
 
 		const [[facing], [turned]] = listener.mock.calls;
-		expect(turnBetween(facing, turned)).toBeCloseTo(0.3);
+		expect(turned).toEqual(facing);
 	});
 
 	it("reports nothing on a phone without a gyroscope", async () => {

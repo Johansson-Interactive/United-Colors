@@ -56,7 +56,7 @@ function pilotedRun(seconds: number, seed: number) {
 	session.start(PINK);
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(gravityTilt(pilot(), FLAT.up));
+		session.feedTilt(gravityTilt(pilot(), FLAT.up, "up"));
 		clock.step();
 		const frame = store.getState().frame;
 		frames.push(frame);

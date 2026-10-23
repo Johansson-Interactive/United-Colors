@@ -1,6 +1,6 @@
 import { GAME_HERTZ, PLAYER_SPEED_PER_DEGREE } from "../domain/constants";
-import { attitudeAt, FLAT_ATTITUDES } from "../domain/levelPose";
-import type { Attitude, DotView, RenderFrame, ScreenSize, TiltAngles } from "../domain/types";
+import { FLAT, gravityAt } from "../domain/levelPose";
+import type { DotView, Gravity, RenderFrame, ScreenSize, TiltAngles } from "../domain/types";
 
 /**
  * The pilot: a tilt that steers the player from what the frame shows, so the capture build
@@ -171,11 +171,11 @@ export function pilotStep(
 export function createPilot(
 	getState: () => { frame: RenderFrame; settings: { tiltSensitivity: number } },
 	getScreen: () => ScreenSize,
-): () => Attitude {
+): () => Gravity {
 	let previous = LEVEL;
 	return () => {
 		const { frame, settings } = getState();
 		previous = pilotStep(frame, getScreen(), settings.tiltSensitivity, previous);
-		return attitudeAt(previous, FLAT_ATTITUDES.up);
+		return gravityAt(previous, FLAT.up);
 	};
 }

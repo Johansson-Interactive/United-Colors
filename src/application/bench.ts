@@ -1,8 +1,8 @@
 import { DOT_LIMIT, GAME_HERTZ } from "../domain/constants";
 import { BenchSpawner } from "../domain/engine/BenchSpawner";
-import { attitudeAt, FLAT_ATTITUDES } from "../domain/levelPose";
+import { FLAT, gravityAt } from "../domain/levelPose";
 import { seededRandom } from "../domain/random";
-import type { Attitude } from "../domain/types";
+import type { Gravity } from "../domain/types";
 import type { GameSessionOptions } from "./GameSession";
 
 /**
@@ -47,13 +47,11 @@ const TILT_AMPLITUDE = 0.14;
 const PERIOD_X_S = 6.1;
 const PERIOD_Y_S = 4.3;
 
-/**
- * The reading the bench run steers with, `seconds` after it starts: tilted from flat
- */
-export function benchTilt(seconds: number): Attitude {
+/** The reading the bench run steers with, `seconds` after it starts: tilted from flat */
+export function benchTilt(seconds: number): Gravity {
 	const tilt = {
 		x: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_X_S),
 		y: TILT_AMPLITUDE * Math.sin((2 * Math.PI * seconds) / PERIOD_Y_S),
 	};
-	return attitudeAt(tilt, FLAT_ATTITUDES.up);
+	return gravityAt(tilt, FLAT.up);
 }

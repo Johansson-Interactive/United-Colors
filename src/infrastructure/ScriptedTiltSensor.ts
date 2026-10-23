@@ -1,5 +1,5 @@
 import type { SensorPort } from "../application/ports";
-import type { Attitude } from "../domain/types";
+import type { Gravity } from "../domain/types";
 
 /** Samples a second, about what a phone's motion sensor gives at a 60 Hz display */
 const SAMPLE_HZ = 60;
@@ -10,10 +10,10 @@ const SAMPLE_HZ = 60;
  */
 export class ScriptedTiltSensor implements SensorPort {
 	private timer: ReturnType<typeof setInterval> | null = null;
-	private readonly listeners = new Set<(attitude: Attitude) => void>();
+	private readonly listeners = new Set<(gravity: Gravity) => void>();
 
 	constructor(
-		private readonly path: (seconds: number) => Attitude,
+		private readonly path: (seconds: number) => Gravity,
 		private readonly now: () => number = () => performance.now(),
 	) {}
 
@@ -31,7 +31,7 @@ export class ScriptedTiltSensor implements SensorPort {
 		this.timer = null;
 	}
 
-	onSample(listener: (attitude: Attitude) => void): () => void {
+	onSample(listener: (gravity: Gravity) => void): () => void {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);

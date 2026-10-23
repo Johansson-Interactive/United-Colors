@@ -1,21 +1,14 @@
 /**
  * Pure state machine behind the settle bowl (setting the level pose). The player holds the
- * phone the way they like to play; once the phone has stayed put for a moment, swivel included,
- * the running mean becomes the new level pose. No timer on screen: holding still is the input.
+ * phone the way they like to play; once gravity has stayed put for a moment, its running mean
+ * becomes the new level pose. No timer on screen: holding still is the input.
  * The bowl opens waiting, so the player can read what to do; the hold only counts once they
  * start it. The outcome is the pose together with the side it replaces (screen up or turned
  * over), so a turn-over afterwards can't move it.
  */
 
-import {
-	FLAT,
-	FLAT_ATTITUDES,
-	gravityOf,
-	gravityTilt,
-	turnBetween,
-	turnedToward,
-} from "../../domain/levelPose";
-import type { Attitude, Gravity, PoseSide, TiltAngles } from "../../domain/types";
+import { angleBetween, FLAT, gravityTilt, turnedToward } from "../../domain/levelPose";
+import type { Gravity, PoseSide, TiltAngles } from "../../domain/types";
 
 /**
  * "waiting": open, not yet started; "moving": the hand is still finding its pose;
@@ -25,21 +18,21 @@ export type SettlePhase = "waiting" | "moving" | "settling" | "settled";
 
 export interface SettleState {
 	phase: SettlePhase;
-	/** Running mean of the attitude held; its gravity is the pose once settled */
-	mean: Attitude;
+	/** Running mean of the gravity read; the pose once settled */
+	mean: Gravity;
 	/** The level pose in use at the latest sample; the one the pose replaces once settled */
 	side: PoseSide;
-	/** Attitude when the current hold began; the hold survives while within STILL_RAD of it */
-	anchor: Attitude;
+	/** Gravity when the current hold began; the hold survives while within STILL_RAD of it */
+	anchor: Gravity;
 	/** Hold progress 0..1; also how far the bowl has levelled itself to the hand */
 	progress: number;
 	elapsedMs: number;
 }
 
 /**
- * How far the phone may turn from the hold's anchor (radians, ~2.3 degrees), about any axis,
- * swivel included, and still count as holding still. The whole turn, so it is as forgiving
- * upright or on your side as flat, and a phone still turning about the vertical never holds.
+ * How far gravity may turn from the hold's anchor (radians, ~2.3 degrees) and still count as
+ * holding still, as forgiving in every pose. Turning on the spot doesn't move gravity, so it
+ * doesn't break a hold: it changes nothing the pose keeps (ADR 0014).
  */
 export const STILL_RAD = 0.04;
 /** How long the pose must hold */
@@ -55,9 +48,9 @@ const MEAN_TAU_MS = 90;
  */
 export const INITIAL_SETTLE: SettleState = {
 	phase: "moving",
-	mean: FLAT_ATTITUDES.up,
+	mean: FLAT.up,
 	side: "up",
-	anchor: FLAT_ATTITUDES.up,
+	anchor: FLAT.up,
 	progress: 0,
 	elapsedMs: 0,
 };
@@ -78,26 +71,25 @@ export function settleEase(progress: number): number {
 }
 
 /**
- * Where the bowl's dot rolls (radians) for the phone held in `attitude`: at first gravity's turn
- * from flat, so it runs to the low edge as in a real bowl whichever way the player faces, then
- * more and more the tilt from the mean, as play will read it, as the hold levels the bowl to the
- * hand
+ * Where the bowl's dot rolls (radians) for the phone reading `gravity`: at first its tilt from
+ * flat, so it runs to the low edge as in a real bowl, then more and more the tilt from the mean,
+ * as play will read it, as the hold levels the bowl to the hand
  */
-export function bowlTilt(state: SettleState, attitude: Attitude): TiltAngles {
+export function bowlTilt(state: SettleState, gravity: Gravity): TiltAngles {
 	"worklet";
 	const level = settleEase(state.progress);
-	const fromFlat = gravityTilt(attitude, FLAT[state.side]);
-	const fromMean = gravityTilt(attitude, gravityOf(state.mean));
+	const fromFlat = gravityTilt(gravity, FLAT[state.side], state.side);
+	const fromMean = gravityTilt(gravity, state.mean, state.side);
 	return {
 		x: fromFlat.x + (fromMean.x - fromFlat.x) * level,
 		y: fromFlat.y + (fromMean.y - fromFlat.y) * level,
 	};
 }
 
-/** Advance one frame with the latest attitude and the level pose in use (see levelTilt) */
+/** Advance one frame with the latest gravity and the level pose in use (see levelTilt) */
 export function stepSettle(
 	state: SettleState,
-	attitude: Attitude,
+	gravity: Gravity,
 	side: PoseSide,
 	dt: number,
 ): SettleState {
@@ -106,11 +98,11 @@ export function stepSettle(
 	const first = state.elapsedMs === 0;
 	const elapsedMs = state.elapsedMs + dt;
 	const k = first ? 1 : 1 - Math.exp(-dt / MEAN_TAU_MS);
-	const mean = turnedToward(state.mean, attitude, k);
+	const mean = turnedToward(state.mean, gravity, k);
 	// A new hold anchors where the hand is now; a hold in progress keeps its anchor so that a
 	// slow drift adds up and breaks it instead of being tracked
-	const anchor = state.progress === 0 ? attitude : state.anchor;
-	const still = elapsedMs > WARMUP_MS && turnBetween(attitude, anchor) < STILL_RAD;
+	const anchor = state.progress === 0 ? gravity : state.anchor;
+	const still = elapsedMs > WARMUP_MS && angleBetween(gravity, anchor) < STILL_RAD;
 	const progress = still
 		? Math.min(1, state.progress + dt / SETTLE_HOLD_MS)
 		: Math.max(0, state.progress - dt / (SETTLE_HOLD_MS * 0.5));
@@ -138,12 +130,12 @@ export function setSettleNow(state: SettleState, sideNow: PoseSide): SettleState
 	"worklet";
 	if (state.phase === "waiting" || state.phase === "settled") return state;
 	if (state.elapsedMs > 0) return { ...state, phase: "settled", progress: 1 };
-	return { ...state, phase: "settled", mean: FLAT_ATTITUDES[sideNow], side: sideNow, progress: 1 };
+	return { ...state, phase: "settled", mean: FLAT[sideNow], side: sideNow, progress: 1 };
 }
 
 /** The pose and which it replaces once settled; null before */
 export function settleOutcome(state: SettleState): SettleOutcome | null {
 	"worklet";
 	if (state.phase !== "settled") return null;
-	return { pose: gravityOf(state.mean), side: state.side };
+	return { pose: state.mean, side: state.side };
 }

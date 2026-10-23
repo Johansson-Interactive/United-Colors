@@ -1,5 +1,5 @@
-import { attitudeAt, FLAT, FLAT_ATTITUDES, gravityOf } from "../../domain/levelPose";
-import type { Attitude, Gravity, PoseSide } from "../../domain/types";
+import { FLAT, gravityAt } from "../../domain/levelPose";
+import type { Gravity, PoseSide } from "../../domain/types";
 import {
 	bowlTilt,
 	INITIAL_SETTLE,
@@ -16,17 +16,17 @@ import {
 
 const DEG = Math.PI / 180;
 
-/** The phone tipped `x`, `y` from flat, screen up */
-function at(x: number, y: number): Attitude {
-	return attitudeAt({ x, y }, FLAT_ATTITUDES.up);
+/** The gravity of the phone tipped `x`, `y` from flat, screen up */
+function at(x: number, y: number): Gravity {
+	return gravityAt({ x, y }, FLAT.up);
 }
 
 /** Held upright, facing the player */
 const UPRIGHT = at(0, 90 * DEG);
 
 /** Upright, turned about the vertical by `angle`: upright, that is a turn about the long axis */
-function swivelledUpright(angle: number): Attitude {
-	return attitudeAt({ x: angle, y: 0 }, UPRIGHT);
+function swivelledUpright(angle: number): Gravity {
+	return gravityAt({ x: angle, y: 0 }, UPRIGHT);
 }
 
 /** The level pose a settle set, as the gravity it saves */
@@ -69,7 +69,7 @@ describe("settle", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
 		expect(s.phase).toBe("settled");
 		expect(s.progress).toBe(1);
-		expectGravity(poseOf(s), gravityOf(at(0.6, -0.2)));
+		expectGravity(poseOf(s), at(0.6, -0.2));
 	});
 
 	it("settles held upright or on your side, through a hand's tremor", () => {
@@ -77,34 +77,22 @@ describe("settle", () => {
 			let s = INITIAL_SETTLE;
 			let sign = 1;
 			for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16) {
-				s = stepSettle(s, attitudeAt({ x: 0.01 * sign, y: -0.01 * sign }, pose), "up", 16);
+				s = stepSettle(s, gravityAt({ x: 0.01 * sign, y: -0.01 * sign }, pose), "up", 16);
 				sign = -sign;
 			}
 			expect(s.phase).toBe("settled");
-			expectGravity(poseOf(s), gravityOf(pose));
+			expectGravity(poseOf(s), pose);
 		}
 	});
 
-	it("upright, a phone still turning about the vertical never fills the hold", () => {
+	it("upright, turning on the spot fills the hold: gravity, all the pose keeps, stays put", () => {
 		let s = INITIAL_SETTLE;
-		let peak = 0;
-		// 0.15 rad/s of swivel: gravity never moves, the phone does
-		for (let t = 0; t < SETTLE_HOLD_MS * 2; t += 16) {
-			s = stepSettle(s, swivelledUpright((t / 1000) * 0.15), "up", 16);
-			peak = Math.max(peak, s.progress);
-		}
-		expect(s.phase).not.toBe("settled");
-		expect(peak).toBeLessThan(0.25);
-	});
-
-	it("upright, once the swivel stops the hold fills where the phone came to rest", () => {
-		let s = INITIAL_SETTLE;
-		for (let t = 0; t < 1000; t += 16)
+		// 0.5 rad/s of swivel: gravity never moves, the phone does
+		for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16) {
 			s = stepSettle(s, swivelledUpright((t / 1000) * 0.5), "up", 16);
-		for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16)
-			s = stepSettle(s, swivelledUpright(0.5), "up", 16);
+		}
 		expect(s.phase).toBe("settled");
-		expectGravity(poseOf(s), gravityOf(UPRIGHT));
+		expectGravity(poseOf(s), UPRIGHT);
 	});
 
 	it("does not settle before the hold time", () => {
@@ -136,7 +124,7 @@ describe("settle", () => {
 		expect(s.phase).toBe("settling");
 		s = run(s, moved, 0, SETTLE_HOLD_MS / 2);
 		expect(s.phase).toBe("settled");
-		expectGravity(poseOf(s), gravityOf(at(moved, 0)));
+		expectGravity(poseOf(s), at(moved, 0));
 	});
 
 	it("a slow drift adds up against the anchor and breaks the hold", () => {
@@ -150,12 +138,12 @@ describe("settle", () => {
 		let s = run(INITIAL_SETTLE, 0.1, 0.1, 200);
 		s = hold(s, 0.7, 0.3, SETTLE_HOLD_MS + 400);
 		expect(s.phase).toBe("settled");
-		expectGravity(poseOf(s), gravityOf(at(0.7, 0.3)));
+		expectGravity(poseOf(s), at(0.7, 0.3));
 	});
 
 	it("stays settled and ignores further samples", () => {
 		const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200);
-		expect(stepSettle(s, FLAT_ATTITUDES.down, "down", 16)).toBe(s);
+		expect(stepSettle(s, FLAT.down, "down", 16)).toBe(s);
 	});
 
 	it("waits for the player to start: holding still before then counts for nothing", () => {
@@ -179,7 +167,7 @@ describe("settle", () => {
 			const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200, 0.01, "down");
 			const outcome = settleOutcome(s);
 			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.pose, gravityOf(at(0.6, -0.2)));
+			expectGravity(outcome?.pose, at(0.6, -0.2));
 		});
 
 		it("turning over after the dot rests does not change the side", () => {
@@ -216,7 +204,7 @@ describe("settle", () => {
 			expect(s.progress).toBe(1);
 			const outcome = settleOutcome(s);
 			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.pose, gravityOf(at(0.5, 0.1)));
+			expectGravity(outcome?.pose, at(0.5, 0.1));
 		});
 
 		it("sets a flat pose if no tilt has been measured yet", () => {
@@ -234,7 +222,7 @@ describe("settle", () => {
 			expect(setSettleNow(settled, "down")).toBe(settled);
 			const tapped = setSettleNow(run(INITIAL_SETTLE, 0.2, 0, 300), "up");
 			expect(setSettleNow(tapped, "down")).toBe(tapped);
-			expect(stepSettle(tapped, FLAT_ATTITUDES.down, "down", 16)).toBe(tapped);
+			expect(stepSettle(tapped, FLAT.down, "down", 16)).toBe(tapped);
 		});
 	});
 
@@ -247,7 +235,7 @@ describe("settle", () => {
 
 		it("turned over, the dot rolls from flat screen down", () => {
 			const s = { ...INITIAL_SETTLE, side: "down" as const };
-			expect(bowlTilt(s, attitudeAt({ x: 0.3, y: 0 }, FLAT_ATTITUDES.down)).x).toBeCloseTo(0.3);
+			expect(bowlTilt(s, gravityAt({ x: 0.3, y: 0 }, FLAT.down)).x).toBeCloseTo(0.3);
 		});
 
 		it("once the hold has levelled the bowl, the held pose rests in the middle", () => {
@@ -273,7 +261,7 @@ describe("settle", () => {
 				settled = stepSettle(settled, UPRIGHT, "up", 16);
 			expect(bowlTilt(settled, swivelledUpright(0.2)).x).toBeCloseTo(0, 3);
 			// The right edge lowered 0.2 before standing the phone up: turned clockwise, as seen
-			const wheeled = attitudeAt({ x: 0, y: 90 * DEG }, at(0.2, 0));
+			const wheeled = gravityAt({ x: 0, y: 90 * DEG }, at(0.2, 0));
 			expect(bowlTilt(settled, wheeled).x).toBeCloseTo(0.2, 3);
 		});
 

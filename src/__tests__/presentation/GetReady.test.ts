@@ -1,7 +1,6 @@
 import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { cornerExtent, holdInside } from "../../domain/arena";
-import { attitudeAt, FLAT, FLAT_ATTITUDES, levelTilt } from "../../domain/levelPose";
 import type { Corners } from "../../domain/types";
 import {
 	EDGE_GROW_MS,
@@ -35,7 +34,6 @@ import {
 	stepGetReady,
 	stepRoll,
 } from "../../presentation/tilt/getReady";
-import { swivelled } from "../domain/attitudes";
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
 /** Where the player dot froze, at its radius */
@@ -137,17 +135,6 @@ describe("get-ready stepper", () => {
 		const held = run(INITIAL_GET_READY, 0, 0, HOLD_MS / 2);
 		expect(run(held, 0.12, 0, 100).progress).toBeLessThan(held.progress);
 		expect(run(held, 0, -0.12, 100).progress).toBeLessThan(held.progress);
-	});
-
-	it("upright, fills while the player turns on the spot, which never steers", () => {
-		const upright = attitudeAt({ x: 0, y: Math.PI / 2 }, FLAT_ATTITUDES.up);
-		const poses = { up: { x: 0, y: -1, z: 0 }, down: FLAT.down };
-		let state = INITIAL_GET_READY;
-		for (let t = 0; t < PLENTY; t += 10) {
-			const tilt = levelTilt(swivelled(upright, (2 * t) / PLENTY), poses, "up");
-			state = stepGetReady(state, tilt.x, tilt.y, 10, true);
-		}
-		expect(state.fired).toBe(true);
 	});
 
 	it("fires once only", () => {

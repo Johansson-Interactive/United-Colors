@@ -130,8 +130,8 @@ export const SettleOverlay: React.FC<SettleOverlayProps> = ({
 	useFrameCallback((info) => {
 		if (!tilt.available.get()) return;
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const { attitude, side } = tilt.reading.get();
-		advance(stepSettle(state.get(), attitude, side, dt));
+		const { gravity, side } = tilt.reading.get();
+		advance(stepSettle(state.get(), gravity, side, dt));
 	});
 
 	// On press-in rather than release, so the pose comes from before the finger disturbed it
