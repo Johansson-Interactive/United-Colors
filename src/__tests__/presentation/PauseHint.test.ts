@@ -50,7 +50,11 @@ describe("the pause hint around a finger on the field", () => {
 	it("comes back after an early lift while the run is still young", () => {
 		const touched = stepFlow(running, { type: "fieldTouched", landedAt: 0 }, GAME).state;
 		const paused = stepFlow(touched, { type: "phaseChanged", phase: "PAUSED" }, GAME).state;
-		const cleared = stepFlow(paused, { type: "bloomCleared", liftedAt: 0 }, GAME).state;
+		const cleared = stepFlow(
+			paused,
+			{ type: "bloomCleared", liftedAt: 0, relanded: false },
+			GAME,
+		).state;
 		const resumed = stepFlow(cleared, { type: "phaseChanged", phase: "RUNNING" }, GAME);
 		expect(resumed.screen.kind).toBe("hud");
 		expect(pauseHintLook(resumed.screen.kind, young, true).opacity).toBe(1);

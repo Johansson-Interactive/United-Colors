@@ -20,7 +20,7 @@ import { PauseHint } from "./components/PauseHint";
 import { PauseWorld } from "./components/PauseWorld";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { pauseContent } from "./flow/pauseContent";
-import { bloomEndEvents, type MenuOpening, type Screen } from "./flow/screenFlow";
+import type { MenuOpening, Screen } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -176,10 +176,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		(landedAt: number) => dispatch({ type: "fieldTouched", landedAt }),
 		[dispatch],
 	);
-	// A drained bloom hands on when its finger lifted, which a second touch is timed from
+	// A drained bloom hands on when its finger lifted, which a second touch is timed from, and
+	// whether a finger is down again already
 	const handleBloomEnd = useCallback(
 		(end: BloomEnd) => {
-			for (const event of bloomEndEvents(end, touch.get())) dispatch(event);
+			if (end === "covered") return dispatch({ type: "bloomCovered" });
+			const { liftedAt, down } = touch.get();
+			dispatch({ type: "bloomCleared", liftedAt, relanded: down });
 		},
 		[dispatch, touch],
 	);
@@ -298,7 +301,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					/>
 
 					{screen.kind === "frosting" && (
+						// Keyed on the start, so a second touch's bloom taking over from a drained one
+						// opens afresh under the new finger
 						<BloomOverlay
+							key={screen.start}
 							scene={scene}
 							color={restingColor}
 							start={screen.start}

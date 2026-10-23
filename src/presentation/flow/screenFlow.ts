@@ -11,9 +11,9 @@
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
  * field in play freezes the game at once and opens a portal into the pause under it; the
  * pause screen opens once the portal covers the field, and a finger lifted before then lets
- * play go on. A finger landing again within a second of that lift opens the pause whole: the
- * bloom's stepper commits a portal still draining, and once play has gone on the flow starts a
- * second touch's bloom, which plays out to the pause held or not (ADR 0015). On the pause
+ * play go on. A finger landing again within a second of that lift opens the pause whole: a
+ * portal still draining is held for good by its stepper, and one that has drained gives way to
+ * a second touch's bloom, which plays out to the pause held or not (ADR 0015). On the pause
  * screen a finger held on the pause opens Get ready and holds it open: the game stays paused
  * until the player has held level, then resumes with no flood; a finger lifted before then
  * shuts the cup and the pause screen comes back.
@@ -28,8 +28,7 @@
 import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
-import { type BloomEnd, type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
-import type { FieldTouchState } from "../touch/fieldTouch";
+import { type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
 
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
 type SettleFrom = "start" | "pause" | "menu";
@@ -152,9 +151,10 @@ export type FlowEvent =
 	| { type: "bloomCovered" }
 	/**
 	 * The finger lifted at `liftedAt` (ms) before the portal covered the field, and it has
-	 * drained: play goes on
+	 * drained: play goes on. Unless a finger is `relanded`, down again as the portal clears:
+	 * too late for the bloom's stepper, and ignored by the flow as it landed under the bloom
 	 */
-	| { type: "bloomCleared"; liftedAt: number }
+	| { type: "bloomCleared"; liftedAt: number; relanded: boolean }
 	/** Dev only: the corner pause dot, kept where touch steers the dot instead of the gyro */
 	| { type: "pausePressed" }
 	/** The player left the app (home, app switcher, an incoming call) */
@@ -310,18 +310,6 @@ const openingColor = (
 	game: GameFacts,
 ) => (event.from === "menu" ? event.color : game.playerColor);
 
-/**
- * What the bloom's end tells the flow, with the field's touch as it stands: covered, or cleared
- * at the finger's lift. A finger already down again as the portal clears landed too late for the
- * bloom's stepper and while the flow was still under the bloom, which ignores it; its landing
- * follows the clearing, once play has gone on, so it counts as a second touch.
- */
-export function bloomEndEvents(end: BloomEnd, touch: FieldTouchState): FlowEvent[] {
-	if (end === "covered") return [{ type: "bloomCovered" }];
-	const cleared: FlowEvent = { type: "bloomCleared", liftedAt: touch.liftedAt };
-	return touch.down ? [cleared, { type: "fieldTouched", landedAt: touch.landedAt }] : [cleared];
-}
-
 /** Step `event`, with `game` answering what the tap does not carry */
 export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): FlowStep {
 	const step = bareStep(state, event, game);
@@ -426,6 +414,9 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "bloomCovered":
 			return { state: endBloom(state) };
 		case "bloomCleared":
+			// A finger already down again is a second touch: the run stays frozen and its bloom
+			// takes over from the drained one, the only bloom to follow another with no play between
+			if (event.relanded) return { state: { ...state, bloom: "secondTouch" } };
 			// The frozen frame is where play goes on from; the pose has not had time to change.
 			// The lift's second runs on into play
 			return { state: { ...endBloom(state), earlyLift: event.liftedAt }, act: RESUME };

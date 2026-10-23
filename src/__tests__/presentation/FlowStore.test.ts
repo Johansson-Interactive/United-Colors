@@ -95,7 +95,7 @@ describe("flow store", () => {
 		publish("RUNNING");
 		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		publish("PAUSED");
-		flow.getState().dispatch({ type: "bloomCleared", liftedAt: 0 });
+		flow.getState().dispatch({ type: "bloomCleared", liftedAt: 0, relanded: false });
 		expect(calls).toEqual(["pause", "resume"]);
 		publish("RUNNING");
 		expect(screen()).toEqual({ kind: "hud" });
