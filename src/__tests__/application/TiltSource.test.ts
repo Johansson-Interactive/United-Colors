@@ -66,17 +66,32 @@ function setup(settings: Partial<GameSettings> = {}) {
 	const store = createGameStore();
 	store.getState().updateSettings(settings);
 	const hand = handSensor();
-	const source = new TiltSource(hand.sensor, store);
+	let time = 0;
+	const source = new TiltSource(hand.sensor, store, () => time);
 	const readings: TiltReading[] = [];
 	source.onReading((reading) => readings.push(reading));
 	source.start();
+	/** Hold `attitude` for `ms`, a sample every display frame */
+	const holdFor = (attitude: Attitude, ms: number) => {
+		for (let t = 0; t < ms; t += 16) {
+			time += 16;
+			hand.hold(attitude);
+		}
+	};
 	/** How far the latest reading is from level */
 	const tilt = () => {
 		const latest = readings.at(-1);
 		if (!latest) throw new Error("no reading");
 		return Math.hypot(latest.x, latest.y);
 	};
-	return { store, hand, source, readings, tilt };
+	/** Turn on the spot by `angle` over `ms`, holding `attitude` turned with the player */
+	const turnOnTheSpot = (attitude: Attitude, angle: number, ms: number) => {
+		for (let t = 16; t <= ms; t += 16) {
+			time += 16;
+			hand.hold(swivelled(attitude, (angle * t) / ms));
+		}
+	};
+	return { store, hand, source, readings, tilt, holdFor, turnOnTheSpot };
 }
 
 describe("calibrateTilt", () => {
@@ -211,5 +226,47 @@ describe("TiltSource", () => {
 		const { source, readings } = setup();
 		source.zeroSwivel();
 		expect(readings).toHaveLength(0);
+	});
+
+	it("turning on the spot while playing flat keeps forward forward", () => {
+		const { readings, holdFor, turnOnTheSpot } = setup();
+		holdFor(FLAT_ATTITUDES.up, 100);
+		turnOnTheSpot(FLAT_ATTITUDES.up, Math.PI, 1500);
+		holdFor(attitudeAt({ x: 0, y: 0.2 }, swivelled(FLAT_ATTITUDES.up, Math.PI)), 16);
+		expect(readings.at(-1)?.x).toBeCloseTo(0);
+		expect(readings.at(-1)?.y).toBeCloseTo(0.2);
+	});
+
+	it("reclined, a turn on the spot reads level again once the player is still", () => {
+		const { readings, tilt, holdFor, turnOnTheSpot } = setup({
+			levelPoses: { up: gravityOf(RECLINED), down: null },
+		});
+		holdFor(RECLINED, 100);
+		const turned = swivelled(RECLINED, Math.PI / 2);
+		turnOnTheSpot(RECLINED, Math.PI / 2, 1000);
+		holdFor(turned, 1000);
+		expect(tilt()).toBeLessThan(DEG);
+		holdFor(attitudeAt({ x: 0.3, y: 0 }, turned), 16);
+		expect(readings.at(-1)?.x).toBeCloseTo(0.3, 1);
+		expect(readings.at(-1)?.y).toBeCloseTo(0, 1);
+	});
+
+	it("upright, a roll held as long as you like keeps its full strength", () => {
+		const { readings, holdFor } = setup({ levelPoses: { up: gravityOf(UPRIGHT), down: null } });
+		holdFor(UPRIGHT, 100);
+		holdFor(swivelled(UPRIGHT, 0.5), 5000);
+		expect(readings.at(-1)?.x).toBeCloseTo(0.5);
+	});
+
+	it("a pose saved after a turn on the spot keeps the zero the turn dragged", async () => {
+		const { store, tilt, holdFor, turnOnTheSpot } = setup({
+			levelPoses: { up: gravityOf(UPRIGHT), down: null },
+		});
+		holdFor(UPRIGHT, 100);
+		turnOnTheSpot(UPRIGHT, 2, 1000);
+		holdFor(swivelled(UPRIGHT, 2), 1000);
+		await calibrateTilt(gravityOf(RECLINED), "up", store, memoryStorage(UNSET));
+		holdFor(swivelled(RECLINED, 2), 16);
+		expect(tilt()).toBeLessThan(DEG);
 	});
 });

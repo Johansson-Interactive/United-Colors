@@ -3,9 +3,11 @@ import {
 	attitudeAt,
 	FLAT,
 	FLAT_ATTITUDES,
+	followSwivel,
 	gravityOf,
 	type LevelPoses,
 	levelTilt,
+	swivelledBy,
 	tiltFromFlat,
 	turnBetween,
 	turnedToward,
@@ -271,6 +273,82 @@ describe("zeroSwivel", () => {
 			expect(tilt.x).toBeCloseTo(0);
 			expect(tilt.y).toBeCloseTo(0);
 		}
+	});
+});
+
+describe("followSwivel", () => {
+	/** Follows the phone held at `attitude` from `pose` for `ms`, in display frames; the pose it ends at */
+	function follow(attitude: Attitude, pose: Attitude, ms: number, catchingUp = false) {
+		let at = pose;
+		let catching = catchingUp;
+		for (let t = 0; t < ms; t += 16) {
+			const step = followSwivel(attitude, at, catching, 16);
+			at = swivelledBy(at, step.turn);
+			catching = step.catchingUp;
+		}
+		return { pose: at, catchingUp: catching };
+	}
+
+	it("swivelledBy turns the phone about the vertical as the player turns", () => {
+		for (const [pose, held] of Object.entries(HELD)) {
+			const a = swivelledBy(held, 1.2);
+			const b = swivelled(held, 1.2);
+			for (const key of Object.keys(a) as (keyof Attitude)[])
+				expect(a[key], pose).toBeCloseTo(b[key]);
+		}
+	});
+
+	it("flat, the zero follows any swivel at once, so turning on the spot never turns the controls", () => {
+		for (const heading of [0.5, 2, Math.PI - 0.1, -2]) {
+			const tipped = attitudeAt({ x: 0, y: 0.2 }, swivelled(FLAT_ATTITUDES.up, heading));
+			const step = followSwivel(tipped, FLAT_ATTITUDES.up, false, 16);
+			const tilt = wholeTilt(tipped, swivelledBy(FLAT_ATTITUDES.up, step.turn));
+			expect(tilt.x, `${heading}`).toBeCloseTo(0);
+			expect(tilt.y, `${heading}`).toBeCloseTo(0.2);
+		}
+	});
+
+	it("a roll or tip within reach is never followed, held as long as you like, in every pose", () => {
+		const leans = [
+			{ x: 44 * DEG, y: 0 },
+			{ x: -44 * DEG, y: 0 },
+			{ x: 0, y: 44 * DEG },
+			{ x: 30 * DEG, y: -30 * DEG },
+		];
+		for (const [pose, held] of Object.entries(HELD)) {
+			for (const lean of leans) {
+				const followed = follow(attitudeAt(lean, held), held, 5000);
+				const tilt = wholeTilt(attitudeAt(lean, held), followed.pose);
+				expect(tilt.x, pose).toBeCloseTo(lean.x);
+				expect(tilt.y, pose).toBeCloseTo(lean.y);
+				expect(followed.catchingUp, pose).toBe(false);
+			}
+		}
+	});
+
+	it("a turn on the spot past the reach drags the zero along, which then catches up, in every pose", () => {
+		for (const [pose, held] of Object.entries(HELD)) {
+			for (const heading of [Math.PI / 2, -2.5]) {
+				const turnedAway = swivelled(held, heading);
+				const first = followSwivel(turnedAway, held, false, 16);
+				expect(first.turn, pose).not.toBe(0);
+				const dragged = wholeTilt(turnedAway, swivelledBy(held, first.turn));
+				expect(Math.hypot(dragged.x, dragged.y), pose).toBeLessThanOrEqual(45 * DEG + 1e-9);
+				const settled = follow(turnedAway, held, 2000);
+				const tilt = wholeTilt(turnedAway, settled.pose);
+				expect(Math.hypot(tilt.x, tilt.y), pose).toBeLessThan(DEG);
+				expect(settled.catchingUp, pose).toBe(false);
+			}
+		}
+	});
+
+	it("once caught up, a roll is read in full again", () => {
+		const turnedAway = swivelled(HELD.upright, Math.PI / 2);
+		const settled = follow(turnedAway, HELD.upright, 2000);
+		const rolled = attitudeAt({ x: 0.3, y: 0 }, turnedAway);
+		const step = followSwivel(rolled, settled.pose, settled.catchingUp, 16);
+		expect(step.turn).toBe(0);
+		expect(wholeTilt(rolled, settled.pose).x).toBeCloseTo(0.3, 1);
 	});
 });
 

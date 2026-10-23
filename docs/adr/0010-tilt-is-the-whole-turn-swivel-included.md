@@ -1,5 +1,7 @@
 # Tilt is the whole turn of the phone, swivel included
 
+Amended by ADR 0013: the swivel zero follows a turn on the spot.
+
 ADR 0009 measures tilt as the turn of gravity from the level pose. Gravity cannot see a turn about itself, so one axis fades as the phone nears vertical: held upright, the roll about the long axis that steers left and right is a turn about gravity and reads as nothing; lying on your side, the tip about the short axis is lost instead. Lying back at 45° half of a roll is already lost. ADR 0009 let a turn in the screen's own plane stand in for the lost axis, which gives the hand a second mapping to learn upright and nothing in between.
 
 Now the sensor reports the phone's whole attitude, and tilt is the whole turn from the level pose, read along the phone's own long and short axes. A roll about the long axis steers left and right at full strength in every pose, flat, reclined, upright or on your side, and the turn in the screen's plane goes back to being ignored everywhere, as the flat spin on a tabletop always was. The part of that turn that gravity cannot see is the swivel: the turn about the vertical, as in a swivel chair. Both platforms already deliver it as a heading (Core Motion's yaw, Android's rotation vector), fused from the gyroscope and pinned by the compass, and the adapter had been throwing it away.

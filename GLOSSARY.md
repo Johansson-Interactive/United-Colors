@@ -36,7 +36,7 @@ How far the phone has turned from the level pose, as the hand turns it: about it
 _Avoid_: angle, orientation, attitude
 
 **Swivel**:
-The part of the tilt that is a turn about the vertical, as in a swivel chair, which gravity cannot see. It has no zero but where the level pose was last taken or held.
+The part of the tilt that is a turn about the vertical, as in a swivel chair, which gravity cannot see. It has no zero but where the level pose was last taken or held, and that zero follows the player turning on the spot.
 _Avoid_: heading, yaw, compass, azimuth
 
 **Run**:
