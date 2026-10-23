@@ -1,4 +1,4 @@
-import { rect, rrect } from "@shopify/react-native-skia";
+import { rect, rrect, type SkRRect } from "@shopify/react-native-skia";
 import { useEffect, useMemo } from "react";
 import {
 	type SharedValue,
@@ -7,51 +7,59 @@ import {
 	withDelay,
 	withTiming,
 } from "react-native-reanimated";
-import type { PortalCut } from "../components/PlaySide";
-import { PAUSE_ALL, PLAY_ALL, type Portal, playShows } from "../effects/portal";
-import { type StageMove, type StagePlace, stageLook } from "../effects/stageLook";
+import { NO_PORTAL, type Portal } from "../effects/portal";
+import { hasPauseWorld, type StageMove, type StagePlace, stageLook } from "../effects/stageLook";
 import { INK_LIFT } from "../theme/theme";
+
+/** How the play side is cut over the pause world (see PlaySide): a circle, and which side of it shows */
+export interface PortalCut {
+	clip: SharedValue<SkRRect> | SkRRect;
+	/** The play side shows outside the circle (the bloom's portal), not inside it */
+	out: SharedValue<boolean> | boolean;
+}
+
+/** None of the play side shows: cut to the inside of a circle of no size */
+const NOTHING_SHOWS: PortalCut = { clip: rrect(rect(0, 0, 0, 0), 0, 0), out: false };
 
 /**
  * Applies the field's look behind the screen (see stageLook.ts) to the shared values the
  * canvases draw from. Each value starts its move only when the move itself changes, so a look
- * that stays the same restarts nothing: going between the pause and Get ready leaves alone
- * the portal Get ready has opened. This is the only writer of the stage opacity; the
- * portal is shared with the bloom and Get ready, which move it. A wash in the player's
- * colour follows `playerColor` on the UI thread, so a colour switch in play renders nothing.
+ * that stays the same restarts nothing. This is the only writer of the stage opacity. A wash in
+ * the player's colour follows `playerColor` on the UI thread, so a colour switch in play renders
+ * nothing.
  *
- * Every canvas on the play side cuts itself to the same portal while the pause world is under
- * it: `cut` holds the portal's circle and whether the play side shows outside it rather than
- * inside (see playShows), worked out once a frame for all of the canvases and only while the
- * portal moves. It is null in play, which is cut nowhere, and the same object otherwise, so no
- * canvas sees a new cut each render.
+ * Every canvas on the play side is cut the same way over the pause world, by `cut`: to nothing
+ * on the pause, and to the portal while the bloom or Get ready runs. Those two own `portal` and
+ * set it as they open (see usePortalStepper); the circle and its side are worked out once a
+ * frame for all of the canvases, and only while the portal moves. `cut` is null in play, which
+ * is cut nowhere, and otherwise the same object for as long as it applies, so no canvas sees a
+ * new cut each render.
  */
 export function useStageLook(place: StagePlace, playerColor: SharedValue<string>) {
 	const look = stageLook(place);
-	const portal = useSharedValue<Portal>(PLAY_ALL);
-	useEffect(() => {
-		if (look.portal === "play") portal.set(PLAY_ALL);
-		else if (look.portal === "pause") portal.set(PAUSE_ALL);
-	}, [look.portal, portal]);
+	const portal = useSharedValue<Portal>(NO_PORTAL);
 	const portalClip = useDerivedValue(() => {
 		const { x, y, radius } = portal.get();
 		return rrect(rect(x - radius, y - radius, 2 * radius, 2 * radius), radius, radius);
 	});
-	const clipsOut = useDerivedValue(() => {
-		const shows = playShows(portal.get());
-		return shows === "all" || shows === "outside";
-	});
+	// The bloom's portal has the pause inside it, so play shows outside; Get ready's has play inside
+	const playOutside = useDerivedValue(() => portal.get().inside === "pause");
 	const frost = useStageValue(0, look.frost);
 	const washInPlayer = look.accent === "player";
 	const accent = useDerivedValue(() => (washInPlayer ? playerColor.get() : INK_LIFT));
 	const stageOpacity = useStageValue(1, look.opacity);
-	// One cut for every canvas, and only while the pause world is under them: play pays for no clip
-	const cut = useMemo<PortalCut | null>(
-		() => (look.pauseWorld ? { clip: portalClip, out: clipsOut } : null),
-		[look.pauseWorld, portalClip, clipsOut],
-	);
+	const cut = useMemo<PortalCut | null>(() => {
+		switch (look.playShows) {
+			case "all":
+				return null;
+			case "none":
+				return NOTHING_SHOWS;
+			case "portal":
+				return { clip: portalClip, out: playOutside };
+		}
+	}, [look.playShows, portalClip, playOutside]);
 	return {
-		pauseWorld: look.pauseWorld,
+		pauseWorld: hasPauseWorld(look.playShows),
 		hudScore: look.hudScore,
 		frost,
 		portal,

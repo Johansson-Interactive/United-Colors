@@ -6,20 +6,15 @@ import type { FlowEvent, Screen } from "../flow/screenFlow";
 
 /**
  * The screens and the floods between them (see flowStore.ts), following the game's phase.
- * Returns the screen to show, the kind of screen before it, and the dispatch for the screen's taps. The controls are taken once.
+ * Returns the screen to show and the dispatch for the screen's taps. The controls are taken once.
  */
 export function useScreenFlow(
 	store: GameStore,
 	controls: GameControls,
-): {
-	screen: Screen;
-	cameFrom: Screen["kind"] | null;
-	dispatch: (event: FlowEvent) => void;
-} {
+): { screen: Screen; dispatch: (event: FlowEvent) => void } {
 	const [{ store: flow, follow }] = useState(() => createFlowStore(store, controls));
 	useEffect(follow, [follow]);
 	const screen = useStore(flow, (s) => s.screen);
-	const cameFrom = useStore(flow, (s) => s.cameFrom);
 	const dispatch = useStore(flow, (s) => s.dispatch);
-	return { screen, cameFrom, dispatch };
+	return { screen, dispatch };
 }

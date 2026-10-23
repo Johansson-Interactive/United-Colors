@@ -2,13 +2,16 @@
  * The portal between the pause and the play (see GLOSSARY.md): a circle around a point, with
  * the pause on one side of it and the play on the other. The pause world, the frozen field
  * frosted, lies under the play side, and the portal decides which part of the play side shows
- * over it (see playShows, stageLook.ts). Two steps open the portal, in opposite
- * directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
+ * over it while the bloom or Get ready moves it (see useStageLook). Two steps open the portal,
+ * in opposite directions: the bloom puts the pause inside the circle, growing out from the seat as a finger
  * holds the run paused (see bloom.ts), and Get ready puts the play inside it, the cup
  * at the seat that widens to the walls with the hold (see getReady.ts). Both grow from the same rest
  * size through the same ease, wear the same rim and fade it at the same point, so here are
- * the pieces they share. No React, so the canvas and the steppers can use it.
+ * the pieces they share, and how both step a frame. No React, so the canvas and the steppers
+ * can use it.
  */
+
+import type { StretchedDisc } from "../../application/sceneRecord";
 
 /** A tilt (radians) or a spot on the stage (px), by axis */
 export interface Point {
@@ -35,26 +38,22 @@ export interface Portal {
 	inside: "pause" | "play";
 }
 
-/** The pause world all over: the pause screen, with no portal into play open */
-export const PAUSE_ALL: Portal = { x: 0, y: 0, radius: 0, inside: "play" };
-/** Play all over: a run in play, with no portal into the pause open */
-export const PLAY_ALL: Portal = { x: 0, y: 0, radius: 0, inside: "pause" };
+/**
+ * No portal open: play all over. Where the portal starts, until the bloom or Get ready opens
+ * one at the seat; anywhere else the play side isn't cut to it (see useStageLook)
+ */
+export const NO_PORTAL: Portal = { x: 0, y: 0, radius: 0, inside: "pause" };
 
 /**
- * Where the play side shows for a portal. The play side is always drawn on top, over the pause
- * world, and the portal only decides which part of it shows: all of it, outside the circle (the
- * bloom), inside it (Get ready) or none of it (the pause screen).
+ * One frame's step of the bloom or Get ready: the state carried to the next frame, what to draw
+ * (the portal among it), and how it ended on this very frame, if it did. A step that is over
+ * answers with the same state, so there is nothing new to copy.
  */
-export type PlayShows = "all" | "outside" | "inside" | "none";
-
-export function playShows(portal: Portal): PlayShows {
-	"worklet";
-	if (portal.inside === "play") return portal.radius > 0 ? "inside" : "none";
-	return portal.radius > 0 ? "outside" : "all";
+export interface PortalStep<S, F extends { portal: Portal }, E extends string> {
+	state: S;
+	frame: F;
+	end: E | null;
 }
-
-/** How dark the frosted scene is dimmed at full frost (the ink laid over it) */
-export const FROST_MAX_DIM = 0.5;
 
 /**
  * How long the edge takes to grow from its rest size past the walls: the bloom's portal
@@ -74,8 +73,10 @@ export const RIM = 0.9;
 const REST_REACH = 1.7;
 /** The rim is gone once the edge has grown this far: it has reached the walls */
 const RIM_GONE_FROM = 0.6;
+/** Progress this close to full counts as full, so frame-sized steps can't fall short by rounding */
+const FULL_EPSILON = 1e-9;
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
 	"worklet";
 	return Math.min(max, Math.max(min, value));
 }
@@ -85,6 +86,28 @@ export function smoothstep(t: number): number {
 	"worklet";
 	const k = clamp(t, 0, 1);
 	return k * k * (3 - 2 * k);
+}
+
+/**
+ * Advance an edge's progress along its growth one frame: towards `full` at the edge's pace
+ * while `growing`, and back to 0 faster otherwise. The bloom's growth, Get ready's cup opening
+ * and its hold widening the portal all move by it, so the two portals keep the same pace.
+ */
+export function advanceEdge(progress: number, growing: boolean, dt: number, full = 1): number {
+	"worklet";
+	if (!growing) return Math.max(0, progress - dt / EDGE_DRAIN_MS);
+	const grown = progress + dt / EDGE_GROW_MS;
+	return grown >= full - FULL_EPSILON ? full : grown;
+}
+
+/**
+ * Where the portals open: the seat, where the player dot froze, at its radius. The frozen scene
+ * always has a player here; were it to have none, they open from the middle of the field, at no
+ * size.
+ */
+export function seatOf(player: StretchedDisc | null, field: FieldSize): StretchedDisc {
+	"worklet";
+	return player ?? { x: field.width / 2, y: field.height / 2, radius: 0, stretchX: 0, stretchY: 0 };
 }
 
 /** The edge's radius at rest around a dot of `dotRadius`: a little clear of it */

@@ -3,9 +3,8 @@
  * gets there. Pause and play open portals into each other (see portal.ts, ADR 0012): the play
  * side, the live field, is always drawn on top, and under it, only while the run is not in
  * play, the pause world: the frozen field, frosted, with the pause's content over it. The
- * portal decides which part of the play side shows. The bloom and Get ready move it; the look
- * only sets it to one world all over where neither is running, so the pause screen starts with
- * play hidden whatever a bloom or Get ready left, and play starts with nothing cut out of it.
+ * portal decides which part of the play side shows while the bloom or Get ready moves it; the
+ * pause itself shows none of play, whatever a bloom or Get ready left, and play is cut nowhere.
  * A moment after a run ends the play side itself dims for the game over, and otherwise it
  * clears quickly. The edges are washed in ink on the title and in the player's colour
  * everywhere else. The stage fades out under the bowl and the speed view opened from the
@@ -39,18 +38,16 @@ export interface StageMove<T> {
 	over: StageTransition;
 }
 
+/**
+ * How much of the play side shows: all of it, with no pause world under it, so play costs
+ * nothing for one; none of it, over the pause world (the frozen field, frosted, under the
+ * pause's content); or what the portal leaves it, as the bloom or Get ready moves it
+ */
+export type PlayShows = "all" | "none" | "portal";
+
 /** How the field looks behind a screen */
 export interface StageLook {
-	/**
-	 * Whether the pause world (the frozen field, frosted) is drawn under the pause's content,
-	 * with the play side over it cut to the portal. Never in play, so play costs nothing for it.
-	 */
-	pauseWorld: boolean;
-	/**
-	 * Which world the portal is set to show all over as the screen comes on, or null where the
-	 * bloom or Get ready moves it
-	 */
-	portal: "play" | "pause" | null;
+	playShows: PlayShows;
 	/**
 	 * Whether the HUD's score shows: in play, and through the bloom's and Get ready's portals,
 	 * which cover and uncover it with the rest of the play side
@@ -76,51 +73,47 @@ const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300 };
 const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400 };
 
 export function stageLook({ screen, phase }: StagePlace): StageLook {
-	const pauseWorld = pauseWorldOf(screen, phase);
+	const playShows = playShowsOf(screen, phase);
 	return {
-		pauseWorld,
-		portal: portalOf(screen, pauseWorld),
+		playShows,
 		hudScore: screen.kind === "hud" || screen.kind === "frosting" || screen.kind === "getReady",
-		frost: frostOf(pauseWorld, phase),
+		frost: frostOf(playShows, phase),
 		accent: phase === "KIOSK" ? "ink" : "player",
 		opacity: opacityOf(screen, phase),
 	};
 }
 
-/**
- * The pause world is under the bloom, the pause, Get ready, and the bowl and the speed view
- * opened from the pause: wherever the run is frozen and the pause is, or is opening
- */
-function pauseWorldOf(screen: Screen, phase: GamePhase): boolean {
-	switch (screen.kind) {
-		case "frosting":
-		case "pause":
-		case "getReady":
-			return true;
-		case "settle":
-		case "speed":
-			return phase === "PAUSED";
-		default:
-			return false;
-	}
+/** Whether the pause world is drawn under the play side: wherever it doesn't show all over */
+export function hasPauseWorld(playShows: PlayShows): boolean {
+	return playShows !== "all";
 }
 
 /**
- * The bloom and Get ready move the portal themselves; over the pause world anywhere else it
- * shows the pause all over (leaving the app lands here at once, with no portal), and with no
- * pause world it shows play all over
+ * The bloom and Get ready show play through their portals. The pause world is under them, the
+ * pause, and the bowl and the speed view opened from the pause: wherever the run is frozen and
+ * the pause is, or is opening. Play shows none over it there.
  */
-function portalOf(screen: Screen, pauseWorld: boolean): StageLook["portal"] {
-	if (screen.kind === "frosting" || screen.kind === "getReady") return null;
-	return pauseWorld ? "pause" : "play";
+function playShowsOf(screen: Screen, phase: GamePhase): PlayShows {
+	switch (screen.kind) {
+		case "frosting":
+		case "getReady":
+			return "portal";
+		case "pause":
+			return "none";
+		case "settle":
+		case "speed":
+			return phase === "PAUSED" ? "none" : "all";
+		default:
+			return "all";
+	}
 }
 
 /**
  * Over the pause world the play side stays sharp: the frost is the pause world's, so the field
  * through Get ready's portal is the live one. The game over dims the play side itself.
  */
-function frostOf(pauseWorld: boolean, phase: GamePhase): StageMove<number> {
-	if (pauseWorld) return { to: 0, over: INSTANT };
+function frostOf(playShows: PlayShows, phase: GamePhase): StageMove<number> {
+	if (hasPauseWorld(playShows)) return { to: 0, over: INSTANT };
 	return phase === "GAME_OVER"
 		? { to: GAME_OVER_FROST, over: GAME_OVER_DIM }
 		: { to: 0, over: CLEAR };

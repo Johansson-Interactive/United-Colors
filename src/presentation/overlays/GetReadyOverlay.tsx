@@ -10,32 +10,25 @@ import {
 	vec,
 } from "@shopify/react-native-skia";
 import type React from "react";
-import { useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
-import Animated, {
-	FadeOut,
-	type SharedValue,
-	useDerivedValue,
-	useFrameCallback,
-	useSharedValue,
-} from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import Animated, { FadeOut, type SharedValue, useDerivedValue } from "react-native-reanimated";
 import { playerDisc } from "../../application/sceneRecord";
-import { cornerExtent } from "../../domain/arena";
 import type { Corners } from "../../domain/types";
-import { PlaySide, type PortalCut } from "../components/PlaySide";
+import { PlaySide } from "../components/PlaySide";
 import { PortalRim } from "../components/PortalRim";
-import { PAUSE_ALL, type Portal } from "../effects/portal";
-import { useStageBox } from "../layout/StageFrame";
+import { type Portal, seatOf } from "../effects/portal";
+import { useFieldSize } from "../hooks/useFieldSize";
+import { usePortalStepper } from "../hooks/usePortalStepper";
+import type { PortalCut } from "../hooks/useStageLook";
 import { LIQUID_WOBBLE } from "../liquidShader";
 import { WALL_DROP_EFFECT } from "../sceneDrawer";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_RIM, glass, INK, shade } from "../theme/theme";
 import {
 	advanceGetReady,
-	closeGetReady,
-	type GetReadyFrame,
-	NO_SEAT,
-	OPEN_GET_READY,
+	type GetReadyEnd,
+	type GetReadyFrameState,
+	openGetReady,
 } from "../tilt/getReady";
 import { useTilt } from "../tilt/TiltProvider";
 import type { FieldTouchState } from "../touch/fieldTouch";
@@ -56,10 +49,11 @@ interface GetReadyOverlayProps {
 	portal: SharedValue<Portal>;
 	/** How the play side is cut to the portal: all drawn here is on the play side (see PlaySide) */
 	cut: PortalCut | null;
-	/** Fired once, the moment the portal has widened past the walls */
-	onReady: () => void;
-	/** Fired once, when the cup has shut after the finger lifted */
-	onShut: () => void;
+	/**
+	 * Fired once, as Get ready ends: the moment the portal has widened past the walls, or when
+	 * the cup has shut after the finger lifted
+	 */
+	onEnd: (end: GetReadyEnd) => void;
 }
 
 /** On resume the dot copy fades into the real dot on the seat in this long */
@@ -72,19 +66,6 @@ const SHADE_MAX = 0.35;
 const SHADE_FULL_AT = 40;
 const SHADE_TRAIL = 8;
 
-/** Before the first frame is stepped nothing is drawn */
-const BEFORE_FIRST_FRAME: GetReadyFrame = {
-	drawn: false,
-	seat: NO_SEAT,
-	dot: { x: 0, y: 0 },
-	body: { x: 0, y: 0, radius: 0, wallX: 0, wallY: 0, wallC: 0, neck: 0 },
-	portal: PAUSE_ALL,
-	rim: 0,
-	opened: 0,
-	glass: 0,
-	fired: false,
-	shut: false,
-};
 /** The cover over the frozen player reaches past its ripples (see LIQUID_WOBBLE) and its edge */
 const COVER_SCALE = 1 + LIQUID_WOBBLE;
 const COVER_MARGIN = 0.5;
@@ -101,8 +82,8 @@ const COVER_MARGIN = 0.5;
  * that is left drawn is the dot copy on the seat, which fades into the real dot. Touches go
  * through to the field touch layer.
  *
- * The rules live in the get-ready stepper: each frame, on the UI thread where the tilt and the
- * touch are, this takes one step of it and copies what it says to draw. It drives `portal`,
+ * The rules live in the get-ready stepper, which usePortalStepper runs a step a frame on the UI
+ * thread, where the tilt and the touch are. It drives `portal`,
  * which every canvas on the play side is cut to (see PlaySide), this one too: the field, the
  * HUD's score and what is drawn here (the bowl's glass at the edge, the seat and the dot) show
  * only inside the portal, over the pause world, and grow into view with it. The rim on the
@@ -117,67 +98,33 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	touch,
 	portal,
 	cut,
-	onReady,
-	onShut,
+	onEnd,
 }) => {
 	const tilt = useTilt();
-	const { width, height } = useStageBox();
-	const field = useMemo(
-		() => ({
-			width,
-			height,
-			cornerExtent: cornerExtent({ width, height, corners: corners ?? undefined }),
-		}),
-		[width, height, corners],
-	);
-	const state = useSharedValue(OPEN_GET_READY);
-	// What the stepper last said to draw
-	const frame = useSharedValue(BEFORE_FIRST_FRAME);
-
-	// The scene is frozen, so the seat is where the player is drawn in it throughout
-	const player = useDerivedValue(() => playerDisc(scene.get()));
-	// What the stepper last drew on: the seat, or NO_SEAT with nothing drawn
-	const seat = useDerivedValue(() => frame.get().seat);
-
-	useFrameCallback((info) => {
-		const prev = state.get();
-		const { state: next, frame: now } = advanceGetReady(prev, {
-			seat: player.get(),
+	const field = useFieldSize(corners);
+	// The scene is frozen, so the seat stays where the player dot froze for Get ready's life
+	const [seat] = useState(() => seatOf(playerDisc(scene.get()), field));
+	const advance = (state: GetReadyFrameState, dt: number) => {
+		"worklet";
+		return advanceGetReady(state, {
+			seat,
 			held: touch.get().down,
 			tilt: { x: tilt.x.get(), y: tilt.y.get() },
-			dt: info.timeSincePreviousFrame ?? 16,
+			dt,
 			field,
 			sensitivity,
 		});
-		// Once fired or shut the stepper answers with the same state, and there is nothing new to copy
-		if (next === prev) return;
-		state.set(next);
-		frame.set(now);
-		portal.set(now.portal);
-		if (now.fired) scheduleOnRN(onReady);
-		if (now.shut) scheduleOnRN(onShut);
-	});
+	};
+	const frame = usePortalStepper(() => openGetReady(seat, field), advance, portal, onEnd);
 
-	// Leaves the portal the stepper says on close: open once fired, the pause all over otherwise
-	useEffect(
-		() => () => {
-			portal.set(closeGetReady(state.get(), portal.get()));
-		},
-		[state, portal],
-	);
-
-	const shown = useDerivedValue(() => (frame.get().drawn ? 1 : 0));
-	const seatCentre = useDerivedValue(() => vec(seat.get().x, seat.get().y));
-	const seatRadius = useDerivedValue(() => seat.get().radius);
+	const seatCentre = vec(seat.x, seat.y);
 	// The frozen player is stretched along its jelly stretch, so its cover is too (see drawScene)
-	const coverRadius = useDerivedValue(() => seat.get().radius * COVER_SCALE + COVER_MARGIN);
-	const coverTransform = useDerivedValue(() => {
-		const stretchX = player.get()?.stretchX ?? 0;
-		const stretchY = player.get()?.stretchY ?? 0;
-		const k = 1 + Math.hypot(stretchX, stretchY);
-		const angle = Math.atan2(stretchY, stretchX);
+	const coverRadius = seat.radius * COVER_SCALE + COVER_MARGIN;
+	const coverTransform = useMemo(() => {
+		const k = 1 + Math.hypot(seat.stretchX, seat.stretchY);
+		const angle = Math.atan2(seat.stretchY, seat.stretchX);
 		return [{ rotate: angle }, { scaleX: k }, { scaleY: 1 / k }, { rotate: -angle }];
-	});
+	}, [seat]);
 	const portalCentre = useDerivedValue(() => vec(frame.get().portal.x, frame.get().portal.y));
 	const portalRadius = useDerivedValue(() => frame.get().portal.radius);
 	const rim = useDerivedValue(() => frame.get().rim);
@@ -190,8 +137,7 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	});
 	const shadeOpacity = useDerivedValue(() => {
 		const { dot } = frame.get();
-		const s = seat.get();
-		return SHADE_MAX * Math.min(1, Math.hypot(dot.x - s.x, dot.y - s.y) / SHADE_FULL_AT);
+		return SHADE_MAX * Math.min(1, Math.hypot(dot.x - seat.x, dot.y - seat.y) / SHADE_FULL_AT);
 	});
 	// The dot's body is the wall drop shader's, so pressed into a wall it is cut off at it and
 	// wets it as the player does in play
@@ -224,45 +170,41 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 		>
 			<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
 				<PlaySide cut={cut}>
-					<Group opacity={shown}>
-						{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
-						<Group transform={coverTransform} origin={seatCentre}>
-							<Circle c={seatCentre} r={coverRadius} color={INK} />
-						</Group>
-						{/* The bowl's glass at the portal's edge, as the cup grows and while it is open */}
-						<Group opacity={glassShows}>
-							<Circle c={portalCentre} r={portalRadius}>
-								<RadialGradient
-									c={portalCentre}
-									r={portalRadius}
-									colors={BOWL_GLAZE}
-									positions={BOWL_GLAZE_STOPS}
-								/>
-							</Circle>
-							<Circle
-								c={portalCentre}
-								r={glassRimRadius}
-								color={BOWL_RIM}
-								style="stroke"
-								strokeWidth={1.5}
-							/>
-						</Group>
-						{/* The rolling dot: its shade, its body and its glare */}
-						<Group opacity={shadeOpacity}>
-							<Circle c={shadeCentre} r={seatRadius} color={shade(1)} />
-						</Group>
-						<Rect rect={bodyRect}>
-							<Shader source={WALL_DROP_EFFECT} uniforms={bodyUniforms} />
-						</Rect>
-						<Circle c={glareCentre} r={glareRadius} color={glass(0.5)}>
-							<BlurMask blur={glareBlur} style="normal" />
-						</Circle>
+					{/* The seat: the frozen player dot under it is covered, leaving its dimple */}
+					<Group transform={coverTransform} origin={seatCentre}>
+						<Circle c={seatCentre} r={coverRadius} color={INK} />
 					</Group>
+					{/* The bowl's glass at the portal's edge, as the cup grows and while it is open */}
+					<Group opacity={glassShows}>
+						<Circle c={portalCentre} r={portalRadius}>
+							<RadialGradient
+								c={portalCentre}
+								r={portalRadius}
+								colors={BOWL_GLAZE}
+								positions={BOWL_GLAZE_STOPS}
+							/>
+						</Circle>
+						<Circle
+							c={portalCentre}
+							r={glassRimRadius}
+							color={BOWL_RIM}
+							style="stroke"
+							strokeWidth={1.5}
+						/>
+					</Group>
+					{/* The rolling dot: its shade, its body and its glare */}
+					<Group opacity={shadeOpacity}>
+						<Circle c={shadeCentre} r={seat.radius} color={shade(1)} />
+					</Group>
+					<Rect rect={bodyRect}>
+						<Shader source={WALL_DROP_EFFECT} uniforms={bodyUniforms} />
+					</Rect>
+					<Circle c={glareCentre} r={glareRadius} color={glass(0.5)}>
+						<BlurMask blur={glareBlur} style="normal" />
+					</Circle>
 				</PlaySide>
 				{/* The rim on the portal's edge, over both worlds and never cut, as the bloom's is */}
-				<Group opacity={shown}>
-					<PortalRim centre={portalCentre} radius={portalRadius} opacity={rim} color={color} />
-				</Group>
+				<PortalRim centre={portalCentre} radius={portalRadius} opacity={rim} color={color} />
 			</Canvas>
 		</Animated.View>
 	);

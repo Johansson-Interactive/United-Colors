@@ -21,5 +21,5 @@ Now pause and play open portals into each other. A portal is a circle with a wor
 - The `frosting` screen no longer carries where the finger landed: nothing uses it. "Touch to pause" goes the moment a finger lands, is not clipped, and comes back after an early lift by its existing rule.
 - The pause's content cannot be pressed while the bloom grows, nor while a finger holds Get ready open, so a stray second finger cannot quit the run. Leaving the pause for the title, the level bowl or the speed screen keeps its fades.
 - The score sink module is gone. The overlay of Get ready no longer fades in or out as a whole; the dot copy still fades into the real dot when play resumes.
-- Leaving the app still goes straight to the pause with no portal, and leaving in Get ready shuts it. The dev-only pause dot plays the full bloom from the seat without a hold.
+- Leaving the app still goes straight to the pause with no portal, and leaving in Get ready shuts it. Coming back, the pause's content fades in, as it does back from the level bowl or the speed screen: only under the bloom is it revealed in place. The dev-only pause dot plays the full bloom from the seat without a hold.
 - Open to tuning on a device: how fast the cup opens (the bloom's speed means about 300 to 400 ms to the cup) and whether the dot copy waiting for it reads well.

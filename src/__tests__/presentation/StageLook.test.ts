@@ -1,4 +1,4 @@
-import { stageLook } from "../../presentation/effects/stageLook";
+import { hasPauseWorld, stageLook } from "../../presentation/effects/stageLook";
 import {
 	type FlowEvent,
 	type GameFacts,
@@ -18,8 +18,8 @@ describe("the stage look", () => {
 
 	it("draws the frosted pause world under the pause's content, with play hidden over it", () => {
 		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
-		expect(look.pauseWorld).toBe(true);
-		expect(look.portal).toBe("pause");
+		expect(look.playShows).toBe("none");
+		expect(hasPauseWorld(look.playShows)).toBe(true);
 	});
 
 	it("keeps the play side sharp over the pause world: the frost is the pause world's", () => {
@@ -32,19 +32,17 @@ describe("the stage look", () => {
 		}
 	});
 
-	it("draws the pause world under the bloom and leaves its portal to the bloom", () => {
+	it("draws the pause world under the bloom and shows play through its portal", () => {
 		for (const phase of ["RUNNING", "PAUSED"] as const) {
 			const look = stageLook({ screen: { kind: "frosting", start: "finger" }, phase });
-			expect(look.pauseWorld).toBe(true);
-			expect(look.portal).toBeNull();
+			expect(look.playShows).toBe("portal");
 			expect(look.accent).toBe("player");
 		}
 	});
 
-	it("draws the pause world around Get ready and leaves its portal to Get ready", () => {
+	it("draws the pause world around Get ready and shows play through its portal", () => {
 		const look = stageLook({ screen: { kind: "getReady" }, phase: "PAUSED" });
-		expect(look.pauseWorld).toBe(true);
-		expect(look.portal).toBeNull();
+		expect(look.playShows).toBe("portal");
 	});
 
 	it("keeps the pause world, frosted, under the bowl and the speed view opened from the pause", () => {
@@ -62,15 +60,14 @@ describe("the stage look", () => {
 	it("goes straight to the pause with no portal when the player leaves the app mid-run", () => {
 		// Leaving the app takes the flow from play straight to the pause screen (see screenFlow.ts)
 		const look = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
-		expect(look.pauseWorld).toBe(true);
-		expect(look.portal).toBe("pause");
+		expect(look.playShows).toBe("none");
 		expect(look.frost.over).toEqual({ kind: "instant" });
 	});
 
 	it("draws no pause world in play, and play shows all over, so play costs nothing extra", () => {
 		const look = stageLook({ screen: { kind: "hud" }, phase: "RUNNING" });
-		expect(look.pauseWorld).toBe(false);
-		expect(look.portal).toBe("play");
+		expect(look.playShows).toBe("all");
+		expect(hasPauseWorld(look.playShows)).toBe(false);
 		expect(look.frost.to).toBe(0);
 		expect(look.accent).toBe("player");
 	});
@@ -82,8 +79,7 @@ describe("the stage look", () => {
 			{ kind: "speed", color: PINK },
 		] as const) {
 			const look = stageLook({ screen, phase: "KIOSK" });
-			expect(look.pauseWorld).toBe(false);
-			expect(look.portal).toBe("play");
+			expect(look.playShows).toBe("all");
 		}
 	});
 
@@ -104,8 +100,7 @@ describe("the stage look", () => {
 	it("dims the field to 0.6 a moment after the run ends, so the game over reads over a quieted field", () => {
 		const look = stageLook({ screen: { kind: "gameOver" }, phase: "GAME_OVER" });
 		expect(look.frost).toEqual({ to: 0.6, over: { kind: "timed", duration: 700, delay: 350 } });
-		expect(look.pauseWorld).toBe(false);
-		expect(look.portal).toBe("play");
+		expect(look.playShows).toBe("all");
 	});
 
 	it("clears the field's dim in 300 ms as the game over gives way to the title", () => {

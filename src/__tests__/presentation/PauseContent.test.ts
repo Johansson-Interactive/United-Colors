@@ -3,15 +3,15 @@ import type { Screen } from "../../presentation/flow/screenFlow";
 
 describe("pause content", () => {
 	it("is there and pressable on the pause", () => {
-		expect(pauseContent("pause")).toEqual({ pressable: true });
+		expect(pauseContent("pause")).toBe("pressable");
 	});
 
 	it("is there but takes no press while the bloom grows over the run", () => {
-		expect(pauseContent("frosting")).toEqual({ pressable: false });
+		expect(pauseContent("frosting")).toBe("inert");
 	});
 
 	it("is there but takes no press while a finger holds Get ready open", () => {
-		expect(pauseContent("getReady")).toEqual({ pressable: false });
+		expect(pauseContent("getReady")).toBe("inert");
 	});
 
 	it("is not there on any other screen", () => {
@@ -21,16 +21,11 @@ describe("pause content", () => {
 });
 
 describe("pause content's entry", () => {
-	it("doesn't fade in when the bloom's portal reveals it, as it is simply there", () => {
-		expect(pauseEntryFades("hud", "frosting")).toBe(false);
+	it("doesn't fade in when it first shows under the bloom, where the portal reveals it in place", () => {
+		expect(pauseEntryFades("inert")).toBe(false);
 	});
 
-	it("doesn't fade in when the player comes back from leaving the app mid-run", () => {
-		expect(pauseEntryFades("hud", "pause")).toBe(false);
-	});
-
-	it("fades in as today when it first shows on the pause itself, back from the bowl or the speed view", () => {
-		expect(pauseEntryFades("settle", "pause")).toBe(true);
-		expect(pauseEntryFades("speed", "pause")).toBe(true);
+	it("fades in where it comes straight onto the pause: back from the bowl, the speed view or leaving the app", () => {
+		expect(pauseEntryFades("pressable")).toBe(true);
 	});
 });

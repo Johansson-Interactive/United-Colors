@@ -17,9 +17,9 @@ import { FieldTouch } from "./components/FieldTouch";
 import { HUD } from "./components/HUD";
 import { PausedScore } from "./components/PausedScore";
 import { PauseHint } from "./components/PauseHint";
+import { PauseWorld } from "./components/PauseWorld";
 import { FloodOverlay, useFlood } from "./effects/Flood";
-import { pauseContent, pauseEntryFades } from "./flow/pauseContent";
-import { pauseDotShown } from "./flow/pauseHint";
+import { pauseContent } from "./flow/pauseContent";
 import type { MenuOpening, Screen } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
@@ -33,6 +33,7 @@ import { useSensitivitySetting } from "./hooks/useSensitivitySetting";
 import { useSessionScene } from "./hooks/useSessionScene";
 import { useStageEffects } from "./hooks/useStageEffects";
 import { useStageLook } from "./hooks/useStageLook";
+import { useStageScene } from "./hooks/useStageScene";
 import { StageFrame } from "./layout/StageFrame";
 import { BloomOverlay } from "./overlays/BloomOverlay";
 import { GameOverOverlay } from "./overlays/GameOverOverlay";
@@ -42,8 +43,10 @@ import { PauseOverlay } from "./overlays/PauseOverlay";
 import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
+import type { GetReadyEnd } from "./tilt/getReady";
 import { useTilt } from "./tilt/TiltProvider";
-import { FIELD_UNTOUCHED } from "./touch/fieldTouch";
+import type { BloomEnd } from "./touch/bloom";
+import { FIELD_UNTOUCHED, touchSteers } from "./touch/fieldTouch";
 
 interface GameScreenProps {
 	session: GameSession;
@@ -112,7 +115,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
 	// The flow's controls on the game, with the gyro check that goes with play, and the facts it
 	// steps on. The stage fade that goes with them is the stage look's
-	const { screen, cameFrom, dispatch } = useScreenFlow(store, {
+	const { screen, dispatch } = useScreenFlow(store, {
 		play: (color) => {
 			session.start(color);
 			detectGyro();
@@ -154,11 +157,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 
 	// The pause world, the portal, the frost, the edge wash and the stage fade follow the screen,
-	// shake and bursts react to the store; the flood is the transition
+	// shake and bursts react to the store; the flood is the transition. The play side and the
+	// pause world draw the same room and scene
 	const { pauseWorld, hudScore, frost, portal, cut, accent, stageOpacity } = useStageLook(
 		{ screen, phase },
 		playerColor,
 	);
+	const stage = useStageScene(scene, accent, frost, pauseWorld);
 	const { shake, bursts, burstClock } = useStageEffects(store);
 
 	useAutoStart(autoStart, dispatch);
@@ -168,12 +173,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// place, and whether it is still down is the bloom's and Get ready's to follow each frame
 	const touch = useSharedValue(FIELD_UNTOUCHED);
 	const handleFieldTouch = useCallback(() => dispatch({ type: "fieldTouched" }), [dispatch]);
-	const handleBloomCovered = useCallback(() => dispatch({ type: "bloomCovered" }), [dispatch]);
-	const handleBloomCleared = useCallback(() => dispatch({ type: "bloomCleared" }), [dispatch]);
-	const handleReadyShut = useCallback(() => dispatch({ type: "readyShut" }), [dispatch]);
-	// Dev only: with touch steering the dot, the field cannot pause it, so a corner dot does
+	const handleBloomEnd = useCallback(
+		(end: BloomEnd) => dispatch({ type: end === "covered" ? "bloomCovered" : "bloomCleared" }),
+		[dispatch],
+	);
+	// Dev only: where touch steers the dot in play, the field cannot pause it, so a corner dot
+	// does, and a drag on the stage moves the dot
+	const steers = touchSteers(screen.kind, devTouch);
 	const handlePause = useCallback(() => dispatch({ type: "pausePressed" }), [dispatch]);
-	const fieldTouchEnabled = !devTouch || screen.kind !== "hud";
+	const handleDrag = useCallback((dx: number, dy: number) => session.feedDelta(dx, dy), [session]);
 
 	// Leaving the app mid-run or in Get ready lands on the pause screen when the player comes back
 	const handleAppLeave = useEffectEvent(() => dispatch({ type: "appLeft" }));
@@ -194,11 +202,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
 	const handleSnap = useCallback(() => audio.playCollect(0), [audio]);
-	// Get ready's portal cleared the field: a snap, and play picks up at once
-	const handleReady = useCallback(() => {
-		handleSnap();
-		dispatch({ type: "readyHeld" });
-	}, [handleSnap, dispatch]);
+	// Get ready's portal cleared the field: a snap, and play picks up at once. Or its cup shut
+	const handleReadyEnd = useCallback(
+		(end: GetReadyEnd) => {
+			if (end === "shut") return dispatch({ type: "readyShut" });
+			handleSnap();
+			dispatch({ type: "readyHeld" });
+		},
+		[handleSnap, dispatch],
+	);
 	const handleSpeedPress = useCallback(
 		(opening: MenuOpening) => dispatch({ type: "speedPressed", ...opening }),
 		[dispatch],
@@ -214,8 +226,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 
 	const { sensitivity, setSensitivity } = useSensitivitySetting(store, storage, session);
-	// Dev only: where touch steers the dot in play, a drag on the stage moves it
-	const handleDrag = useCallback((dx: number, dy: number) => session.feedDelta(dx, dy), [session]);
 
 	// Everything lives in the stage frame, clear of the top inset (notch / Dynamic Island) and
 	// side insets, which stay black; the playfield runs under the home indicator, the
@@ -225,7 +235,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// the interface over the stage, never cut: the title, the game over, the bowl, the speed
 	// view, the pause hint, and the flood over everything
 	const insetStyle = [styles.inset, { paddingBottom: insets.bottom }];
-	const dragSteers = devTouch && screen.kind === "hud";
 	return (
 		<View style={styles.container}>
 			<StageFrame corners={corners}>
@@ -237,32 +246,26 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					onLevel={handleLevelPress}
 					onSpeed={handleSpeedPress}
 				>
+					{pauseWorld && <PauseWorld stage={stage} />}
+					<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={!steers} />
+					<PauseSide
+						insetStyle={insetStyle}
+						screen={screen.kind}
+						store={store}
+						color={playerColor}
+						score={score}
+						onQuit={handleLeavePress}
+					/>
 					<GameCanvas
-						scene={scene}
+						stage={stage}
 						frost={frost}
-						pauseWorld={pauseWorld}
 						cut={cut}
-						accent={accent}
 						stageOpacity={stageOpacity}
 						shake={shake}
 						bursts={bursts}
 						burstClock={burstClock}
 						onLayout={handleLayout}
-						onDragDelta={dragSteers ? handleDrag : undefined}
-						pauseSide={
-							<>
-								<FieldTouch touch={touch} onTouch={handleFieldTouch} enabled={fieldTouchEnabled} />
-								<PauseSide
-									insetStyle={insetStyle}
-									screen={screen.kind}
-									cameFrom={cameFrom}
-									store={store}
-									color={playerColor}
-									score={score}
-									onQuit={handleLeavePress}
-								/>
-							</>
-						}
+						onDragDelta={steers ? handleDrag : undefined}
 					/>
 
 					{screen.kind === "getReady" && (
@@ -274,8 +277,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 							touch={touch}
 							portal={portal}
 							cut={cut}
-							onReady={handleReady}
-							onShut={handleReadyShut}
+							onEnd={handleReadyEnd}
 						/>
 					)}
 
@@ -285,7 +287,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 						color={playerColor}
 						visible={hudScore}
 						cut={cut}
-						onPause={pauseDotShown(screen.kind, !devTouch) ? handlePause : undefined}
+						onPause={steers ? handlePause : undefined}
 						corners={corners}
 					/>
 
@@ -297,8 +299,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 							touch={touch}
 							corners={corners}
 							portal={portal}
-							onCovered={handleBloomCovered}
-							onCleared={handleBloomCleared}
+							onEnd={handleBloomEnd}
 						/>
 					)}
 
@@ -355,8 +356,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 interface PauseSideProps {
 	insetStyle: StyleProp<ViewStyle>;
 	screen: Screen["kind"];
-	/** The kind of screen before this one, which decides whether the content fades in */
-	cameFrom: Screen["kind"] | null;
 	store: GameStore;
 	color: SharedValue<string>;
 	score: ScoreTally;
@@ -371,26 +370,21 @@ interface PauseSideProps {
 const PauseSide: React.FC<PauseSideProps> = ({
 	insetStyle,
 	screen,
-	cameFrom,
 	store,
 	color,
 	score,
 	onQuit,
 }) => {
-	const shows = pauseContent(screen);
+	const content = pauseContent(screen);
 	return (
 		<View style={insetStyle} pointerEvents="box-none">
-			<View style={styles.stage} pointerEvents="box-none">
-				{shows && (
-					<PauseOverlay
-						pressable={shows.pressable}
-						fadesIn={pauseEntryFades(cameFrom, screen)}
-						onQuit={onQuit}
-					/>
-				)}
-				{/* The paused score and run time, still in the middle, with the pause's content */}
-				{shows && <PausedScore store={store} color={color} score={score} />}
-			</View>
+			{content && (
+				<View style={styles.stage} pointerEvents="box-none">
+					<PauseOverlay content={content} onQuit={onQuit} />
+					{/* The paused score and run time, still in the middle, with the pause's content */}
+					<PausedScore store={store} color={color} score={score} />
+				</View>
+			)}
 		</View>
 	);
 };

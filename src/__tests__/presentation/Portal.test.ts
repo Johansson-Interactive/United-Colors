@@ -1,38 +1,45 @@
 import {
+	advanceEdge,
 	EDGE_DRAIN_MS,
 	EDGE_GROW_MS,
 	edgeProgress,
 	edgeRadius,
-	PAUSE_ALL,
-	PLAY_ALL,
-	playShows,
 	portalReach,
 	restRadius,
 	rimFade,
+	seatOf,
 	smoothstep,
 } from "../../presentation/effects/portal";
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
 
-describe("where the play side shows through the portal", () => {
-	it("shows all of play with the play world all over, as in play itself", () => {
-		expect(playShows(PLAY_ALL)).toBe("all");
+describe("where the portals open", () => {
+	it("opens at the seat, where the player dot froze", () => {
+		const player = { x: 150, y: 300, radius: 20, stretchX: 0.1, stretchY: 0 };
+		expect(seatOf(player, field)).toBe(player);
 	});
 
-	it("shows none of play with the pause world all over, as on the pause screen", () => {
-		expect(playShows(PAUSE_ALL)).toBe("none");
+	it("opens from the middle of the field, at no size, when there is no player dot to open at", () => {
+		expect(seatOf(null, field)).toEqual({ x: 200, y: 400, radius: 0, stretchX: 0, stretchY: 0 });
+	});
+});
+
+describe("how the edge steps a frame", () => {
+	it("grows at the edge's pace while growing, and stops at full", () => {
+		expect(advanceEdge(0, true, EDGE_GROW_MS / 2)).toBeCloseTo(0.5, 9);
+		expect(advanceEdge(0.9, true, EDGE_GROW_MS)).toBe(1);
+		expect(advanceEdge(0, true, EDGE_GROW_MS / 2, 0.3)).toBe(0.3);
 	});
 
-	it("shows play outside the bloom's portal, the pause inside it", () => {
-		expect(playShows({ x: 10, y: 10, radius: 30, inside: "pause" })).toBe("outside");
+	it("counts a step that falls short of full by rounding alone as full", () => {
+		let progress = 0;
+		for (let i = 0; i < 90; i++) progress = advanceEdge(progress, true, EDGE_GROW_MS / 90);
+		expect(progress).toBe(1);
 	});
 
-	it("shows play inside Get ready's portal, the pause outside it", () => {
-		expect(playShows({ x: 10, y: 10, radius: 30, inside: "play" })).toBe("inside");
-	});
-
-	it("shows all of play once a bloom's portal has drained to nothing", () => {
-		expect(playShows({ x: 10, y: 10, radius: 0, inside: "pause" })).toBe("all");
+	it("drains faster than it grows, and no further than nothing", () => {
+		expect(advanceEdge(1, false, EDGE_DRAIN_MS / 2)).toBeCloseTo(0.5, 9);
+		expect(advanceEdge(0.1, false, EDGE_DRAIN_MS)).toBe(0);
 	});
 });
 

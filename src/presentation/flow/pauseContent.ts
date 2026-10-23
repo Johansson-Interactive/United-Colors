@@ -9,30 +9,27 @@
 
 import type { Screen } from "./screenFlow";
 
-export interface PauseContent {
-	/** QUIT and the corner menus take a press */
-	pressable: boolean;
-}
+/** The pause's content: taking a press, or there but inert */
+export type PauseContent = "pressable" | "inert";
 
 /** The pause's content on `screen`, or null where it isn't there */
 export function pauseContent(screen: Screen["kind"]): PauseContent | null {
 	switch (screen) {
 		case "pause":
-			return { pressable: true };
+			return "pressable";
 		case "frosting":
 		case "getReady":
-			return { pressable: false };
+			return "inert";
 		default:
 			return null;
 	}
 }
 
 /**
- * Whether the content fades in as it first shows on `shownOn`, coming from the screen `from`:
- * only on the pause itself, back from the level bowl or the speed view, as those transitions
- * always have. Never through the bloom, where the portal reveals it already in place, and never
- * back from leaving the app mid-run, where the pause is simply there.
+ * Whether the content fades in as it first shows: only where it comes straight onto the pause
+ * itself (back from the level bowl or the speed view, or from leaving the app mid-run), never
+ * under the bloom, where it first shows inert and the portal reveals it already in place
  */
-export function pauseEntryFades(from: Screen["kind"] | null, shownOn: Screen["kind"]): boolean {
-	return shownOn === "pause" && (from === "settle" || from === "speed");
+export function pauseEntryFades(content: PauseContent): boolean {
+	return content === "pressable";
 }

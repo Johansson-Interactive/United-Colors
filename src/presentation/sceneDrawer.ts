@@ -135,7 +135,7 @@ export function compileEffect(name: string, sksl: string): SkRuntimeEffect {
 /**
  * The player and the dots merging into it, drawn as one liquid body by the metaball shader
  * (see mergeShader.ts). Compiled once; the canvas draws it between the two layers of the
- * scene from liquidBody's uniforms (see GameCanvas.tsx).
+ * scene from liquidBody's uniforms (see StageScene.tsx).
  */
 export const MERGE_EFFECT = compileEffect("merge", MERGE_SKSL);
 

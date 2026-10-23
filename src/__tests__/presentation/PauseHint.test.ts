@@ -1,7 +1,6 @@
 import { GAME_HERTZ } from "../../domain/constants";
 import {
 	PAUSE_HINT_MS,
-	pauseDotShown,
 	pauseHintLook,
 	pauseHintShown,
 	RESUME_HINT,
@@ -64,22 +63,5 @@ describe("the pause hint around a finger on the field", () => {
 		const aged = pauseHintLook("hud", ticks(PAUSE_HINT_MS), true);
 		expect(aged.opacity).toBe(0);
 		expect(aged.over).toBeGreaterThan(0);
-	});
-});
-
-describe("dev pause dot", () => {
-	it("shows on the HUD only where touch steers the dot, so the field can't pause", () => {
-		expect(pauseDotShown("hud", false)).toBe(true);
-		expect(pauseDotShown("hud", true)).toBe(false);
-	});
-
-	it("goes as the bloom starts, so it never floats over the pause world growing from the seat", () => {
-		expect(pauseDotShown("frosting", false)).toBe(false);
-	});
-
-	it("is not on any other screen", () => {
-		for (const screen of ["title", "pause", "getReady", "gameOver"] as const) {
-			expect(pauseDotShown(screen, false)).toBe(false);
-		}
 	});
 });

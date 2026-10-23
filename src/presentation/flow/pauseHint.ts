@@ -28,15 +28,6 @@ export function pauseHintShown(
 	return fieldPauses && screen === "hud" && (runTicks * 1000) / GAME_HERTZ < PAUSE_HINT_MS;
 }
 
-/**
- * Whether the dev-only pause dot shows: where touch steers the dot, so the field can't pause, and
- * only on the HUD. It goes as the bloom starts, so it never floats, uncut, over the pause world
- * growing from the seat.
- */
-export function pauseDotShown(screen: Screen["kind"], fieldPauses: boolean): boolean {
-	return !fieldPauses && screen === "hud";
-}
-
 /** How the hint shows: its opacity, and how long it takes to get there (ms) */
 export interface PauseHintLook {
 	opacity: 0 | 1;

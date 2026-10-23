@@ -1,3 +1,5 @@
+import type { Screen } from "../flow/screenFlow";
+
 /**
  * Whether a finger is on the field. The field touch layer (see FieldTouch) writes it as the
  * finger lands and lifts; the bloom and Get ready read it on the UI thread each frame, so a lift
@@ -21,3 +23,13 @@ export const FIELD_TOUCH_FRAME = {
 	left: GRIP_BAND,
 	right: GRIP_BAND,
 } as const;
+
+/**
+ * Whether touch steers the dot (dev only, see useDevControlMode): in a run in play, not once
+ * the bloom has started. There a drag on the stage moves the dot, so the field's touch layer
+ * takes no touch and can't pause, and the corner pause dot does instead; it goes as the bloom
+ * starts, so it never floats, uncut, over the pause world growing from the seat.
+ */
+export function touchSteers(screen: Screen["kind"], devTouch: boolean): boolean {
+	return devTouch && screen === "hud";
+}

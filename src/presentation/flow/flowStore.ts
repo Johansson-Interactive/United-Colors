@@ -56,8 +56,6 @@ function perform(controls: GameControls, action: FlowAction) {
 export interface FlowStoreState {
 	/** The screen to show */
 	screen: Screen;
-	/** The kind of screen shown before this one, if any (see pauseEntryFades) */
-	cameFrom: Screen["kind"] | null;
 	/** Step a tap, then carry out what the step asks: calibrate, zero the swivel, act, flood */
 	dispatch: (event: FlowEvent) => void;
 }
@@ -71,19 +69,13 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 	let flow: FlowState = INITIAL_FLOW;
 	const store = createStore<FlowStoreState>(() => ({
 		screen: screenOf(INITIAL_FLOW),
-		cameFrom: null,
 		dispatch,
 	}));
 
 	const apply = (event: FlowEvent) => {
 		const step = stepFlow(flow, event, controls.facts());
 		flow = step.state;
-		const { screen } = store.getState();
-		store.setState(
-			step.screen.kind === screen.kind
-				? { screen: step.screen }
-				: { screen: step.screen, cameFrom: screen.kind },
-		);
+		store.setState({ screen: step.screen });
 		return step;
 	};
 

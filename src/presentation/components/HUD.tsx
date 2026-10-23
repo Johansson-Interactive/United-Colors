@@ -4,10 +4,10 @@ import { StyleSheet, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import type { Corners } from "../../domain/types";
 import type { ScoreTally } from "../hooks/useScoreTally";
+import type { PortalCut } from "../hooks/useStageLook";
 import { cornerButton } from "../layout/cornerButton";
 import { useStageBox } from "../layout/StageFrame";
 import { IconDot } from "./IconDot";
-import type { PortalCut } from "./PlaySide";
 import { ScoreMeter } from "./ScoreMeter";
 
 interface HUDProps {
@@ -25,7 +25,7 @@ interface HUDProps {
 	/**
 	 * Dev only: a pause dot in the top-right corner, for the control mode where touch steers
 	 * the dot and so cannot pause it (see useDevControlMode), given only while the run is in
-	 * play, not while the bloom grows (see pauseDotShown). Play pauses on any touch otherwise.
+	 * play, not while the bloom grows (see touchSteers). Play pauses on any touch otherwise.
 	 */
 	onPause?: () => void;
 	/** How the frame rounds its corners; the corner dot keeps clear of the curve (null: square) */

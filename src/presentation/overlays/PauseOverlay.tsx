@@ -5,15 +5,14 @@ import { DotButton, type PressPoint } from "../components/DotButton";
 import { DotMatrixText } from "../components/DotMatrixText";
 import { SettingsMenu } from "../components/SettingsMenu";
 import { SoundMenu } from "../components/SoundMenu";
+import { type PauseContent, pauseEntryFades } from "../flow/pauseContent";
 import { RESUME_HINT } from "../flow/pauseHint";
 import type { MenuOpening } from "../flow/screenFlow";
 import { CAPTION, WHITE } from "../theme/theme";
 
 interface PauseOverlayProps {
-	/** QUIT and the corner menus take a press (see pauseContent.ts) */
-	pressable: boolean;
-	/** It fades in as it mounts (see pauseContent.ts); read only then */
-	fadesIn: boolean;
+	/** Whether QUIT and the corner menus take a press, and so whether it fades in as it mounts (see pauseContent.ts) */
+	content: PauseContent;
 	onQuit: (point: PressPoint) => void;
 	/** Extra content below the controls (e.g. dev tools) */
 	children?: React.ReactNode;
@@ -31,18 +30,13 @@ const fromPause = (): MenuOpening => ({ from: "pause" });
  * the buttons, and the caption under PAUSED says so (see pauseHint.ts). The corners hold the
  * settings (level pose and tilt speed) and the sound.
  */
-export const PauseOverlay: React.FC<PauseOverlayProps> = ({
-	pressable,
-	fadesIn,
-	onQuit,
-	children,
-}) => {
+export const PauseOverlay: React.FC<PauseOverlayProps> = ({ content, onQuit, children }) => {
 	return (
 		<Animated.View
 			style={styles.container}
-			entering={fadesIn ? FadeIn.duration(300) : undefined}
+			entering={pauseEntryFades(content) ? FadeIn.duration(300) : undefined}
 			exiting={FadeOut.duration(200)}
-			pointerEvents={pressable ? "box-none" : "none"}
+			pointerEvents={content === "pressable" ? "box-none" : "none"}
 		>
 			<View style={styles.top} pointerEvents="none">
 				<DotMatrixText text="PAUSED" pitch={8} color={WHITE} glow />

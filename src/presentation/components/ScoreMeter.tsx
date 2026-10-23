@@ -3,10 +3,11 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { type SharedValue, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import type { ScoreTally } from "../hooks/useScoreTally";
+import type { PortalCut } from "../hooks/useStageLook";
 import { useStageBox } from "../layout/StageFrame";
 import { recordPicture } from "../recordPicture";
 import { drawTally } from "../sceneDrawer";
-import { PlaySide, type PortalCut } from "./PlaySide";
+import { PlaySide } from "./PlaySide";
 
 interface ScoreMeterProps {
 	/** The tally to draw, fed from the game (see useScoreTally) */

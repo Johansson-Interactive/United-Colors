@@ -145,26 +145,6 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "pause" });
 	});
 
-	it("remembers the screen the pause came from: play, when the player left the app mid-run", () => {
-		const { flow, publish, screen } = setup();
-		publish("RUNNING");
-		flow.getState().dispatch({ type: "appLeft" });
-		publish("PAUSED");
-		expect(screen()).toEqual({ kind: "pause" });
-		expect(flow.getState().cameFrom).toBe("hud");
-	});
-
-	it("remembers the screen the pause came from: the bowl or the speed view it closed", () => {
-		const { flow, publish } = setup();
-		publish("PAUSED");
-		flow.getState().dispatch({ type: "levelPressed", from: "pause" });
-		flow.getState().dispatch({ type: "settleBacked" });
-		expect(flow.getState().cameFrom).toBe("settle");
-		flow.getState().dispatch({ type: "speedPressed", from: "pause" });
-		flow.getState().dispatch({ type: "speedBacked" });
-		expect(flow.getState().cameFrom).toBe("speed");
-	});
-
 	it("the pause's level button opens the bowl in the player's colour", () => {
 		const { flow, answers, publish, screen } = setup();
 		answers.playerColor = BLUE;
