@@ -7,7 +7,7 @@ import type { Attitude, DotView, RenderFrame, ScreenSize, TiltAngles } from "../
  * (built with EXPO_PUBLIC_CAPTURE=1; a shipped build never sets it) plays itself for the store
  * screenshots and the app preview. It heads for the nearest dot it may eat, leaning towards
  * point dots, keeps clear of the dots it may not, and holds the phone level off play, so the
- * settle bowl settles at once and Get ready thaws. The rules it plays by are the game's own:
+ * settle bowl settles at once and Get ready's portal widens to the walls. The rules it plays by are the game's own:
  * it only reads frames and answers with a tilt, as the phone would.
  */
 

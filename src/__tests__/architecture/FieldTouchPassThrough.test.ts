@@ -14,7 +14,7 @@
 const OVER_THE_FIELD = [
 	"presentation/components/HUD.tsx",
 	"presentation/components/PausedScore.tsx",
-	"presentation/overlays/FrostBloomOverlay.tsx",
+	"presentation/overlays/BloomOverlay.tsx",
 	"presentation/overlays/GetReadyOverlay.tsx",
 	"presentation/overlays/PauseOverlay.tsx",
 ];
@@ -74,7 +74,15 @@ const fillsTheStage = (tag: string, styles: string[]) =>
 	/StyleSheet\.absoluteFill/.test(tag) ||
 	styles.some((s) => new RegExp(`styles\\.${s}\\b`).test(tag));
 
-const letsTouchesThrough = (tag: string) => /pointerEvents=\{?["'](none|box-none)["']\}?/.test(tag);
+/**
+ * A literal "none" or "box-none", or a choice between the two (the pause's content, say, which
+ * takes no press at all while a hold is on): either way a touch clear of the buttons falls through
+ */
+const letsTouchesThrough = (tag: string) =>
+	/pointerEvents=\{?["'](none|box-none)["']\}?/.test(tag) ||
+	/pointerEvents=\{[^{}?]+\?\s*["'](none|box-none)["']\s*:\s*["'](none|box-none)["']\s*\}/.test(
+		tag,
+	);
 
 const takesNoTouch = (tag: string) => /pointerEvents=\{?["']none["']\}?/.test(tag);
 

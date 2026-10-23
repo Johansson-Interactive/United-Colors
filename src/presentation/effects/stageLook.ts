@@ -1,17 +1,14 @@
 /**
  * Pure rules behind how the field looks behind each screen (see screenFlow.ts), and how it
- * gets there. The frozen game is frosted for the whole of the pause and everything that opens
- * over it, Get ready included, where the seat is the one clear window in the frost until the
- * hold thaws it (see getReady.ts). The bloom that pauses a run frosts in full from the first
- * frame: its edge, not the frost's strength, is what grows (see frostBloom.ts). A moment after
- * a run ends the field dims for the game over, and otherwise it clears quickly. The edges are
- * washed in ink on the title and in the player's colour everywhere else. The stage fades out
- * under the bowl and the speed view opened from the title, so only their one dot moves, and
- * back in as they close.
- *
- * The frost edge is the bloom's and Get ready's to move; the look only resets it to frosted
- * all over as the pause's or the game over's frost comes on, so neither starts with a window
- * left by a Get ready that resumed the run, or the clear edge of a bloom that drained.
+ * gets there. Pause and play open portals into each other (see portal.ts, ADR 0012): the play
+ * side, the live field, is always drawn on top, and under it, only while the run is not in
+ * play, the pause world: the frozen field, frosted, with the pause's content over it. The
+ * portal decides which part of the play side shows while the bloom or Get ready moves it; the
+ * pause itself shows none of play, whatever a bloom or Get ready left, and play is cut nowhere.
+ * A moment after a run ends the play side itself dims for the game over, and otherwise it
+ * clears quickly. The edges are washed in ink on the title and in the player's colour
+ * everywhere else. The stage fades out under the bowl and the speed view opened from the
+ * title, so only their one dot moves, and back in as they close.
  */
 
 import type { GamePhase } from "../../domain/types";
@@ -41,20 +38,29 @@ export interface StageMove<T> {
 	over: StageTransition;
 }
 
+/**
+ * How much of the play side shows: all of it, with no pause world under it, so play costs
+ * nothing for one; none of it, over the pause world (the frozen field, frosted, under the
+ * pause's content); or what the portal leaves it, as the bloom or Get ready moves it
+ */
+export type PlayShows = "all" | "none" | "portal";
+
 /** How the field looks behind a screen */
 export interface StageLook {
-	/** 0 = clear; 1 = fully frosted (see frost.ts) */
+	playShows: PlayShows;
+	/**
+	 * Whether the HUD's score shows: in play, and through the bloom's and Get ready's portals,
+	 * which cover and uncover it with the rest of the play side
+	 */
+	hudScore: boolean;
+	/** How frosted the play side itself is: 0 = clear; 1 = fully frosted (the game over dims it) */
 	frost: StageMove<number>;
-	/** Reset the frost edge to frosted all over as the pause's or the game over's frost comes on */
-	shutWindow: boolean;
 	/** The edge wash's colour */
 	accent: StageAccent;
 	/** 0 = the stage is hidden; 1 = it shows */
 	opacity: StageMove<number>;
 }
 
-/** The field frosts over as the pause opens */
-const FROST_ON: StageTransition = { kind: "timed", duration: 450 };
 /** How far the field dims for the game over, and how: a moment after the run ends, slowly */
 const GAME_OVER_FROST = 0.6;
 const GAME_OVER_DIM: StageTransition = { kind: "timed", duration: 700, delay: 350 };
@@ -67,30 +73,50 @@ const STAGE_FADE_OUT: StageTransition = { kind: "timed", duration: 300 };
 const STAGE_FADE_IN: StageTransition = { kind: "timed", duration: 400 };
 
 export function stageLook({ screen, phase }: StagePlace): StageLook {
-	const frost = frostOf(screen, phase);
+	const playShows = playShowsOf(screen, phase);
 	return {
-		frost,
-		shutWindow: frost.over === FROST_ON || frost.over === GAME_OVER_DIM,
+		playShows,
+		hudScore: screen.kind === "hud" || screen.kind === "frosting" || screen.kind === "getReady",
+		frost: frostOf(playShows, phase),
 		accent: phase === "KIOSK" ? "ink" : "player",
 		opacity: opacityOf(screen, phase),
 	};
 }
 
+/** Whether the pause world is drawn under the play side: wherever it doesn't show all over */
+export function hasPauseWorld(playShows: PlayShows): boolean {
+	return playShows !== "all";
+}
+
 /**
- * The bloom frosts at full strength from its first frame, inside an edge that grows from
- * under the finger; the frost coming on over time is for a pause with no bloom (leaving the
- * app), where the whole field frosts at once
+ * The bloom and Get ready show play through their portals. The pause world is under them, the
+ * pause, and the bowl and the speed view opened from the pause: wherever the run is frozen and
+ * the pause is, or is opening. Play shows none over it there.
  */
-function frostOf(screen: Screen, phase: GamePhase): StageMove<number> {
-	if (screen.kind === "frosting") return { to: 1, over: INSTANT };
-	switch (phase) {
-		case "PAUSED":
-			return { to: 1, over: FROST_ON };
-		case "GAME_OVER":
-			return { to: GAME_OVER_FROST, over: GAME_OVER_DIM };
+function playShowsOf(screen: Screen, phase: GamePhase): PlayShows {
+	switch (screen.kind) {
+		case "frosting":
+		case "getReady":
+			return "portal";
+		case "pause":
+			return "none";
+		case "settle":
+		case "speed":
+			return phase === "PAUSED" ? "none" : "all";
 		default:
-			return { to: 0, over: CLEAR };
+			return "all";
 	}
+}
+
+/**
+ * Over the pause world the play side stays sharp: the frost is the pause world's, so the field
+ * through Get ready's portal is the live one. The game over dims the play side itself.
+ */
+function frostOf(playShows: PlayShows, phase: GamePhase): StageMove<number> {
+	if (hasPauseWorld(playShows)) return { to: 0, over: INSTANT };
+	return phase === "GAME_OVER"
+		? { to: GAME_OVER_FROST, over: GAME_OVER_DIM }
+		: { to: 0, over: CLEAR };
 }
 
 /**

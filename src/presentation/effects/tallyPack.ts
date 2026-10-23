@@ -1,3 +1,4 @@
+import { GLYPH_ROWS } from "../dotmatrix/glyphs";
 import {
 	fitBatch,
 	POP_DOT_CELL,
@@ -17,7 +18,6 @@ import {
 	DIGIT_DOTS,
 	departed,
 	digitCols,
-	GLYPH_ROWS,
 	landed,
 	SCORE_PITCH,
 	shownScore,

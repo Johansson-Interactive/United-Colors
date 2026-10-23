@@ -75,30 +75,30 @@ How long a run lasted, counting only time the game was being played: not paused,
 _Avoid_: duration, survival time
 
 **Bloom**:
-How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and frosts the field from under the finger outward, the frost's edge wearing the rim. It covers the field in about half a second and the pause opens; a finger lifted before then drains the frost back into the fingertip, faster than it grew, and play goes on from the frozen frame. The bloom is the Get ready window run the other way. In code it is `frostBloom.ts`, screen `frosting`.
+How a run pauses: a finger held on the field, anywhere clear of a button and the grip band, freezes the run at once and opens a portal into the pause from under the finger. It reaches the walls in about a second and the pause is there; a finger lifted before then drains the portal back into the fingertip, faster than it grew, and play goes on from the frozen frame. In code it is `touch/bloom.ts`, screen `frosting`; see ADR 0012.
 _Avoid_: long press, hold to pause, pause gesture
 
 **Grip band**:
 The strip 24 dp wide down the field's left and right edges where a finger is taken for the hand holding the phone, not the player: a phone whose glass curves round its sides is gripped there. A finger landing in it does nothing, on any screen, until it lifts. It is not drawn. In code it is `GRIP_BAND`; see ADR 0008.
 
-**Frost edge**:
-The circle where the frost stops, with one side frosted and the other clear, and the rim on it: frosted inside for the bloom, clear inside for Get ready's cup. Both grow through the same ease, and the rim fades the same way once the edge is past sixty percent of the way to the walls. In code it is `FrostEdge` in `frost.ts`, drawn by the game canvas.
-_Avoid_: mask, clip, cutout
+**Portal**:
+The circle between the pause and play, with one world inside it, the other outside, and the rim on its edge: the pause inside for the bloom, play inside for Get ready. Both grow through the same ease, and the rim fades the same way once the portal is past sixty percent of the way to the walls. In code it is `Portal` in `portal.ts`; see ADR 0012.
+_Avoid_: frost edge, mask, clip, cutout, window
 
 **Rim**:
-The thin line in the player's colour, over a soft glow, on the frost edge: pulsing like a point dot while the Get ready dot is away from the seat, steady once it is home, and in full while the bloom grows. In code it is `FrostRim`.
+The thin line in the player's colour, over a soft glow, on the portal's edge: in full while the bloom grows and while the cup opens, then pulsing like a point dot, from the top of its beat, while the Get ready dot is away from the seat, steady once it is home. In code it is `PortalRim`.
 _Avoid_: ring, progress ring, loading circle
 
 **Get ready**:
-The step between the pause and play, held open by a finger on the frost: the field stays frosted, the cup opens in it at the seat, and a solid copy of the player dot rolls around inside the cup with the tilt. The player rolls it home and holds their level pose; the frost thaws outward from the cup, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the cup and the pause screen comes back. The game stays paused throughout. On a device without tilt, a finger on the frost resumes play directly.
-_Avoid_: calibrate, level gate, resume screen
+The step between the pause and play, held open by a finger on the pause: a portal back into play opens at the seat and grows into the cup, and a solid copy of the player dot rolls around inside it with the tilt from the moment the finger lands. The player rolls it home and holds their level pose; the portal widens from the cup to the walls, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the portal and the pause is whole again. The game stays paused throughout. On a device without tilt, a finger on the pause resumes play directly.
+_Avoid_: calibrate, level gate, resume screen, roll it home
 
 **Seat**:
-Where the player dot froze when the run paused, shown in Get ready as the dot's dimple under the clear window. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
+Where the player dot froze when the run paused, and where Get ready's portal opens from; shown in Get ready as the dot's dimple inside the cup. Rolling the copy onto it is rolling it home; the real dot never leaves it, so nothing jumps when play resumes.
 _Avoid_: socket, target, home position
 
 **Cup**:
-The title's bowl, opened in the frost at the seat in Get ready: a circle of the field left sharp and full colour, the bowl's size, with the bowl's glass drawn over it, which the rolling copy of the player dot cannot leave. Its rim pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The thaw grows the clear circle outward from the cup with the hold until the field is clear, and the cup shuts if the finger lifts first.
+The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Fully open, it arms Get ready: only then does the level hold count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
 _Avoid_: window, hole, spotlight, bowl (that is the title's and the settle screen's)
 
 **Run record**:
@@ -135,12 +135,8 @@ _Avoid_: menu, home, start screen
 The attract-mode game that plays itself behind the title screen. It halts and fades while a view opens over the title.
 
 **Pause**:
-The screen over a paused run, the frozen field frosted under it: the score, in the player's colour, and the run time stand in its middle; QUIT ends the run, and the corner menus hold the settings and the sound. The frost itself is the way back: a finger held on it, clear of the buttons, opens Get ready. There is no play dot, and no pause dot in play: the field is both (see Bloom). Nothing in the field moves. In code it is `PauseOverlay`.
+The world on the other side of the bloom's portal: the frozen field frosted, with the score, in the player's colour, and the run time standing still in its middle; QUIT ends the run, and the corner menus hold the settings and the sound. All of it is already there as the portal reveals it, and none of it can be pressed while the bloom grows or while Get ready is held open. A finger held on it, clear of the buttons, opens Get ready. There is no play dot, and no pause dot in play: the field is both (see Bloom). Nothing in the field moves. In code it is `PauseOverlay`.
 _Avoid_: pause menu, pause button, play button
-
-**Sink and rise**:
-How the score moves between play and the pause: as the pause opens it sinks from the top into the middle and swells, and the run time follows it in; as Get ready opens it rises back to the top, where it waits dimmed until play resumes, while the run time fades where it stands. Silent, and never seen with any other screen: elsewhere the score and time fade with the pause.
-_Avoid_: pour (that is the game over's), slide, transition
 
 **Corner menu**:
 A dot in a bottom corner that opens into smaller dots, one per item (`DotMenu`). The title screen and the pause share two: the settings corner bottom left (`SettingsMenu`: level pose and tilt speed) and the sound corner bottom right (`SoundMenu`: music and effects).

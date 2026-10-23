@@ -4,7 +4,7 @@
  * first few seconds of run time and then goes for good; a run resumed after that never brings
  * it back, and only a run started afresh does.
  *
- * Its pair, the resume hint, stands under PAUSED for the whole pause: the frost is the way
+ * Its pair, the resume hint, stands under PAUSED for the whole pause: the pause world is the way
  * back, and it takes a hold, not a tap, since lifting the finger shuts Get ready again.
  */
 
@@ -26,4 +26,27 @@ export function pauseHintShown(
 	fieldPauses: boolean,
 ): boolean {
 	return fieldPauses && screen === "hud" && (runTicks * 1000) / GAME_HERTZ < PAUSE_HINT_MS;
+}
+
+/** How the hint shows: its opacity, and how long it takes to get there (ms) */
+export interface PauseHintLook {
+	opacity: 0 | 1;
+	over: number;
+}
+
+const FADE_IN_MS = 400;
+const FADE_OUT_MS = 600;
+
+/**
+ * How the hint shows (see pauseHintShown): it fades in, and fades out as the run grows old, but
+ * a finger landing on the field takes it away at once, so no caption floats over the portal
+ * opening under it. An early lift brings it back by the same rule that showed it.
+ */
+export function pauseHintLook(
+	screen: Screen["kind"],
+	runTicks: number,
+	fieldPauses: boolean,
+): PauseHintLook {
+	if (pauseHintShown(screen, runTicks, fieldPauses)) return { opacity: 1, over: FADE_IN_MS };
+	return { opacity: 0, over: screen === "frosting" ? 0 : FADE_OUT_MS };
 }

@@ -1,13 +1,15 @@
 /**
  * Pure state machine behind Get ready: the step between the pause and play, held open by the
- * finger that touched the frost. The field stays frosted; the cup opens in it at the seat,
- * where the player dot froze: a clear bowl the size of the title's, which a solid copy of the
- * dot rolls around inside with the tilt and cannot leave. Rolling the dot home and holding the
- * phone level thaws the frost outward from the cup, and play resumes the instant the whole
- * field is clear. Tilt is relative to the level pose, so "level" is the pose the player likes
- * to play in. The hold only counts after a short arming delay, so the jolt of the finger
- * landing can't start play. A finger lifted before the field is clear shuts the cup again, and
- * Get ready is over: back to the pause.
+ * finger on the pause. A portal into play opens at the seat, where the player dot froze: the
+ * cup, grown from nothing with the hold at the bloom's pace to the size of the title's bowl,
+ * which a solid copy of the dot rolls around inside with the tilt from the finger's landing and
+ * cannot leave: the glass holds it in as the cup grows, and herds it home as the cup drains. The
+ * cup being fully open is the arming: until then the level hold doesn't count, so the jolt of
+ * the finger landing can't start play. Then rolling the dot home
+ * and holding the phone level widens the portal to the walls, and play resumes the instant the
+ * whole field is clear. Tilt is relative to the level pose, so "level" is the pose the player
+ * likes to play in. A finger lifted before the field is clear drains the portal back into the
+ * seat, faster than it grew, and Get ready is over: back to the pause.
  *
  * The hold (stepGetReady) is the rule; the cup, the roll and the rim are what shows it.
  * advanceGetReady puts them together into one step a frame, which is all the overlay runs.
@@ -17,81 +19,59 @@ import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { GAME_HERTZ, POINT_DOT_PULSE_SPEED } from "../../domain/constants";
 import {
+	advanceEdge,
+	clamp,
 	EDGE_GROW_MS,
+	edgeProgress,
 	edgeRadius,
 	type FieldSize,
-	FROSTED_ALL,
-	type FrostEdge,
-	frostReach,
 	type Point,
+	type Portal,
+	type PortalStep,
+	portalReach,
+	RIM,
+	restRadius,
 	rimFade,
-	smoothstep,
-} from "../effects/frost";
+} from "../effects/portal";
 import { BOWL_SIZE } from "../theme/theme";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
 	progress: number;
-	/** Time since Get ready opened */
-	elapsedMs: number;
 	fired: boolean;
 }
 
 /** Tilt (radians, either axis) that still counts as level */
 const LEVEL_RAD = 0.11;
-/** Samples this early are ignored, so the jolt of the finger landing can't count */
-export const ARMING_MS = 200;
-/** How long the device must stay level: the thaw grows at the bloom's pace */
+/**
+ * How long the device must stay level: the portal widens at the bloom's pace, and a broken hold
+ * drains faster than it fills, as the bloom does
+ */
 export const HOLD_MS = EDGE_GROW_MS;
-/** A broken hold drains faster than it fills */
-const DRAIN_MS = HOLD_MS * 0.4;
-/** Progress this close to full counts as full, so frame-sized steps can't fall short by rounding */
-const FULL_EPSILON = 1e-9;
 
-export const INITIAL_GET_READY: GetReadyState = { progress: 0, elapsedMs: 0, fired: false };
+export const INITIAL_GET_READY: GetReadyState = { progress: 0, fired: false };
 
 function isLevel(x: number, y: number): boolean {
 	"worklet";
 	return Math.abs(x) < LEVEL_RAD && Math.abs(y) < LEVEL_RAD;
 }
 
-function clamp(value: number, min: number, max: number): number {
-	"worklet";
-	return Math.min(max, Math.max(min, value));
-}
-
-/**
- * Whether the player is holding level over the frame from `prev` to `next`: the hold grew. The
- * caption fades while this holds and comes back when the hold breaks (or hasn't armed yet).
- */
-export function isHolding(prev: GetReadyState, next: GetReadyState): boolean {
-	"worklet";
-	return next.progress > prev.progress;
-}
-
 /**
  * Advance one frame with the latest tilt (radians, relative to the level pose). The hold grows
- * only while the finger is down (`held`) and the phone is level, and only for the part of the
- * frame past the arming delay; otherwise it drains.
+ * only while it is `armed` (the finger down and the cup fully open) and the phone is level;
+ * otherwise it drains.
  */
 export function stepGetReady(
 	state: GetReadyState,
 	x: number,
 	y: number,
 	dt: number,
-	held: boolean,
+	armed: boolean,
 ): GetReadyState {
 	"worklet";
 	if (state.fired) return state;
-	const elapsedMs = state.elapsedMs + dt;
-	// Only the part of this frame past the arming delay counts
-	const armedMs = Math.min(dt, Math.max(0, elapsedMs - ARMING_MS));
-	const raw =
-		held && isLevel(x, y)
-			? state.progress + armedMs / HOLD_MS
-			: Math.max(0, state.progress - dt / DRAIN_MS);
-	const progress = raw >= 1 - FULL_EPSILON ? 1 : raw;
-	return { progress, elapsedMs, fired: progress === 1 };
+	const progress = advanceEdge(state.progress, armed && isLevel(x, y), dt);
+	return { progress, fired: progress === 1 };
 }
 
 // ---- The cup, and the roll: a solid copy of the player dot that the tilt pushes around it ----
@@ -100,6 +80,12 @@ export function stepGetReady(
 export const CUP_RADIUS = BOWL_SIZE / 2;
 /** Room the rolling dot keeps from the cup's rim, as the bowl's dot does */
 const CUP_MARGIN = 6;
+
+/** How far the rolling dot's centre can get from the seat in the cup `opened` 0..1 of its size */
+function cupTravel(seat: Disc, opened: number): number {
+	"worklet";
+	return Math.max(0, CUP_RADIUS * opened - seat.radius - CUP_MARGIN);
+}
 
 /**
  * Pixels the tilt pushes the rolling dot per radian at the default sensitivity: a little off
@@ -123,7 +109,8 @@ function cornerCentre(at: Point, cornerExtent: number, field: FieldSize): Point 
 
 /**
  * Where the tilt pushes the rolling dot: off the seat by the tilt, scaled like the dot itself
- * moves, kept inside the cup so it rolls round its rim rather than leaving it, and kept inside
+ * moves, kept inside the cup as open as it is (`opened`, 0..1 of its size) so it rolls round its
+ * rim rather than leaving it, and kept inside
  * the playfield too, so where the cup runs past a wall the dot slides along the wall (and round
  * a rounded corner) instead. Against a wall it presses in as the player does in play (see
  * PLAYER_PRESS), as deep as the player's deepest press, so a seat where the player froze pressed
@@ -135,13 +122,19 @@ function cornerCentre(at: Point, cornerExtent: number, field: FieldSize): Point 
  * dot never presses further under the curve the stage is clipped to than it does into a wall;
  * the game's own bound (arena.ts) is not a worklet, so it can't run here on the UI thread.
  */
-export function rollTarget(seat: Disc, tilt: Point, sensitivity: number, field: FieldSize): Point {
+export function rollTarget(
+	seat: Disc,
+	tilt: Point,
+	sensitivity: number,
+	field: FieldSize,
+	opened = 1,
+): Point {
 	"worklet";
 	const gain = ROLL_GAIN * sensitivity;
 	const { radius } = seat;
 	const { width, height, cornerExtent } = field;
 	// Inside the cup first: the push is cut to the cup's travel, keeping its direction
-	const travel = Math.max(0, CUP_RADIUS - radius - CUP_MARGIN);
+	const travel = cupTravel(seat, opened);
 	let pushX = tilt.x * gain;
 	let pushY = tilt.y * gain;
 	const push = Math.hypot(pushX, pushY);
@@ -271,6 +264,30 @@ export function stepRoll(roll: Roll, target: Point, dt: number): Roll {
 	return { x: roll.x + vx * s, y: roll.y + vy * s, vx, vy };
 }
 
+/**
+ * The rolling dot kept inside the cup `opened` 0..1 of its size: the glass stops it at the rim,
+ * taking the speed that carried it there, and pushes it in as the cup drains, so it never shows
+ * cut off at the portal's edge
+ */
+export function holdInCup(roll: Roll, seat: Disc, opened: number): Roll {
+	"worklet";
+	const travel = cupTravel(seat, opened);
+	const dx = roll.x - seat.x;
+	const dy = roll.y - seat.y;
+	const distance = Math.hypot(dx, dy);
+	if (distance <= travel) return roll;
+	if (distance < 1e-9) return { x: seat.x, y: seat.y, vx: 0, vy: 0 };
+	const nx = dx / distance;
+	const ny = dy / distance;
+	const out = Math.max(0, roll.vx * nx + roll.vy * ny);
+	return {
+		x: seat.x + nx * travel,
+		y: seat.y + ny * travel,
+		vx: roll.vx - out * nx,
+		vy: roll.vy - out * ny,
+	};
+}
+
 /** The rolling dot counts as home within this many seat radii of the seat's centre */
 const HOME_REACH = 1.5;
 
@@ -281,49 +298,78 @@ const HOME_REACH = 1.5;
 export function seated(roll: Point, seat: Disc): number {
 	"worklet";
 	const distance = Math.hypot(roll.x - seat.x, roll.y - seat.y);
-	return clamp(1 - distance / (seat.radius * HOME_REACH), 0, 1);
+	const reach = seat.radius * HOME_REACH;
+	return distance < reach ? 1 - distance / reach : 0;
 }
 
-// ---- The window: the clear circle in the frost, the cup at rest, and the rim that marks it ----
+// ---- The portal into play: the cup at rest, widening with the hold, and the rim that marks it ----
 
-/** How much the window breathes at the top of a pulse, as a fraction of the cup's size */
+/** How much the cup breathes at the top of a pulse, as a fraction of the cup's size */
 const BREATH = 0.03;
 /** A pulse's period: the point dot's own rhythm, a shrink and a grow at the game's rate */
 export const PULSE_MS = (2 * POINT_DOT_PULSE_SPEED * 1000) / GAME_HERTZ;
-/** The cup opens at the seat in this long as the finger lands */
-export const OPEN_MS = 120;
-/** And shuts in this long once the finger lifts, faster than it opened */
-const SHUT_MS = OPEN_MS * 0.4;
 
 /**
- * The beat of the seat's pulse at `elapsedMs` since Get ready opened, 0..1 and back each
- * PULSE_MS, so it reads as the point dot's "come here"
+ * How far along the bloom's growth from `seat` (0..1) the cup is fully open. The cup grows from
+ * nothing at the bloom's pace: as the bloom from this seat grows past its rest, so the cup grows
+ * from the seat, until it is the cup's size.
  */
-export function seatPulse(elapsedMs: number): number {
+function cupOpenAt(seat: Disc, field: FieldSize): number {
 	"worklet";
-	return 0.5 - 0.5 * Math.cos((2 * Math.PI * elapsedMs) / PULSE_MS);
+	const rest = restRadius(seat.radius);
+	return edgeProgress(rest + CUP_RADIUS, rest, portalReach(seat, field));
+}
+
+/** How open the cup is at `opening` along the bloom's growth, 0..1 of the cup's size */
+function cupOpened(opening: number, seat: Disc, field: FieldSize): number {
+	"worklet";
+	if (opening >= cupOpenAt(seat, field)) return 1;
+	const rest = restRadius(seat.radius);
+	return (edgeRadius(opening, rest, portalReach(seat, field)) - rest) / CUP_RADIUS;
 }
 
 /**
- * The window's radius: the cup at rest, breathing by `breath` (0..1, see seatPulse and
- * seated), and thawing outward with the hold to `reach` at full progress, where the whole
+ * The beat of the seat's pulse at `openMs` since the cup was fully open, 0..1 and back each
+ * PULSE_MS, so it reads as the point dot's "come here"
+ */
+export function seatPulse(openMs: number): number {
+	"worklet";
+	return 0.5 - 0.5 * Math.cos((2 * Math.PI * openMs) / PULSE_MS);
+}
+
+/**
+ * The portal's radius: the cup at rest, breathing by `breath` (0..1, see seatPulse and
+ * seated), and widening with the hold to `reach` at full progress, where the whole
  * field is clear whatever the breath
  */
-export function windowRadius(progress: number, reach: number, breath: number): number {
+export function portalRadius(progress: number, reach: number, breath: number): number {
 	"worklet";
 	return edgeRadius(progress, CUP_RADIUS * (1 + BREATH * clamp(breath, 0, 1)), reach);
 }
 
 /**
- * How strongly the rim on the window's edge shows: beating with `pulse` while the dot is away,
- * steady once `seated`, and fading out as the thaw passes the walls so nothing is left drawn
- * over a clear field
+ * How strongly the rim on the open cup's edge shows: beating with `pulse` while the dot is away,
+ * steady at the bloom's strength once `seated`, and fading out as the portal passes the walls so
+ * nothing is left drawn over a clear field
  */
 export function rimOpacity(progress: number, seated: number, pulse: number): number {
 	"worklet";
 	const away = (0.35 + 0.5 * pulse) * (1 - seated);
-	const home = 0.75 * seated;
+	const home = RIM * seated;
 	return (away + home) * rimFade(progress);
+}
+
+/**
+ * The rim on the cup's edge: the bloom's, steady and in full, from the cup's first opening and
+ * as it drains, and the pulse (see rimOpacity) only once it is fully open; none once shut. The
+ * rim's beat starts at its top as the cup opens, so where the dot has already rolled off the
+ * seat it takes over from the opening's full rim with no jump; the cup's breath, which starts
+ * from rest, keeps the pulse's own phase.
+ */
+function cupRim(progress: number, seated: number, pulse: number, opened: number): number {
+	"worklet";
+	if (opened >= 1) return rimOpacity(progress, seated, 1 - pulse);
+	return opened > 0 ? RIM * rimFade(progress) : 0;
 }
 
 // ---- The frame: one step of all of the above, as the overlay runs it each frame ----
@@ -331,38 +377,26 @@ export function rimOpacity(progress: number, seated: number, pulse: number): num
 /** Everything Get ready carries from one frame to the next */
 export interface GetReadyFrameState {
 	hold: GetReadyState;
-	/** The rolling dot; null until the first frame sets it on the seat */
-	roll: Roll | null;
+	/** The rolling dot */
+	roll: Roll;
 	/**
-	 * Whether the caption is up: down while the hold grows, back as soon as it breaks. Kept
-	 * rather than read off the last two holds, so it stays down once fired.
+	 * How far along the bloom's growth the cup's opening is, 0..1: growing while the finger is
+	 * down until the cup is fully open, draining back along the same way once it has lifted
 	 */
-	caption: boolean;
-	/** How open the cup is, 0..1: opening as the finger lands, shutting once it has lifted */
-	open: number;
+	opening: number;
+	/** Time the cup has been fully open, the clock of the rim's pulse */
+	openMs: number;
 	/** The cup has shut after the finger lifted: Get ready is over, back to the pause */
 	shut: boolean;
 }
 
-/** Get ready as it opens, as the finger lands on the frost */
-export const OPEN_GET_READY: GetReadyFrameState = {
-	hold: INITIAL_GET_READY,
-	roll: null,
-	caption: false,
-	open: 0,
-	shut: false,
-};
-
-/**
- * The seat with no player in the frozen scene (it should always have one here): Get ready still
- * runs, on a seat of no size in the corner, but nothing is drawn and the window stays shut
- */
-export const NO_SEAT: Disc = { x: 0, y: 0, radius: 0 };
+/** How Get ready ends: the portal clear of the walls, so play resumes, or the cup shut, back to the pause */
+export type GetReadyEnd = "ready" | "shut";
 
 /** This frame's inputs: where the seat is, whether the finger is down, the tilt and the time since the last frame */
 export interface GetReadyInputs {
-	/** The dot at rest: where the player dot froze, at its radius; null with no player */
-	seat: Disc | null;
+	/** The dot at rest: where the player dot froze, at its radius (see seatOf) */
+	seat: Disc;
 	/** Whether the finger that opened Get ready is still on the field */
 	held: boolean;
 	/** Radians, relative to the level pose */
@@ -372,122 +406,100 @@ export interface GetReadyInputs {
 	sensitivity: number;
 }
 
-/** What Get ready draws and reports this frame */
+/** What Get ready draws this frame */
 export interface GetReadyFrame {
-	/** Whether the seat, the rim and the dot are drawn at all: not without a player */
-	drawn: boolean;
-	/** The seat the frame was drawn on: NO_SEAT without a player */
-	seat: Disc;
 	/** The rolling dot's centre */
 	dot: Point;
 	/** The rolling dot as drawn, pressed into a wall the way the player is in play (see rollBody) */
 	body: RollBody;
-	/** The clear window in the frost, the cup at rest: frosted all over without a player */
-	window: FrostEdge;
-	/** How strongly the rim on the window's edge shows, 0..1 */
+	/** The portal into play, the cup at rest */
+	portal: Portal;
+	/** How strongly the rim on the portal's edge shows, 0..1 */
 	rim: number;
-	/**
-	 * How open the cup is, 0..1, eased: the seat, the dot and its shade show by it
-	 * as it opens, and go with it as it shuts
-	 */
+	/** How open the cup is, 0..1 of its size: the portal grows by it, and drains with it */
 	opened: number;
-	/** Whether the caption is up (the overlay fades it on the edges) */
-	caption: boolean;
-	/** True on the one frame Get ready fired on: play resumes */
-	fired: boolean;
-	/** True on the one frame the window shut on: the pause screen comes back */
-	shut: boolean;
+	/**
+	 * How strongly the bowl's glass shows at the portal's edge, 0..1: in full from the cup's
+	 * first opening, so it shows at the edge as the cup grows, and fading as the rim does as the
+	 * portal passes the walls
+	 */
+	glass: number;
 }
 
+/** One frame's step of Get ready (see advanceGetReady) */
+export type GetReadyStep = PortalStep<GetReadyFrameState, GetReadyFrame, GetReadyEnd>;
+
 /**
- * What a state draws at the seat. The window breathes by the state's roll, which is this
- * frame's stepped roll, the same one the dot and the rim are drawn from, so the window, its rim
- * and the dot agree on how far from home the dot is. Without a player nothing is drawn and the
- * window stays shut, so nothing thaws open in the corner.
+ * What a state draws at the seat. The portal breathes by the state's roll, which is this
+ * frame's stepped roll, the same one the dot and the rim are drawn from, so the portal, its rim
+ * and the dot agree on how far from home the dot is.
  */
-function drawFrame(
-	state: GetReadyFrameState & { roll: Roll },
-	player: Disc | null,
-	field: FieldSize,
-	firedNow: boolean,
-	shutNow: boolean,
-): GetReadyFrame {
+function drawFrame(state: GetReadyFrameState, seat: Disc, field: FieldSize): GetReadyFrame {
 	"worklet";
-	const { hold, roll, caption, open } = state;
+	const { hold, roll, opening, openMs } = state;
 	const dot = { x: roll.x, y: roll.y };
-	if (player === null) {
-		return {
-			drawn: false,
-			seat: NO_SEAT,
-			dot,
-			body: rollBody(dot, 0, field),
-			window: FROSTED_ALL,
-			rim: 0,
-			opened: 0,
-			caption,
-			fired: firedNow,
-			shut: shutNow,
-		};
-	}
-	const home = seated(roll, player);
-	const pulse = seatPulse(hold.elapsedMs);
-	const opened = smoothstep(open);
+	const home = seated(roll, seat);
+	const pulse = seatPulse(openMs);
+	const opened = cupOpened(opening, seat, field);
 	return {
-		drawn: true,
-		seat: player,
 		dot,
-		body: rollBody(dot, player.radius, field),
-		window: {
-			x: player.x,
-			y: player.y,
-			radius: windowRadius(hold.progress, frostReach(player, field), pulse * (1 - home)) * opened,
-			frosted: "outside",
+		body: rollBody(dot, seat.radius, field),
+		portal: {
+			x: seat.x,
+			y: seat.y,
+			radius: portalRadius(hold.progress, portalReach(seat, field), pulse * (1 - home)) * opened,
+			inside: "play",
 		},
-		rim: rimOpacity(hold.progress, home, pulse) * opened,
+		rim: cupRim(hold.progress, home, pulse, opened),
 		opened,
-		caption,
-		fired: firedNow,
-		shut: shutNow,
+		glass: opened > 0 ? rimFade(hold.progress) : 0,
 	};
 }
 
 /**
- * Advance Get ready one frame: the cup's opening, then the roll, then the hold. Once fired or
- * shut it is inert: the state comes back unchanged and the frame leaves the window where it
- * was, so the frost can lift behind an open window unseen, and it never fires again.
+ * Get ready as the finger lands on the pause: the cup shut, the dot on the seat, and no hold;
+ * the portal into play is of no size yet, so the first frame shows the pause as it was
  */
-export function advanceGetReady(
-	state: GetReadyFrameState,
-	inputs: GetReadyInputs,
-): { state: GetReadyFrameState; frame: GetReadyFrame } {
+export function openGetReady(seat: Disc, field: FieldSize): GetReadyStep {
 	"worklet";
-	const { held, tilt, dt, field, sensitivity } = inputs;
-	const seat = inputs.seat ?? NO_SEAT;
-	const roll = state.roll ?? rollAt(seat);
+	const state: GetReadyFrameState = {
+		hold: INITIAL_GET_READY,
+		roll: rollAt(seat),
+		opening: 0,
+		openMs: 0,
+		shut: false,
+	};
+	return { state, frame: drawFrame(state, seat, field), end: null };
+}
+
+/**
+ * Advance Get ready one frame: the cup's opening, then the roll, then the hold. The roll goes
+ * from the first frame, inside the cup as open as it is this frame. The hold goes by whether
+ * the cup was fully open as the frame began: until then it isn't armed, so the hold counts from
+ * the frame after. Once fired or
+ * shut it is inert: the state comes back unchanged with no end, and the frame leaves the portal
+ * where it was, so the pause world can go behind an open portal unseen, and it never fires again.
+ */
+export function advanceGetReady(state: GetReadyFrameState, inputs: GetReadyInputs): GetReadyStep {
+	"worklet";
+	const { seat, held, tilt, dt, field, sensitivity } = inputs;
 	if (state.hold.fired || state.shut) {
-		return { state, frame: drawFrame({ ...state, roll }, inputs.seat, field, false, false) };
+		return { state, frame: drawFrame(state, seat, field), end: null };
 	}
-	const open = held
-		? clamp(state.open + dt / OPEN_MS, 0, 1)
-		: clamp(state.open - dt / SHUT_MS, 0, 1);
-	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt, held);
-	const shut = !held && open === 0;
-	const next: GetReadyFrameState & { roll: Roll } = {
+	const openAt = cupOpenAt(seat, field);
+	const wasOpen = state.opening >= openAt;
+	const opening = advanceEdge(state.opening, held, dt, openAt);
+	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt, held && wasOpen);
+	const shut = !held && opening === 0;
+	const opened = cupOpened(opening, seat, field);
+	const target = rollTarget(seat, tilt, sensitivity, field, opened);
+	const next: GetReadyFrameState = {
 		hold,
-		roll: stepRoll(roll, rollTarget(seat, tilt, sensitivity, field), dt),
-		caption: held && !isHolding(state.hold, hold),
-		open,
+		roll: holdInCup(stepRoll(state.roll, target, dt), seat, opened),
+		opening,
+		openMs: wasOpen ? state.openMs + dt : state.openMs,
 		shut,
 	};
-	return { state: next, frame: drawFrame(next, inputs.seat, field, hold.fired, shut) };
-}
-
-/**
- * The frost edge Get ready leaves behind when it closes, given its last state and the window
- * it had open: unchanged once fired, so the frost lifts behind the open window unseen; the field
- * frosted all over otherwise (the window shut, leaving the app), so the pause screen is frosted
- * all over.
- */
-export function closeGetReady(state: GetReadyFrameState, frostEdge: FrostEdge): FrostEdge {
-	return state.hold.fired ? frostEdge : FROSTED_ALL;
+	const end = hold.fired ? "ready" : shut ? "shut" : null;
+	return { state: next, frame: drawFrame(next, seat, field), end };
 }

@@ -3,22 +3,28 @@ import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall
 import { cornerExtent, holdInside } from "../../domain/arena";
 import { attitudeAt, FLAT, FLAT_ATTITUDES, levelTilt, zeroSwivel } from "../../domain/levelPose";
 import type { Corners } from "../../domain/types";
-import { FROSTED_ALL, frostReach, type Point } from "../../presentation/effects/frost";
+import {
+	EDGE_GROW_MS,
+	edgeRadius,
+	type Point,
+	portalReach,
+	RIM,
+	restRadius,
+} from "../../presentation/effects/portal";
 import { BOWL_SIZE } from "../../presentation/theme/theme";
 import {
-	ARMING_MS,
 	advanceGetReady,
 	CUP_RADIUS,
-	closeGetReady,
+	type GetReadyEnd,
 	type GetReadyFrame,
 	type GetReadyFrameState,
 	type GetReadyState,
 	HOLD_MS,
+	holdInCup,
 	INITIAL_GET_READY,
-	isHolding,
-	OPEN_GET_READY,
-	OPEN_MS,
+	openGetReady,
 	PULSE_MS,
+	portalRadius,
 	type Roll,
 	rimOpacity,
 	rollAt,
@@ -28,7 +34,6 @@ import {
 	seatPulse,
 	stepGetReady,
 	stepRoll,
-	windowRadius,
 } from "../../presentation/tilt/getReady";
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
@@ -38,10 +43,8 @@ const LEVEL = { x: 0, y: 0 };
 const TIPPED = { x: 0.5, y: 0 };
 /** The overlay's frame, as the frame steps below play it */
 const FRAME_DT = 16;
-/** Frames that fit wholly inside the arming delay; the next straddles its end and counts */
-const ARMING_FRAMES = Math.floor(ARMING_MS / FRAME_DT);
-/** Long enough for the hold to fill, with room to spare */
-const PLENTY = ARMING_MS + HOLD_MS * 2;
+/** Long enough for the cup to open and the hold to fill, with room to spare */
+const PLENTY = EDGE_GROW_MS + HOLD_MS * 2;
 /** How far the rolling dot can get from the seat inside the cup */
 const TRAVEL = CUP_RADIUS - seat.radius - 6;
 /** How near a wall the walls let the seat's centre come, pressed in as deep as the player goes */
@@ -52,24 +55,30 @@ function run(
 	x: number,
 	y: number,
 	ms: number,
-	held = true,
+	armed = true,
 	dt = 10,
 ): GetReadyState {
 	let s = state;
-	for (let t = 0; t < ms; t += dt) s = stepGetReady(s, x, y, dt, held);
+	for (let t = 0; t < ms; t += dt) s = stepGetReady(s, x, y, dt, armed);
 	return s;
 }
+
+/** Get ready as the finger lands, on `on` */
+const landing = (on: Disc = seat) => openGetReady(on, field).state;
+
+/** A frame as stepped, with how Get ready ended on it, if it did */
+type Played = GetReadyFrame & { end: GetReadyEnd | null };
 
 /** Frames for `ms` at one tilt, as the overlay's frame callback steps them */
 function play(
 	from: GetReadyFrameState,
 	tilt: Point,
 	ms: number,
-	on: Disc | null = seat,
+	on: Disc = seat,
 	held = true,
-): { state: GetReadyFrameState; frames: GetReadyFrame[] } {
+): { state: GetReadyFrameState; frames: Played[] } {
 	let state = from;
-	const frames: GetReadyFrame[] = [];
+	const frames: Played[] = [];
 	for (let t = 0; t < ms; t += FRAME_DT) {
 		const next = advanceGetReady(state, {
 			seat: on,
@@ -80,53 +89,51 @@ function play(
 			sensitivity: 1,
 		});
 		state = next.state;
-		frames.push(next.frame);
+		frames.push({ ...next.frame, end: next.end });
 	}
 	return { state, frames };
 }
 
+/** How many frames of a held finger the cup takes to open fully at `seat` */
+function framesToOpen(on: Disc = seat): number {
+	const { frames } = play(landing(on), TIPPED, EDGE_GROW_MS, on);
+	return frames.findIndex((f) => f.opened === 1) + 1;
+}
+/** Frames held while the cup opens at the test seat, before the hold can count */
+const OPEN_FRAMES = framesToOpen();
+const OPENING_MS = OPEN_FRAMES * FRAME_DT;
+
 /** Get ready with the cup open and the hold half full */
-const halfHeld = () => play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2).state;
+const halfHeld = () => play(landing(), LEVEL, OPENING_MS + FRAME_DT + HOLD_MS / 2).state;
 
 describe("get-ready stepper", () => {
-	it("already level at open, fires after the arming delay plus the hold, and not before", () => {
-		const almost = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS - 10);
+	it("armed and level, fires after the hold, and not before", () => {
+		const almost = run(INITIAL_GET_READY, 0, 0, HOLD_MS - 10);
 		expect(almost.fired).toBe(false);
 		expect(run(almost, 0, 0, 10).fired).toBe(true);
 	});
 
-	it("samples inside the arming delay don't count towards the hold", () => {
-		const armed = run(INITIAL_GET_READY, 0, 0, ARMING_MS);
-		expect(armed.progress).toBe(0);
-		expect(run(armed, 0, 0, HOLD_MS - 10).fired).toBe(false);
-	});
-
-	it("a frame straddling the end of the arming delay counts only its armed part", () => {
-		const s = stepGetReady(run(INITIAL_GET_READY, 0, 0, ARMING_MS - 10), 0, 0, 100, true);
-		expect(s.progress).toBeCloseTo(90 / HOLD_MS, 9);
-	});
-
-	it("counts nothing while the finger is up, however level", () => {
-		const lifted = run(INITIAL_GET_READY, 0, 0, PLENTY, false);
-		expect(lifted.progress).toBe(0);
-		expect(lifted.fired).toBe(false);
+	it("counts nothing until armed, however level", () => {
+		const unarmed = run(INITIAL_GET_READY, 0, 0, HOLD_MS * 2, false);
+		expect(unarmed.progress).toBe(0);
+		expect(unarmed.fired).toBe(false);
 	});
 
 	it("drifting off level drains the hold faster than it fills", () => {
-		const held = run(INITIAL_GET_READY, 0.05, -0.05, ARMING_MS + HOLD_MS / 2);
+		const held = run(INITIAL_GET_READY, 0.05, -0.05, HOLD_MS / 2);
 		expect(held.progress).toBeCloseTo(0.5, 6);
 		const drifted = run(held, 0.2, 0, 200);
 		expect(drifted.progress).toBeLessThan(0.5 - 200 / HOLD_MS);
 		expect(run(drifted, 0, 0.3, 1000).progress).toBe(0);
 	});
 
-	it("a lifted finger drains the hold the same way", () => {
-		const held = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS / 2);
+	it("disarmed, drains the hold the same way", () => {
+		const held = run(INITIAL_GET_READY, 0, 0, HOLD_MS / 2);
 		expect(run(held, 0, 0, 200, false).progress).toBeCloseTo(run(held, 0.2, 0, 200).progress, 9);
 	});
 
 	it("tilt on either axis alone breaks the hold", () => {
-		const held = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS / 2);
+		const held = run(INITIAL_GET_READY, 0, 0, HOLD_MS / 2);
 		expect(run(held, 0.12, 0, 100).progress).toBeLessThan(held.progress);
 		expect(run(held, 0, -0.12, 100).progress).toBeLessThan(held.progress);
 	});
@@ -300,9 +307,9 @@ describe("get-ready rolling dot body", () => {
 
 	it("is drawn with the frame, pressed when the seat is pressed into a wall", () => {
 		const pressed = { x: CORE, y: 300, radius: 20 };
-		const { frames } = play(OPEN_GET_READY, LEVEL, FRAME_DT, pressed);
+		const { frames } = play(landing(pressed), LEVEL, FRAME_DT, pressed);
 		expect(frames[0].body.neck).toBeGreaterThan(0);
-		const { frames: free } = play(OPEN_GET_READY, LEVEL, FRAME_DT);
+		const { frames: free } = play(landing(), LEVEL, FRAME_DT);
 		expect(free[0].body.neck).toBe(0);
 	});
 });
@@ -355,6 +362,34 @@ describe("get-ready roll", () => {
 	});
 });
 
+describe("get-ready glass", () => {
+	const roll = (x: number, y: number, vx: number, vy: number): Roll => ({ x, y, vx, vy });
+
+	it("leaves a dot inside the cup as it is", () => {
+		const inside = roll(seat.x + 10, seat.y, 50, 0);
+		expect(holdInCup(inside, seat, 1)).toBe(inside);
+	});
+
+	it("stops a dot at the rim, taking only the speed that carried it out", () => {
+		const held = holdInCup(roll(seat.x + TRAVEL + 10, seat.y, 80, -30), seat, 1);
+		expect(held.x).toBeCloseTo(seat.x + TRAVEL, 9);
+		expect(held.y).toBe(seat.y);
+		expect(held.vx).toBe(0);
+		expect(held.vy).toBe(-30);
+	});
+
+	it("keeps a dot heading back in moving in", () => {
+		const held = holdInCup(roll(seat.x + TRAVEL + 10, seat.y, -40, 0), seat, 1);
+		expect(held.vx).toBe(-40);
+	});
+
+	it("holds the dot on the seat while the cup is too small for it to move", () => {
+		expect(holdInCup(roll(seat.x + 5, seat.y - 5, 10, 10), seat, 0.1)).toEqual(
+			roll(seat.x, seat.y, 10, 10),
+		);
+	});
+});
+
 describe("get-ready seat", () => {
 	it("counts the dot as seated on the seat, and less so as it rolls off", () => {
 		expect(seated(seat, seat)).toBe(1);
@@ -372,25 +407,25 @@ describe("get-ready seat", () => {
 	});
 });
 
-describe("get-ready window", () => {
-	const reach = frostReach(seat, field);
+describe("get-ready portal", () => {
+	const reach = portalReach(seat, field);
 
 	it("rests at the cup, breathing a little with the pulse", () => {
-		expect(windowRadius(0, reach, 0)).toBe(CUP_RADIUS);
-		const breathing = windowRadius(0, reach, 1);
+		expect(portalRadius(0, reach, 0)).toBe(CUP_RADIUS);
+		const breathing = portalRadius(0, reach, 1);
 		expect(breathing).toBeGreaterThan(CUP_RADIUS);
 		expect(breathing).toBeLessThan(CUP_RADIUS * 1.05);
 	});
 
 	it("clears the whole field at full progress, whatever the breath", () => {
-		expect(windowRadius(1, reach, 0)).toBe(reach);
-		expect(windowRadius(1, reach, 1)).toBe(reach);
+		expect(portalRadius(1, reach, 0)).toBe(reach);
+		expect(portalRadius(1, reach, 1)).toBe(reach);
 	});
 
-	it("thaws outward monotonically with the hold", () => {
+	it("widens monotonically with the hold", () => {
 		let previous = 0;
 		for (let p = 0; p <= 1; p += 0.05) {
-			const r = windowRadius(p, reach, 0);
+			const r = portalRadius(p, reach, 0);
 			expect(r).toBeGreaterThanOrEqual(previous);
 			previous = r;
 		}
@@ -407,7 +442,7 @@ describe("get-ready rim", () => {
 		expect(rimOpacity(0, 1, 0)).toBe(rimOpacity(0, 1, 1));
 	});
 
-	it("is gone by the time the thaw has cleared the field", () => {
+	it("is gone by the time the portal has cleared the field", () => {
 		expect(rimOpacity(0.3, 1, 0)).toBe(rimOpacity(0, 1, 0));
 		expect(rimOpacity(0.8, 1, 0)).toBeLessThan(rimOpacity(0.6, 1, 0));
 		expect(rimOpacity(1, 1, 0)).toBe(0);
@@ -415,76 +450,153 @@ describe("get-ready rim", () => {
 	});
 });
 
-describe("get-ready caption", () => {
-	const frame = (state: GetReadyState, x: number, held = true) =>
-		[state, stepGetReady(state, x, 0, 16, held)] as const;
-
-	it("stays up while the finger's jolt is still arming", () => {
-		expect(isHolding(...frame(INITIAL_GET_READY, 0))).toBe(false);
-	});
-
-	it("fades while the player holds level", () => {
-		const armed = run(INITIAL_GET_READY, 0, 0, ARMING_MS + 100);
-		expect(isHolding(...frame(armed, 0))).toBe(true);
-	});
-
-	it("comes back when the hold breaks, and stays while off level or with the finger up", () => {
-		const held = run(INITIAL_GET_READY, 0, 0, ARMING_MS + HOLD_MS / 2);
-		expect(isHolding(...frame(held, 0.3))).toBe(false);
-		expect(isHolding(...frame(held, 0, false))).toBe(false);
-		const drained = run(held, 0.3, 0, 2000);
-		expect(isHolding(...frame(drained, 0.3))).toBe(false);
-	});
-});
-
 describe("get-ready cup", () => {
-	it("opens at the seat to the cup's size in the opening time, and rests there", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS);
-		const openFrames = Math.ceil(OPEN_MS / FRAME_DT);
+	/** The bloom's growth past its rest at this seat, `ms` into its hold: the cup opens at this pace */
+	const bloomGrowth = (ms: number, on: Disc = seat) => {
+		const rest = restRadius(on.radius);
+		return edgeRadius(ms / EDGE_GROW_MS, rest, portalReach(on, field)) - rest;
+	};
+
+	it("grows from nothing at the seat to the cup's size at the bloom's pace while held", () => {
+		const { frames } = play(landing(), LEVEL, EDGE_GROW_MS);
 		for (const f of frames) {
-			expect(f.window.x).toBe(seat.x);
-			expect(f.window.y).toBe(seat.y);
-			expect(f.window.frosted).toBe("outside");
+			expect(f.portal.x).toBe(seat.x);
+			expect(f.portal.y).toBe(seat.y);
+			expect(f.portal.inside).toBe("play");
 		}
-		const radii = frames.map((f) => f.window.radius);
-		expect(radii[0]).toBeGreaterThan(0);
-		for (let i = 1; i < openFrames; i++) expect(radii[i]).toBeGreaterThan(radii[i - 1]);
-		// Until the arming delay ends and the hold starts to grow it
-		for (const r of radii.slice(openFrames, ARMING_FRAMES)) expect(r).toBeCloseTo(CUP_RADIUS, 9);
+		// The first frame is a sliver, as the bloom's first frame is
+		expect(frames[0].portal.radius).toBeLessThan(2);
+		for (let i = 0; i < OPEN_FRAMES - 1; i++) {
+			expect(frames[i].portal.radius).toBeCloseTo(bloomGrowth((i + 1) * FRAME_DT), 9);
+		}
+		expect(frames[OPEN_FRAMES - 1].portal.radius).toBe(CUP_RADIUS);
+		// Mid-field on a phone-sized stage, the bloom's pace opens the cup in about 270 ms
+		expect(OPENING_MS).toBeGreaterThan(250);
+		expect(OPENING_MS).toBeLessThan(300);
 	});
 
-	it("shows its rim, the seat and the dot as it opens, and none of them before", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS);
+	it("opens faster where the walls are farther, as the bloom from that seat grows faster", () => {
+		expect(framesToOpen({ x: 30, y: 30, radius: 20 })).toBeLessThan(OPEN_FRAMES);
+	});
+
+	it("opens the cup steadily, from nothing to its full size", () => {
+		const { frames } = play(landing(), LEVEL, OPENING_MS);
 		expect(frames[0].opened).toBeLessThan(0.05);
 		for (let i = 1; i < frames.length; i++) {
-			expect(frames[i].opened).toBeGreaterThanOrEqual(frames[i - 1].opened);
+			expect(frames[i].opened).toBeGreaterThan(frames[i - 1].opened);
 		}
-		// Fully open before the arming delay ends
-		const armed = frames[ARMING_FRAMES - 1];
-		expect(armed.opened).toBe(1);
+		expect(frames[OPEN_FRAMES - 1].opened).toBe(1);
+	});
+
+	it("counts no hold until fully open, however level", () => {
+		const { frames } = play(landing(), LEVEL, OPENING_MS);
+		for (const f of frames) {
+			expect(f.dot).toEqual({ x: seat.x, y: seat.y });
+			expect(f.portal.radius).toBeLessThanOrEqual(CUP_RADIUS);
+			expect(f.end).not.toBe("ready");
+		}
+	});
+
+	it("rolls the dot copy off the seat as the finger lands, inside the glass as it grows", () => {
+		const { frames } = play(landing(), TIPPED, OPENING_MS);
+		const opening = frames.slice(0, OPEN_FRAMES - 1);
+		// Off the seat well before the cup is open, and further each frame as the glass lets it
+		expect(opening[Math.floor(opening.length / 2)].dot.x).toBeGreaterThan(seat.x);
+		expect(opening[opening.length - 1].dot.x - seat.x).toBeGreaterThan(seat.radius);
+		for (let i = 1; i < opening.length; i++) {
+			expect(opening[i].dot.x).toBeGreaterThanOrEqual(opening[i - 1].dot.x);
+		}
+		for (const f of opening) {
+			const travel = Math.max(0, CUP_RADIUS * f.opened - seat.radius - 6);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(travel + 1e-9);
+			expect(f.end).not.toBe("ready");
+		}
+	});
+
+	it("counts the level hold from the frame after it is fully open", () => {
+		const { frames } = play(landing(), LEVEL, OPENING_MS + FRAME_DT * 3);
+		expect(frames[OPEN_FRAMES - 1].portal.radius).toBe(CUP_RADIUS);
+		expect(frames[OPEN_FRAMES].portal.radius).toBeGreaterThan(CUP_RADIUS);
+	});
+
+	it("fires the level hold's length after it is fully open", () => {
+		const { frames } = play(landing(), LEVEL, PLENTY);
+		const at = frames.findIndex((f) => f.end === "ready");
+		expect((at + 1 - OPEN_FRAMES) * FRAME_DT).toBeGreaterThanOrEqual(HOLD_MS);
+		expect((at - OPEN_FRAMES) * FRAME_DT).toBeLessThan(HOLD_MS);
+	});
+
+	it("wears the bloom's rim, steady and in full, from its first frame while opening", () => {
+		const { frames } = play(landing(), TIPPED, OPENING_MS - FRAME_DT);
+		for (const f of frames) expect(f.rim).toBe(RIM);
+	});
+
+	it("pulses the rim only once open, taking over from the opening's rim with no jump", () => {
+		const { frames } = play(landing(), TIPPED, OPENING_MS + 2000);
+		// The dot has rolled off the seat by the time the cup is open
+		expect(Math.hypot(frames[OPEN_FRAMES - 1].dot.x - seat.x, 0)).toBeGreaterThan(seat.radius);
+		const opening = frames.slice(0, OPEN_FRAMES - 1).map((f) => f.rim);
+		const open = frames.slice(OPEN_FRAMES - 1).map((f) => f.rim);
+		expect(Math.max(...open) - Math.min(...open)).toBeGreaterThan(0.3);
+		// The pulse takes over where the opening left off, at the top of its beat: no jump
+		expect(Math.abs(open[0] - opening[opening.length - 1])).toBeLessThan(0.06);
+		expect(open[1]).toBeLessThan(open[0]);
 	});
 
 	it("keeps the dot inside the cup, however the phone is tilted", () => {
-		const { frames } = play(OPEN_GET_READY, { x: 3, y: -2 }, 2000);
+		const { frames } = play(landing(), { x: 3, y: -2 }, 2000);
 		for (const f of frames) {
-			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThan(TRAVEL + 20);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(TRAVEL + 1e-9);
 		}
 		const last = frames[frames.length - 1];
 		expect(Math.hypot(last.dot.x - seat.x, last.dot.y - seat.y)).toBeCloseTo(TRAVEL, 0);
 	});
 });
 
+describe("get-ready finger lifted before the cup is open", () => {
+	it("drains the cup back into the seat faster than it grew, and shuts Get ready", () => {
+		const half = Math.floor(OPEN_FRAMES / 2);
+		const opening = play(landing(), LEVEL, half * FRAME_DT);
+		const { frames } = play(opening.state, LEVEL, 1000, seat, false);
+		const at = frames.findIndex((f) => f.end === "shut");
+		expect(at).toBeGreaterThan(0);
+		expect(frames.filter((f) => f.end === "shut")).toHaveLength(1);
+		expect(at + 1).toBeLessThan(half);
+		const radii = frames.slice(0, at + 1).map((f) => f.portal.radius);
+		for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
+		expect(radii[at]).toBe(0);
+		for (const f of frames) {
+			expect(f.portal.x).toBe(seat.x);
+			expect(f.end).not.toBe("ready");
+		}
+	});
+});
+
+describe("get-ready finger lifted with the dot off the seat", () => {
+	it("herds the dot home inside the draining glass, onto the seat as the cup shuts", () => {
+		const away = play(landing(), TIPPED, OPENING_MS + 1000);
+		const { frames } = play(away.state, TIPPED, 1000, seat, false);
+		const at = frames.findIndex((f) => f.end === "shut");
+		expect(at).toBeGreaterThan(0);
+		for (const f of frames.slice(0, at + 1)) {
+			const travel = Math.max(0, CUP_RADIUS * f.opened - seat.radius - 6);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(travel + 1e-9);
+		}
+		expect(frames[at].dot).toEqual({ x: seat.x, y: seat.y });
+	});
+});
+
 describe("get-ready frame step", () => {
 	it("fires on exactly one frame, and is inert after it", () => {
-		const { state, frames } = play(OPEN_GET_READY, LEVEL, PLENTY);
-		const firing = frames.filter((f) => f.fired);
+		const { state, frames } = play(landing(), LEVEL, PLENTY);
+		const firing = frames.filter((f) => f.end === "ready");
 		expect(firing).toHaveLength(1);
 		const at = frames.indexOf(firing[0]);
-		const open = { x: seat.x, y: seat.y, radius: frostReach(seat, field), frosted: "outside" };
-		expect(firing[0].window).toEqual(open);
+		const open = { x: seat.x, y: seat.y, radius: portalReach(seat, field), inside: "play" };
+		expect(firing[0].portal).toEqual(open);
 		for (const after of frames.slice(at + 1)) {
-			expect(after.fired).toBe(false);
-			expect(after.window).toEqual(open);
+			expect(after.end).toBeNull();
+			expect(after.portal).toEqual(open);
 		}
 		const tipped = advanceGetReady(state, {
 			seat,
@@ -495,72 +607,56 @@ describe("get-ready frame step", () => {
 			sensitivity: 1,
 		});
 		expect(tipped.state).toBe(state);
-		expect(tipped.frame.fired).toBe(false);
-		expect(tipped.frame.shut).toBe(false);
-		expect(tipped.frame.window).toEqual(open);
+		expect(tipped.end).toBeNull();
+		expect(tipped.frame.portal).toEqual(open);
 	});
 
-	it("hides the caption on the frame the hold starts growing, without flicker as it holds", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
-		expect(frames.slice(0, ARMING_FRAMES).every((f) => f.caption)).toBe(true);
-		expect(frames.slice(ARMING_FRAMES).every((f) => !f.caption)).toBe(true);
-	});
-
-	it("shows the caption on the frame the hold breaks, and keeps it while off level", () => {
-		const { frames } = play(halfHeld(), { x: 0.3, y: 0 }, 2000);
-		expect(frames.every((f) => f.caption)).toBe(true);
-	});
-
-	it("counts no hold during the arming delay: the window rests at the cup", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, ARMING_FRAMES * FRAME_DT);
-		expect(frames).toHaveLength(ARMING_FRAMES);
-		const rest = frames[frames.length - 1].window.radius;
-		expect(rest).toBeCloseTo(CUP_RADIUS, 9);
-		expect(frames.every((f) => f.window.radius <= rest && !f.fired)).toBe(true);
-	});
-
-	it("grows the window with the hold and shrinks it when the hold breaks", () => {
-		const { state, frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
-		const held = frames.slice(ARMING_FRAMES).map((f) => f.window.radius);
+	it("grows the portal with the hold and shrinks it when the hold breaks", () => {
+		const { state, frames } = play(landing(), LEVEL, OPENING_MS + HOLD_MS / 2);
+		const held = frames.slice(OPEN_FRAMES).map((f) => f.portal.radius);
 		for (let i = 1; i < held.length; i++) expect(held[i]).toBeGreaterThan(held[i - 1]);
-		const broken = play(state, { x: 0.3, y: 0 }, 160).frames.map((f) => f.window.radius);
+		const broken = play(state, { x: 0.3, y: 0 }, 160).frames.map((f) => f.portal.radius);
 		expect(broken[0]).toBeLessThan(held[held.length - 1]);
 		for (let i = 1; i < broken.length; i++) expect(broken[i]).toBeLessThan(broken[i - 1]);
 	});
 
 	it("rolls the dot off the seat with the tilt and back home when level", () => {
-		const first = play(OPEN_GET_READY, LEVEL, FRAME_DT).frames[0];
+		const first = play(landing(), LEVEL, FRAME_DT).frames[0];
 		expect(first.dot).toEqual({ x: seat.x, y: seat.y });
-		const away = play(OPEN_GET_READY, { x: 0.2, y: 0 }, 1000);
+		const away = play(landing(), { x: 0.2, y: 0 }, OPENING_MS + 1000);
 		expect(away.frames[away.frames.length - 1].dot.x).toBeCloseTo(seat.x + 30, 0);
 		const home = play(away.state, LEVEL, 1000).frames;
 		expect(home[home.length - 1].dot.x).toBeCloseTo(seat.x, 0);
 	});
 
-	it("breathes the window by this frame's roll, not the last frame's", () => {
-		const reach = frostReach(seat, field);
+	it("breathes the portal by this frame's roll, not the last frame's", () => {
+		const reach = portalReach(seat, field);
 		const homeReach = seat.radius * 1.5;
 		const off = (f: GetReadyFrame) => Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y);
-		// Tipped hard off level, so the hold never grows and the dot rolls off the seat
-		const { frames } = play(OPEN_GET_READY, TIPPED, 1000);
+		// Just off level, so the hold never grows but the dot stays home while the cup opens and
+		// the pulse gets going; then tipped hard, so the dot rolls off the seat
+		const NEAR = { x: 0.15, y: 0 };
+		const settled = play(landing(), NEAR, OPENING_MS + 400);
+		expect(settled.frames.every((f) => off(f) < homeReach)).toBe(true);
+		const { frames } = play(settled.state, TIPPED, 1000);
 		// The frame the dot leaves home on: on the last frame it was still home
 		const left = frames.findIndex((f) => off(f) >= homeReach);
 		expect(left).toBeGreaterThan(0);
 		const before = frames[left - 1];
 		expect(off(before)).toBeLessThan(homeReach);
-		const pulse = seatPulse((left + 1) * FRAME_DT);
-		// The cup may still be opening on that frame; the window is scaled by it either way
-		const { opened } = frames[left];
-		// Away from home the window breathes in full; by the last frame's roll it would breathe less
-		expect(frames[left].window.radius).toBeCloseTo(windowRadius(0, reach, pulse) * opened, 9);
-		const lagging = windowRadius(0, reach, pulse * (1 - seated(before.dot, seat))) * opened;
-		expect(frames[left].window.radius).toBeGreaterThan(lagging);
+		// The pulse's clock started as the cup was fully open
+		const pulse = seatPulse(settled.state.openMs + (left + 1) * FRAME_DT);
+		expect(pulse).toBeGreaterThan(0.2);
+		// Away from home the portal breathes in full; by the last frame's roll it would breathe less
+		expect(frames[left].portal.radius).toBeCloseTo(portalRadius(0, reach, pulse), 9);
+		const lagging = portalRadius(0, reach, pulse * (1 - seated(before.dot, seat)));
+		expect(frames[left].portal.radius).toBeGreaterThan(lagging);
 	});
 
-	it("fades the rim out as the thaw passes the walls, gone by the firing frame", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, PLENTY);
-		const at = frames.findIndex((f) => f.fired);
-		const rims = frames.slice(ARMING_FRAMES, at + 1).map((f) => f.rim);
+	it("fades the rim out as the portal passes the walls, gone by the firing frame", () => {
+		const { frames } = play(landing(), LEVEL, PLENTY);
+		const at = frames.findIndex((f) => f.end === "ready");
+		const rims = frames.slice(OPEN_FRAMES - 1, at + 1).map((f) => f.rim);
 		expect(rims[0]).toBeGreaterThan(0.5);
 		for (let i = 1; i < rims.length; i++) expect(rims[i]).toBeLessThanOrEqual(rims[i - 1]);
 		expect(rims[Math.floor(rims.length / 2)]).toBe(rims[0]);
@@ -568,49 +664,62 @@ describe("get-ready frame step", () => {
 		expect(frames.slice(at).every((f) => f.rim === 0)).toBe(true);
 	});
 
+	it("shows the bowl's glass in full at the portal's edge from the first frame it opens", () => {
+		const { frames } = play(landing(), TIPPED, OPENING_MS + 1000);
+		for (const f of frames) expect(f.glass).toBe(1);
+	});
+
+	it("fades the glass out as the portal passes the walls, gone by the firing frame", () => {
+		const { frames } = play(landing(), LEVEL, PLENTY);
+		const at = frames.findIndex((f) => f.end === "ready");
+		const glass = frames.slice(OPEN_FRAMES - 1, at + 1).map((f) => f.glass);
+		for (let i = 1; i < glass.length; i++) expect(glass[i]).toBeLessThanOrEqual(glass[i - 1]);
+		expect(glass[Math.floor(glass.length / 2)]).toBe(1);
+		expect(glass[glass.length - 1]).toBe(0);
+	});
+
+	it("takes the glass away with the cup when it shuts", () => {
+		const { frames } = play(halfHeld(), LEVEL, 400, seat, false);
+		expect(frames.find((f) => f.end === "shut")?.glass).toBe(0);
+	});
+
 	it("beats the rim with the pulse while the dot is away from home", () => {
-		const away = play(OPEN_GET_READY, TIPPED, 2000).frames.map((f) => f.rim);
+		const away = play(landing(), TIPPED, OPENING_MS + 2000).frames.map((f) => f.rim);
 		expect(Math.max(...away) - Math.min(...away)).toBeGreaterThan(0.3);
 	});
 
-	it("draws the seat, the dot and the rim when the frozen scene has a player", () => {
-		const first = play(OPEN_GET_READY, LEVEL, FRAME_DT).frames[0];
-		expect(first.drawn).toBe(true);
-		expect(first.seat).toEqual(seat);
+	it("opens with the dot on the seat and the portal of no size, so the first frame shows the pause as it was", () => {
+		const opened = openGetReady(seat, field);
+		expect(opened.end).toBeNull();
+		expect(opened.frame.dot).toEqual({ x: seat.x, y: seat.y });
+		expect(opened.frame.portal.radius).toBe(0);
+		expect(opened.frame.rim).toBe(0);
 	});
 
-	it("draws nothing and keeps the field frosted all over when the frozen scene has no player", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, PLENTY, null);
-		for (const f of frames) {
-			expect(f.drawn).toBe(false);
-			expect(f.window).toEqual(FROSTED_ALL);
-			expect(f.opened).toBe(0);
-		}
-	});
-
-	it("keeps the caption hidden once fired", () => {
-		const { frames } = play(OPEN_GET_READY, LEVEL, PLENTY);
-		const at = frames.findIndex((f) => f.fired);
-		expect(frames.slice(at).every((f) => !f.caption)).toBe(true);
+	it("still opens and fires on a seat of no size, as from a scene with no player", () => {
+		const nowhere = { x: 200, y: 400, radius: 0 };
+		const { frames } = play(landing(nowhere), LEVEL, PLENTY, nowhere);
+		expect(frames.filter((f) => f.end === "ready")).toHaveLength(1);
+		for (const f of frames) expect(Number.isFinite(f.rim)).toBe(true);
 	});
 });
 
-describe("get-ready finger lifted", () => {
+describe("get-ready finger lifted once the cup is open", () => {
 	it("shuts the cup, faster than it opened, and is inert after the frame it shut on", () => {
 		const { state, frames } = play(halfHeld(), LEVEL, 400, seat, false);
-		const shutting = frames.filter((f) => f.shut);
+		const shutting = frames.filter((f) => f.end === "shut");
 		expect(shutting).toHaveLength(1);
 		const at = frames.indexOf(shutting[0]);
 		expect(at).toBeGreaterThan(0);
-		expect((at + 1) * FRAME_DT).toBeLessThan(OPEN_MS);
-		const radii = frames.slice(0, at + 1).map((f) => f.window.radius);
+		expect((at + 1) * FRAME_DT).toBeLessThan(OPENING_MS);
+		const radii = frames.slice(0, at + 1).map((f) => f.portal.radius);
 		for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
 		expect(radii[at]).toBe(0);
 		expect(shutting[0].rim).toBe(0);
 		expect(shutting[0].opened).toBe(0);
 		for (const after of frames.slice(at + 1)) {
-			expect(after.shut).toBe(false);
-			expect(after.window.radius).toBe(0);
+			expect(after.end).toBeNull();
+			expect(after.portal.radius).toBe(0);
 		}
 		const inert = advanceGetReady(state, {
 			seat,
@@ -625,46 +734,21 @@ describe("get-ready finger lifted", () => {
 
 	it("never fires once the finger has lifted, however long the phone stays level", () => {
 		const { frames } = play(halfHeld(), LEVEL, HOLD_MS * 2, seat, false);
-		expect(frames.some((f) => f.fired)).toBe(false);
+		expect(frames.some((f) => f.end === "ready")).toBe(false);
 	});
 
-	it("drains the hold and drops the caption while the finger is up", () => {
+	it("drains the hold while the finger is up", () => {
 		const held = halfHeld();
 		const lifted = play(held, LEVEL, FRAME_DT, seat, false);
 		expect(lifted.state.hold.progress).toBeLessThan(held.hold.progress);
-		expect(lifted.frames[0].caption).toBe(false);
 	});
 
 	it("opens again if the finger comes back before the cup has shut", () => {
 		const slipped = play(halfHeld(), LEVEL, FRAME_DT, seat, false);
-		expect(slipped.frames[0].shut).toBe(false);
+		expect(slipped.frames[0].end).toBeNull();
 		const back = play(slipped.state, LEVEL, FRAME_DT * 3);
-		expect(back.frames.some((f) => f.shut)).toBe(false);
-		expect(back.state.open).toBe(1);
-		expect(back.frames[back.frames.length - 1].window.radius).toBeGreaterThan(
-			slipped.frames[0].window.radius,
-		);
-	});
-});
-
-describe("get-ready close", () => {
-	it("leaves the window as it is after firing, so the frost lifts behind it unseen", () => {
-		const { state, frames } = play(OPEN_GET_READY, LEVEL, PLENTY);
-		expect(frames.some((f) => f.fired)).toBe(true);
-		const open = frames[frames.length - 1].window;
-		expect(closeGetReady(state, open)).toBe(open);
-	});
-
-	it("frosts the field all over when closed mid-hold, so the pause screen is frosted all over", () => {
-		const { state, frames } = play(OPEN_GET_READY, LEVEL, ARMING_MS + HOLD_MS / 2);
-		expect(frames.some((f) => f.fired)).toBe(false);
-		const thawing = frames[frames.length - 1].window;
-		expect(thawing.radius).toBeGreaterThan(CUP_RADIUS);
-		expect(closeGetReady(state, thawing)).toEqual(FROSTED_ALL);
-	});
-
-	it("frosts the field all over once the cup has shut", () => {
-		const { state, frames } = play(halfHeld(), LEVEL, 400, seat, false);
-		expect(closeGetReady(state, frames[frames.length - 1].window)).toEqual(FROSTED_ALL);
+		expect(back.frames.some((f) => f.end === "shut")).toBe(false);
+		expect(back.frames[back.frames.length - 1].opened).toBe(1);
+		expect(back.frames[back.frames.length - 1].portal.radius).toBeGreaterThan(CUP_RADIUS);
 	});
 });

@@ -1,4 +1,4 @@
-import { FIELD_TOUCH_FRAME, onStage } from "../../presentation/touch/fieldTouch";
+import { FIELD_TOUCH_FRAME, onStage, touchSteers } from "../../presentation/touch/fieldTouch";
 
 describe("the field's touch layer", () => {
 	it("keeps a grip band clear down both sides", () => {
@@ -18,5 +18,22 @@ describe("the field's touch layer", () => {
 			x: 150 + FIELD_TOUCH_FRAME.left,
 			y: 600 + FIELD_TOUCH_FRAME.top,
 		});
+	});
+});
+
+describe("where touch steers the dot (dev)", () => {
+	it("steers in a run in play only in the dev mode where touch steers, so the field can't pause there", () => {
+		expect(touchSteers("hud", true)).toBe(true);
+		expect(touchSteers("hud", false)).toBe(false);
+	});
+
+	it("stops as the bloom starts, so the pause dot never floats over the pause world the bloom opens", () => {
+		expect(touchSteers("frosting", true)).toBe(false);
+	});
+
+	it("is not on any other screen", () => {
+		for (const screen of ["title", "pause", "getReady", "gameOver"] as const) {
+			expect(touchSteers(screen, true)).toBe(false);
+		}
 	});
 });
