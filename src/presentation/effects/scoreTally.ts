@@ -1,3 +1,4 @@
+import { GLYPH_ROWS } from "../dotmatrix/glyphs";
 import { layoutDotMatrix } from "../dotmatrix/layout";
 import { COMBO_AMBER } from "../theme/theme";
 import { BURST_COLORS, NOT_STARTED } from "./burstFrames";
@@ -39,8 +40,7 @@ export const TICK_MAX_MS = 60;
 export const FAR_FLIGHT_MS = 600;
 /** The combo's amber, by index into BURST_COLORS */
 export const AMBER = BURST_COLORS.indexOf(COMBO_AMBER);
-/** Rows and columns of a glyph */
-export const GLYPH_ROWS = 7;
+/** Columns of a glyph */
 const GLYPH_COLS = 5;
 /** Columns a digit takes, its gap included */
 export const DIGIT_CELLS = GLYPH_COLS + 1;

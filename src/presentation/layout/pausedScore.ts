@@ -3,6 +3,7 @@
  * stage (see PausedScore). The HUD's own score stays on the play side.
  */
 
+import { GLYPH_ROWS } from "../dotmatrix/glyphs";
 import { layoutDotMatrix, pitchToFit } from "../dotmatrix/layout";
 
 /** The score's dot spacing in the middle (px), and the run time's under it */
@@ -12,8 +13,6 @@ export const TIME_PITCH = 5;
 const SIDE_MARGIN = 48;
 /** From the score's dots' bottom row to the time's top row (px) */
 export const TIME_GAP = 24;
-
-const GLYPH_ROWS = 7;
 
 /** The score's pitch in the middle: MIDDLE_PITCH, closer for a score too wide for the stage */
 export function middlePitch(score: number, stageWidth: number): number {
