@@ -36,8 +36,12 @@ How far the phone has turned from the level pose, as the hand turns it: about it
 _Avoid_: angle, orientation, attitude
 
 **Swivel**:
-The part of the tilt that is a turn about the vertical, as in a swivel chair, which gravity cannot see. It has no zero but where the level pose was last taken or held, and that zero follows the player turning on the spot.
+A turn of the phone about the vertical, as in a swivel chair or the player turning on the spot. Gravity cannot see it, so it never steers.
 _Avoid_: heading, yaw, compass, azimuth
+
+**Steering wheel**:
+Turning the screen in its own plane. Near upright it steers left and right, standing in for the roll that gravity can no longer see there.
+_Avoid_: twist, spin
 
 **Run**:
 One game, from its start until the refusal that ends it.

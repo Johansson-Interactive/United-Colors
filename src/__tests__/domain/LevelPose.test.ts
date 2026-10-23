@@ -3,17 +3,12 @@ import {
 	attitudeAt,
 	FLAT,
 	FLAT_ATTITUDES,
-	followSwivel,
 	gravityOf,
-	type LevelPoses,
+	gravityTilt,
 	levelTilt,
-	swivelledBy,
-	tiltFromFlat,
 	turnBetween,
 	turnedToward,
 	unitGravity,
-	wholeTilt,
-	zeroSwivel,
 } from "../../domain/levelPose";
 import type { Attitude, Gravity } from "../../domain/types";
 import { swivelled } from "./attitudes";
@@ -91,13 +86,20 @@ function expectGravity(actual: Gravity, expected: Gravity, label?: string): void
 	expect(actual.z, label).toBeCloseTo(expected.z);
 }
 
-describe("wholeTilt", () => {
+describe("gravityTilt", () => {
 	const ROOM_X = { x: 1, y: 0, z: 0 };
 	const ROOM_Y = { x: 0, y: 1, z: 0 };
+	const HEADINGS = [0.5, Math.PI / 2, 2, Math.PI - 0.1, -2];
+
+	/** Tilt of the phone held in `a` from the level pose held in `pose` */
+	const tiltOf = (a: Attitude, pose: Attitude) => gravityTilt(a, gravityOf(pose));
+
+	/** Reclined `degrees` from flat, screen up, top edge raised */
+	const reclined = (degrees: number) => attitudeAt({ x: 0, y: degrees * DEG }, FLAT_ATTITUDES.up);
 
 	it("the level pose itself reads as no tilt, in any pose", () => {
 		for (const [pose, held] of Object.entries(HELD)) {
-			const tilt = wholeTilt(held, held);
+			const tilt = tiltOf(held, held);
 			expect(tilt.x, pose).toBeCloseTo(0);
 			expect(tilt.y, pose).toBeCloseTo(0);
 		}
@@ -107,308 +109,183 @@ describe("wholeTilt", () => {
 		// Right edge lowered by 0.4 rad: gravity leans to +x
 		const right = turnedInRoom(FLAT_ATTITUDES.up, ROOM_Y, 0.4);
 		expectGravity(gravityOf(right), { x: Math.sin(0.4), y: 0, z: -Math.cos(0.4) });
-		expect(wholeTilt(right, FLAT_ATTITUDES.up).x).toBeCloseTo(0.4);
-		expect(wholeTilt(right, FLAT_ATTITUDES.up).y).toBeCloseTo(0);
+		expect(gravityTilt(right, FLAT.up).x).toBeCloseTo(0.4);
+		expect(gravityTilt(right, FLAT.up).y).toBeCloseTo(0);
 		// Top edge raised by 0.7 rad
 		const top = turnedInRoom(FLAT_ATTITUDES.up, ROOM_X, 0.7);
 		expectGravity(gravityOf(top), { x: 0, y: -Math.sin(0.7), z: -Math.cos(0.7) });
-		expect(wholeTilt(top, FLAT_ATTITUDES.up).x).toBeCloseTo(0);
-		expect(wholeTilt(top, FLAT_ATTITUDES.up).y).toBeCloseTo(0.7);
+		expect(gravityTilt(top, FLAT.up).x).toBeCloseTo(0);
+		expect(gravityTilt(top, FLAT.up).y).toBeCloseTo(0.7);
 	});
 
 	it("screen down, both axes are mirrored from screen up, as the hand sees them", () => {
 		// Right edge lowered by 0.3 rad, as the player sees the screen: towards the eyes below
 		const right = turnedInRoom(FLAT_ATTITUDES.down, ROOM_Y, 0.3);
 		expectGravity(gravityOf(right), { x: Math.sin(0.3), y: 0, z: Math.cos(0.3) });
-		expect(wholeTilt(right, FLAT_ATTITUDES.down).x).toBeCloseTo(-0.3);
-		expect(wholeTilt(right, FLAT_ATTITUDES.down).y).toBeCloseTo(0);
+		expect(gravityTilt(right, FLAT.down).x).toBeCloseTo(-0.3);
+		expect(gravityTilt(right, FLAT.down).y).toBeCloseTo(0);
 		// Top edge lowered by 0.3 rad: towards the eyes below
 		const top = turnedInRoom(FLAT_ATTITUDES.down, ROOM_X, 0.3);
 		expectGravity(gravityOf(top), { x: 0, y: Math.sin(0.3), z: Math.cos(0.3) });
-		expect(wholeTilt(top, FLAT_ATTITUDES.down).x).toBeCloseTo(0);
-		expect(wholeTilt(top, FLAT_ATTITUDES.down).y).toBeCloseTo(0.3);
+		expect(gravityTilt(top, FLAT.down).x).toBeCloseTo(0);
+		expect(gravityTilt(top, FLAT.down).y).toBeCloseTo(0.3);
 	});
 
-	it("upright, swivelling the right edge away from the eyes steers right", () => {
-		const upright = HELD.upright;
-		// Anticlockwise from above: the right edge swings away from the player
-		const turnedAway = swivelled(upright, 0.2);
-		expectGravity(gravityOf(turnedAway), gravityOf(upright));
-		expect(wholeTilt(turnedAway, upright).x).toBeCloseTo(0.2);
-		expect(wholeTilt(turnedAway, upright).y).toBeCloseTo(0);
-	});
-
-	it("on your side, swivelling the top edge away from the eyes reads as tipping it away", () => {
-		const onSide = HELD["on your side"];
-		// Anticlockwise from above: the top edge swings away from the screen's face
-		const turnedAway = swivelled(onSide, 0.2);
-		expectGravity(gravityOf(turnedAway), gravityOf(onSide));
-		expect(wholeTilt(turnedAway, onSide).x).toBeCloseTo(0);
-		expect(wholeTilt(turnedAway, onSide).y).toBeCloseTo(-0.2);
-	});
-
-	it("a roll about the long axis reads in full, in every pose", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			const tilt = wholeTilt(turnedAbout(held, "y", 0.3), held);
-			expect(tilt.x, pose).toBeCloseTo(0.3);
-			expect(tilt.y, pose).toBeCloseTo(0);
-		}
-	});
-
-	it("a tip about the short axis reads in full, in every pose", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			const tilt = wholeTilt(turnedAbout(held, "x", -0.3), held);
-			expect(tilt.x, pose).toBeCloseTo(0);
-			expect(tilt.y, pose).toBeCloseTo(-0.3);
-		}
-	});
-
-	it("turning the screen like a steering wheel reads as nothing, in every pose", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			const tilt = wholeTilt(turnedAbout(held, "z", 0.4), held);
-			expect(tilt.x, pose).toBeCloseTo(0);
-			expect(tilt.y, pose).toBeCloseTo(0);
-		}
-	});
-
-	it("a turn too small to have an axis reads as its size", () => {
-		const nudged = turnedAbout(HELD.upright, "y", 1e-12);
-		const tilt = wholeTilt(nudged, HELD.upright);
-		expect(tilt.x).toBeCloseTo(1e-12, 20);
-		expect(tilt.y).toBeCloseTo(0, 20);
-	});
-
-	it("tipping through upright while swivelled reads smoothly across the vertical", () => {
-		const upright = HELD.upright;
-		let last = wholeTilt(
-			swivelled(attitudeAt({ x: 0, y: 89 * DEG }, FLAT_ATTITUDES.up), 0.1),
-			upright,
-		);
-		for (let pitch = 89.1; pitch <= 91; pitch += 0.1) {
-			const held = swivelled(attitudeAt({ x: 0, y: pitch * DEG }, FLAT_ATTITUDES.up), 0.1);
-			const tilt = wholeTilt(held, upright);
-			expect(tilt.x).toBeCloseTo(0.1, 2);
-			expect(Math.abs(tilt.x - last.x)).toBeLessThan(0.001);
-			expect(tilt.y - last.y).toBeCloseTo(0.1 * DEG, 4);
-			last = tilt;
-		}
-	});
-});
-
-describe("zeroSwivel", () => {
-	const HEADINGS = [0, 1, 3, -2];
-
-	it("the poses read the saved gravities, whatever way the phone is held", () => {
-		const saved: LevelPoses[] = [
-			FLAT,
-			{ up: POSES.upright, down: POSES["overhead, tipped"] },
-			{ up: POSES["on your side, exactly"], down: { x: -1, y: 0, z: 0 } },
-			{ up: POSES["propped in bed"], down: FLAT.up },
-		];
-		for (const poses of saved) {
-			for (const [pose, held] of Object.entries(HELD)) {
-				const zeroed = zeroSwivel(poses, held);
-				expectGravity(gravityOf(zeroed.up), unitGravity(poses.up), pose);
-				expectGravity(gravityOf(zeroed.down), unitGravity(poses.down), pose);
-			}
-		}
-	});
-
-	it("held at the level pose, the phone reads no tilt, whichever way the player faces", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			const g = gravityOf(held);
-			const side = g.z > 0 ? "down" : "up";
-			const saved = { ...FLAT, [side]: g };
-			for (const heading of HEADINGS) {
-				const facing = swivelled(held, heading);
-				const tilt = wholeTilt(facing, zeroSwivel(saved, facing)[side]);
-				expect(tilt.x, pose).toBeCloseTo(0);
-				expect(tilt.y, pose).toBeCloseTo(0);
-			}
-		}
-	});
-
-	it("away from the level pose, the tilt doesn't depend on which way the player faces", () => {
-		const saved = { up: POSES.upright, down: FLAT.down };
-		const held = attitudeAt({ x: 0.2, y: -0.1 }, HELD.upright);
-		const ahead = wholeTilt(held, zeroSwivel(saved, held).up);
-		for (const heading of HEADINGS) {
-			const facing = swivelled(held, heading);
-			const tilt = wholeTilt(facing, zeroSwivel(saved, facing).up);
-			expect(tilt.x).toBeCloseTo(ahead.x);
-			expect(tilt.y).toBeCloseTo(ahead.y);
-		}
-	});
-
-	it("once zeroed, a swivel upright reads as a roll", () => {
-		const saved = { up: POSES.upright, down: FLAT.down };
-		const facing = swivelled(HELD.upright, 1);
-		const zeroed = zeroSwivel(saved, facing);
-		const tilt = wholeTilt(swivelled(facing, 0.2), zeroed.up);
-		expect(tilt.x).toBeCloseTo(0.2);
-		expect(tilt.y).toBeCloseTo(0);
-	});
-
-	it("lying back after zeroing, the turned-over pose has the same swivel zero", () => {
-		for (const heading of HEADINGS) {
-			const sitting = swivelled(FLAT_ATTITUDES.up, heading);
-			const zeroed = zeroSwivel(FLAT, sitting);
-			// Lying back turns the phone over about its short axis
-			const lying = turnedAbout(sitting, "x", Math.PI);
-			const tilt = wholeTilt(lying, zeroed.down);
-			expect(tilt.x).toBeCloseTo(0);
-			expect(tilt.y).toBeCloseTo(0);
-			// The right edge lowered, towards the eyes below
-			const rolled = wholeTilt(turnedAbout(lying, "y", -0.3), zeroed.down);
-			expect(rolled.x).toBeCloseTo(-0.3);
-		}
-	});
-
-	it("sitting up after zeroing screen down, the screen-up pose has the same swivel zero", () => {
-		for (const heading of HEADINGS) {
-			const lying = swivelled(FLAT_ATTITUDES.down, heading);
-			const zeroed = zeroSwivel(FLAT, lying);
-			const sitting = turnedAbout(lying, "x", Math.PI);
-			const tilt = wholeTilt(sitting, zeroed.up);
-			expect(tilt.x).toBeCloseTo(0);
-			expect(tilt.y).toBeCloseTo(0);
-		}
-	});
-});
-
-describe("followSwivel", () => {
-	/** Follows the phone held at `attitude` from `pose` for `ms`, in display frames; the pose it ends at */
-	function follow(attitude: Attitude, pose: Attitude, ms: number, catchingUp = false) {
-		let at = pose;
-		let catching = catchingUp;
-		for (let t = 0; t < ms; t += 16) {
-			const step = followSwivel(attitude, at, catching, 16);
-			at = swivelledBy(at, step.turn);
-			catching = step.catchingUp;
-		}
-		return { pose: at, catchingUp: catching };
-	}
-
-	it("swivelledBy turns the phone about the vertical as the player turns", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			const a = swivelledBy(held, 1.2);
-			const b = swivelled(held, 1.2);
-			for (const key of Object.keys(a) as (keyof Attitude)[])
-				expect(a[key], pose).toBeCloseTo(b[key]);
-		}
-	});
-
-	it("flat, the zero follows any swivel at once, so turning on the spot never turns the controls", () => {
-		for (const heading of [0.5, 2, Math.PI - 0.1, -2]) {
-			const tipped = attitudeAt({ x: 0, y: 0.2 }, swivelled(FLAT_ATTITUDES.up, heading));
-			const step = followSwivel(tipped, FLAT_ATTITUDES.up, false, 16);
-			const tilt = wholeTilt(tipped, swivelledBy(FLAT_ATTITUDES.up, step.turn));
-			expect(tilt.x, `${heading}`).toBeCloseTo(0);
-			expect(tilt.y, `${heading}`).toBeCloseTo(0.2);
-		}
-	});
-
-	it("a roll or tip within reach is never followed, held as long as you like, in every pose", () => {
+	it("turning on the spot never moves the tilt, in any pose, leaning or not", () => {
 		const leans = [
-			{ x: 44 * DEG, y: 0 },
-			{ x: -44 * DEG, y: 0 },
-			{ x: 0, y: 44 * DEG },
-			{ x: 30 * DEG, y: -30 * DEG },
+			{ x: 0, y: 0 },
+			{ x: 0.3, y: 0 },
+			{ x: 0, y: -0.25 },
+			{ x: -0.2, y: 0.15 },
 		];
 		for (const [pose, held] of Object.entries(HELD)) {
 			for (const lean of leans) {
-				const followed = follow(attitudeAt(lean, held), held, 5000);
-				const tilt = wholeTilt(attitudeAt(lean, held), followed.pose);
-				expect(tilt.x, pose).toBeCloseTo(lean.x);
-				expect(tilt.y, pose).toBeCloseTo(lean.y);
-				expect(followed.catchingUp, pose).toBe(false);
+				const leaning = attitudeAt(lean, held);
+				const ahead = tiltOf(leaning, held);
+				for (const heading of HEADINGS) {
+					const tilt = tiltOf(swivelled(leaning, heading), held);
+					expect(tilt.x, `${pose} ${heading}`).toBeCloseTo(ahead.x);
+					expect(tilt.y, `${pose} ${heading}`).toBeCloseTo(ahead.y);
+				}
 			}
 		}
 	});
 
-	it("a turn on the spot past the reach drags the zero along, which then catches up, in every pose", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
-			for (const heading of [Math.PI / 2, -2.5]) {
-				const turnedAway = swivelled(held, heading);
-				const first = followSwivel(turnedAway, held, false, 16);
-				expect(first.turn, pose).not.toBe(0);
-				const dragged = wholeTilt(turnedAway, swivelledBy(held, first.turn));
-				expect(Math.hypot(dragged.x, dragged.y), pose).toBeLessThanOrEqual(45 * DEG + 1e-9);
-				const settled = follow(turnedAway, held, 2000);
-				const tilt = wholeTilt(turnedAway, settled.pose);
-				expect(Math.hypot(tilt.x, tilt.y), pose).toBeLessThan(DEG);
-				expect(settled.catchingUp, pose).toBe(false);
+	it("a roll about the long axis reads in full in poses reclined up to 60 degrees, screen up or down", () => {
+		const poses = {
+			flat: HELD.flat,
+			"reclined 30°": reclined(30),
+			"reclined 45°": HELD["reclined 45°"],
+			"reclined 60°": reclined(60),
+			"screen down": HELD["screen down"],
+			"screen down, tipped": HELD["screen down, tipped"],
+			"reclined, facing elsewhere": HELD["reclined, facing elsewhere"],
+		};
+		for (const [pose, held] of Object.entries(poses)) {
+			for (const roll of [0.3, -0.2]) {
+				const tilt = tiltOf(turnedAbout(held, "y", roll), held);
+				expect(tilt.x, pose).toBeCloseTo(roll, 2);
+				// Gravity follows a cone, not a great circle, as a reclined phone rolls: a little
+				// of a big roll reads as a tip
+				expect(Math.abs(tilt.y), pose).toBeLessThan(0.05);
 			}
 		}
 	});
 
-	it("once caught up, a roll is read in full again", () => {
-		const turnedAway = swivelled(HELD.upright, Math.PI / 2);
-		const settled = follow(turnedAway, HELD.upright, 2000);
-		const rolled = attitudeAt({ x: 0.3, y: 0 }, turnedAway);
-		const step = followSwivel(rolled, settled.pose, settled.catchingUp, 16);
-		expect(step.turn).toBe(0);
-		expect(wholeTilt(rolled, settled.pose).x).toBeCloseTo(0.3, 1);
+	it("a tip about the axis that lies level at the pose reads in full, in every pose", () => {
+		const cases: [string, Attitude, "x" | "y"][] = [
+			["flat", HELD.flat, "x"],
+			["reclined 45°", HELD["reclined 45°"], "x"],
+			["upright", HELD.upright, "x"],
+			["on your side", HELD["on your side"], "y"],
+		];
+		for (const [pose, held, axis] of cases) {
+			const tilt = tiltOf(turnedAbout(held, axis, 0.3), held);
+			expect(axis === "x" ? tilt.y : tilt.x, pose).toBeCloseTo(0.3);
+			expect(axis === "x" ? tilt.x : tilt.y, pose).toBeCloseTo(0);
+		}
+	});
+
+	it("upright, turning the screen clockwise like a steering wheel steers right, in full", () => {
+		const tilt = tiltOf(turnedAbout(HELD.upright, "z", -0.3), HELD.upright);
+		expect(tilt.x).toBeCloseTo(0.3);
+		expect(tilt.y).toBeCloseTo(0);
+	});
+
+	it("on your side, the steering wheel lowering the bottom edge reads as raising the top", () => {
+		const tilt = tiltOf(turnedAbout(HELD["on your side"], "z", 0.3), HELD["on your side"]);
+		expect(tilt.x).toBeCloseTo(0);
+		expect(tilt.y).toBeCloseTo(0.3);
+	});
+
+	it("flat, turning the screen like a steering wheel reads as nothing", () => {
+		for (const held of [HELD.flat, HELD["screen down"]]) {
+			const tilt = tiltOf(turnedAbout(held, "z", 0.4), held);
+			expect(tilt.x).toBeCloseTo(0);
+			expect(tilt.y).toBeCloseTo(0);
+		}
+	});
+
+	it("from flat to upright, steering right reads right and never jumps, by roll or by wheel", () => {
+		const steer = (degrees: number) => {
+			const held = reclined(degrees);
+			return {
+				roll: tiltOf(turnedAbout(held, "y", 0.05), held).x,
+				wheel: tiltOf(turnedAbout(held, "z", -0.05), held).x,
+			};
+		};
+		let last = steer(1);
+		for (let degrees = 1.5; degrees <= 90; degrees += 0.5) {
+			const now = steer(degrees);
+			if (degrees <= 60) expect(now.roll, `${degrees}`).toBeCloseTo(0.05, 3);
+			expect(now.roll, `${degrees}`).toBeGreaterThanOrEqual(0);
+			expect(now.wheel, `${degrees}`).toBeGreaterThan(0);
+			expect(Math.abs(now.roll - last.roll), `${degrees}`).toBeLessThan(0.002);
+			expect(Math.abs(now.wheel - last.wheel), `${degrees}`).toBeLessThan(0.002);
+			last = now;
+		}
+		expect(last.wheel).toBeCloseTo(0.05, 3);
+	});
+
+	it("just past upright, the steering wheel still steers the same way round", () => {
+		for (const degrees of [85, 90, 95]) {
+			const held = reclined(degrees);
+			const tilt = tiltOf(turnedAbout(held, "z", -0.1), held);
+			expect(tilt.x, `${degrees}`).toBeGreaterThan(0.09);
+		}
+	});
+
+	it("reads the tilt from flat whichever way the phone faces, screen up or down", () => {
+		const tilt = { x: 0.3, y: -0.2 };
+		for (const heading of [0, 1, -2.5, Math.PI]) {
+			const up = gravityTilt(swivelled(attitudeAt(tilt, FLAT_ATTITUDES.up), heading), FLAT.up);
+			expect(up.x).toBeCloseTo(tilt.x);
+			expect(up.y).toBeCloseTo(tilt.y);
+			const down = gravityTilt(
+				swivelled(attitudeAt(tilt, FLAT_ATTITUDES.down), heading),
+				FLAT.down,
+			);
+			expect(down.x).toBeCloseTo(tilt.x);
+			expect(down.y).toBeCloseTo(tilt.y);
+		}
+	});
+
+	it("turned right over from the level pose, a half turn", () => {
+		const tilt = gravityTilt(FLAT_ATTITUDES.down, FLAT.up);
+		expect(Math.hypot(tilt.x, tilt.y)).toBeCloseTo(Math.PI);
 	});
 });
 
 describe("levelTilt", () => {
 	it("lying screen down turns over to the screen-down pose straight away", () => {
-		expect(levelTilt(FLAT_ATTITUDES.down, FLAT_ATTITUDES, "up").side).toBe("down");
-		expect(levelTilt(FLAT_ATTITUDES.up, FLAT_ATTITUDES, "down").side).toBe("up");
+		expect(levelTilt(FLAT_ATTITUDES.down, FLAT, "up").side).toBe("down");
+		expect(levelTilt(FLAT_ATTITUDES.up, FLAT, "down").side).toBe("up");
 	});
 
 	it("held near upright, the pose in use doesn't flip back and forth", () => {
 		for (const lean of [-10 * DEG, 10 * DEG]) {
 			const held = attitudeAt({ x: 0, y: 90 * DEG + lean }, FLAT_ATTITUDES.up);
-			expect(levelTilt(held, FLAT_ATTITUDES, "up").side).toBe("up");
-			expect(levelTilt(held, FLAT_ATTITUDES, "down").side).toBe("down");
+			expect(levelTilt(held, FLAT, "up").side).toBe("up");
+			expect(levelTilt(held, FLAT, "down").side).toBe("down");
 		}
 	});
 
 	it("a swivel never changes the pose in use", () => {
 		const held = attitudeAt({ x: 0, y: 100 * DEG }, FLAT_ATTITUDES.up);
 		for (const heading of [0.5, 1.5, 3]) {
-			expect(levelTilt(swivelled(held, heading), FLAT_ATTITUDES, "up").side).toBe("up");
+			expect(levelTilt(swivelled(held, heading), FLAT, "up").side).toBe("up");
 		}
 	});
 
-	it("measures the whole turn from the pose in use", () => {
-		const poses = zeroSwivel({ up: POSES.upright, down: FLAT.down }, HELD.upright);
-		const up = levelTilt(swivelled(HELD.upright, 0.2), poses, "up");
+	it("measures from the pose in use", () => {
+		const poses = { up: POSES.upright, down: FLAT.down };
+		const up = levelTilt(turnedAbout(HELD.upright, "z", -0.2), poses, "up");
 		expect(up.side).toBe("up");
 		expect(up.x).toBeCloseTo(0.2);
 		const overhead = levelTilt(turnedAbout(FLAT_ATTITUDES.down, "y", 0.3), poses, "up");
 		expect(overhead.side).toBe("down");
 		expect(overhead.x).toBeCloseTo(0.3);
 		expect(overhead.y).toBeCloseTo(0);
-	});
-});
-
-describe("tiltFromFlat", () => {
-	it("reads the tilt from flat whichever way the phone faces, screen up or down", () => {
-		const tilt = { x: 0.3, y: -0.2 };
-		for (const heading of [0, 1, -2.5, Math.PI]) {
-			const up = tiltFromFlat(swivelled(attitudeAt(tilt, FLAT_ATTITUDES.up), heading), "up");
-			expect(up.x).toBeCloseTo(tilt.x);
-			expect(up.y).toBeCloseTo(tilt.y);
-			const down = tiltFromFlat(swivelled(attitudeAt(tilt, FLAT_ATTITUDES.down), heading), "down");
-			expect(down.x).toBeCloseTo(tilt.x);
-			expect(down.y).toBeCloseTo(tilt.y);
-		}
-	});
-
-	it("upright, a swivel reads as nothing: only gravity's turn counts", () => {
-		for (const heading of [0, 0.4, 2]) {
-			const tilt = tiltFromFlat(swivelled(HELD.upright, heading), "up");
-			expect(tilt.x).toBeCloseTo(0);
-			expect(tilt.y).toBeCloseTo(90 * DEG);
-		}
-	});
-
-	it("turned right over from the flat pose it reads, a half turn", () => {
-		const tilt = tiltFromFlat(FLAT_ATTITUDES.down, "up");
-		expect(Math.hypot(tilt.x, tilt.y)).toBeCloseTo(Math.PI);
 	});
 });
 
@@ -448,21 +325,21 @@ describe("turnedToward", () => {
 		const to = swivelled(HELD.upright, 0.2);
 		const half = turnedToward(HELD.upright, to, 0.5);
 		expect(turnBetween(half, HELD.upright)).toBeCloseTo(0.1);
-		expect(wholeTilt(half, HELD.upright).x).toBeCloseTo(0.1);
+		expect(turnBetween(half, to)).toBeCloseTo(0.1);
 	});
 });
 
 describe("attitudeAt", () => {
-	it("undoes wholeTilt, in every pose", () => {
-		for (const [pose, held] of Object.entries(HELD)) {
+	it("undoes gravityTilt from the flat poses", () => {
+		for (const side of ["up", "down"] as const) {
 			for (const tilt of [
 				{ x: 0.3, y: 0 },
 				{ x: 0, y: -0.5 },
 				{ x: -0.4, y: 0.25 },
 			]) {
-				const back = wholeTilt(attitudeAt(tilt, held), held);
-				expect(back.x, pose).toBeCloseTo(tilt.x);
-				expect(back.y, pose).toBeCloseTo(tilt.y);
+				const back = gravityTilt(attitudeAt(tilt, FLAT_ATTITUDES[side]), FLAT[side]);
+				expect(back.x, side).toBeCloseTo(tilt.x);
+				expect(back.y, side).toBeCloseTo(tilt.y);
 			}
 		}
 	});

@@ -1,4 +1,4 @@
-import { gravityOf, wholeTilt } from "../../domain/levelPose";
+import { gravityOf, gravityTilt } from "../../domain/levelPose";
 import { attitudeFromRotation } from "../../infrastructure/attitudeFromRotation";
 
 /** The gravity formula the adapter used before it kept the swivel: the oracle for beta, gamma */
@@ -36,17 +36,15 @@ describe("attitudeFromRotation", () => {
 
 	it("lying flat, a growing alpha alone reads as no tilt: the flat spin on a tabletop", () => {
 		const pose = attitudeFromRotation(0.4, 0, 0);
-		const tilt = wholeTilt(attitudeFromRotation(1.4, 0, 0), pose);
+		const tilt = gravityTilt(attitudeFromRotation(1.4, 0, 0), gravityOf(pose));
 		expect(tilt.x).toBeCloseTo(0);
 		expect(tilt.y).toBeCloseTo(0);
 	});
 
-	it("held upright, a growing alpha reads as a roll with the right edge turning away", () => {
-		// Counterclockwise seen from above, the right edge of a phone facing the player swings
-		// away from them, which is a positive roll
+	it("held upright, a growing alpha alone reads as no tilt: the player turning on the spot", () => {
 		const pose = attitudeFromRotation(0, Math.PI / 2, 0);
-		const tilt = wholeTilt(attitudeFromRotation(0.3, Math.PI / 2, 0), pose);
-		expect(tilt.x).toBeCloseTo(0.3);
+		const tilt = gravityTilt(attitudeFromRotation(0.3, Math.PI / 2, 0), gravityOf(pose));
+		expect(tilt.x).toBeCloseTo(0);
 		expect(tilt.y).toBeCloseTo(0);
 	});
 
@@ -61,7 +59,7 @@ describe("attitudeFromRotation", () => {
 			samples.push([wrapped(alpha + Math.PI), beta * DEG, wrapped(gamma + Math.PI)]);
 		}
 		const pose = attitudeFromRotation(...samples[0]);
-		const tilts = samples.map((s) => wholeTilt(attitudeFromRotation(...s), pose));
+		const tilts = samples.map((s) => gravityTilt(attitudeFromRotation(...s), gravityOf(pose)));
 		for (let i = 1; i < tilts.length; i++) {
 			const step = Math.hypot(tilts[i].x - tilts[i - 1].x, tilts[i].y - tilts[i - 1].y);
 			expect(step).toBeLessThan(1.5 * DEG);

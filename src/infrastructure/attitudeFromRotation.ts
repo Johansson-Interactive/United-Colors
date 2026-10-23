@@ -14,7 +14,8 @@ import type { Attitude } from "../domain/types";
  * about up). iOS: Core Motion's yaw is right-handed about its z-up reference frame. Android:
  * azimuth runs clockwise from north and Expo negates it. Read from the sources, not yet from a
  * device: confirm with one device log per platform (lay the phone flat, turn it
- * counterclockwise, alpha should grow) before trusting the swivel's sense.
+ * counterclockwise, alpha should grow). Tilt reads gravity alone (ADR 0014), so the sense only
+ * matters to the settle bowl's stillness hold, which takes the turn's size.
  */
 export function attitudeFromRotation(alpha: number, beta: number, gamma: number): Attitude {
 	const ca = Math.cos(alpha);

@@ -267,11 +267,14 @@ describe("settle", () => {
 			expect(rest.y).toBeCloseTo(0, 3);
 		});
 
-		it("upright, once levelled, a swivel rolls the dot as a roll does", () => {
+		it("upright, once levelled, a swivel leaves the dot be and the steering wheel rolls it", () => {
 			let settled = INITIAL_SETTLE;
 			for (let t = 0; t < SETTLE_HOLD_MS + 200; t += 16)
 				settled = stepSettle(settled, UPRIGHT, "up", 16);
-			expect(bowlTilt(settled, swivelledUpright(0.2)).x).toBeCloseTo(0.2, 3);
+			expect(bowlTilt(settled, swivelledUpright(0.2)).x).toBeCloseTo(0, 3);
+			// The right edge lowered 0.2 before standing the phone up: turned clockwise, as seen
+			const wheeled = attitudeAt({ x: 0, y: 90 * DEG }, at(0.2, 0));
+			expect(bowlTilt(settled, wheeled).x).toBeCloseTo(0.2, 3);
 		});
 
 		it("part-way through a hold, the dot sits between flat and the mean", () => {

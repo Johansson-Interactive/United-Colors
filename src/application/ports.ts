@@ -1,8 +1,8 @@
 import type { Attitude, GameSettings } from "../domain/types";
 
 /**
- * The device's motion sensor, reporting the phone's whole attitude, swivel included, so tilt
- * can be measured as the whole turn from a level pose (ADR 0010); its gravity follows from it.
+ * The device's motion sensor, reporting the phone's whole attitude. Tilt is read from its
+ * gravity (ADR 0014); the settle bowl's stillness hold checks the whole turn.
  * One source can feed several listeners; whoever owns it starts and stops it, the others only
  * subscribe.
  */

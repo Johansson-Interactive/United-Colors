@@ -2,7 +2,7 @@ import { type BenchRun, benchSessionOptions, benchTilt } from "../../application
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { Clock } from "../../application/ports";
-import { FLAT_ATTITUDES, turnBetween, wholeTilt } from "../../domain/levelPose";
+import { FLAT, FLAT_ATTITUDES, gravityTilt, turnBetween } from "../../domain/levelPose";
 
 /** A clock the test steps by hand: each step is one tick and one rendered frame */
 function manualClock() {
@@ -34,7 +34,7 @@ function benchRun(seconds: number, run: BenchRun = "steady") {
 	session.start("#E91E63");
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(wholeTilt(benchTilt(t / 30), FLAT_ATTITUDES.up));
+		session.feedTilt(gravityTilt(benchTilt(t / 30), FLAT.up));
 		clock.step();
 		frames.push(store.getState().frame);
 	}
@@ -66,9 +66,7 @@ describe("bench run", () => {
 	});
 
 	it("steers the player round the screen, both ways on both axes", () => {
-		const samples = Array.from({ length: 300 }, (_, i) =>
-			wholeTilt(benchTilt(i / 10), FLAT_ATTITUDES.up),
-		);
+		const samples = Array.from({ length: 300 }, (_, i) => gravityTilt(benchTilt(i / 10), FLAT.up));
 		expect(Math.min(...samples.map((s) => s.x))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.x))).toBeGreaterThan(0.1);
 		expect(Math.min(...samples.map((s) => s.y))).toBeLessThan(-0.1);
@@ -77,7 +75,7 @@ describe("bench run", () => {
 
 	it("tilts from flat with no swivel: at rest on its path the phone lies flat", () => {
 		expect(turnBetween(benchTilt(0), FLAT_ATTITUDES.up)).toBeCloseTo(0, 9);
-		const tilt = wholeTilt(benchTilt(1.3), FLAT_ATTITUDES.up);
+		const tilt = gravityTilt(benchTilt(1.3), FLAT.up);
 		expect(turnBetween(benchTilt(1.3), FLAT_ATTITUDES.up)).toBeCloseTo(
 			Math.hypot(tilt.x, tilt.y),
 			9,

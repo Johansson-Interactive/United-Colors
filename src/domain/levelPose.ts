@@ -5,10 +5,11 @@ import type { Attitude, Gravity, PoseSide, SavedLevelPoses, TiltAngles } from ".
  * turned about its own long axis (right edge away from the eyes), `y` about its short axis (top
  * edge towards them).
  *
- * Tilt is the whole turn of the phone from the level pose, swivel included, read along the
- * phone's own axes at the pose (wholeTilt, ADR 0010), so a roll steers at full strength in
- * every pose. The level pose is then an attitude, made from a saved gravity where the swivel is
- * zeroed (zeroSwivel).
+ * Tilt is read from gravity alone (gravityTilt, ADR 0014): the level pose is a gravity, and only
+ * a turn that moves gravity steers. The player turning on the spot never moves gravity, so it
+ * never moves the dot, in any pose. Reclined, gravity sees only part of a roll; that part is
+ * scaled back to the whole roll while the pose is within WHEEL_FROM of flat, and nearer upright
+ * the same movement of gravity is read as the screen turned like a steering wheel.
  *
  * Screen down, a turn that tips an edge away from the eyes still reads the way it does screen
  * up. To the hand that is the same tilt, though gravity sees it mirrored.
@@ -21,9 +22,6 @@ import type { Attitude, Gravity, PoseSide, SavedLevelPoses, TiltAngles } from ".
 /** The two level poses, as the gravity each reads */
 export type LevelPoses = Readonly<Record<PoseSide, Gravity>>;
 
-/** The two level poses, as the attitude each is held in */
-export type LevelAttitudes = Readonly<Record<PoseSide, Attitude>>;
-
 /**
  * How much nearer the other level pose must be before it takes over (60 degrees). Between flat
  * poses this switches 30 degrees past upright, so holding the phone near upright doesn't flip
@@ -32,17 +30,16 @@ export type LevelAttitudes = Readonly<Record<PoseSide, Attitude>>;
 const TURN_OVER_MARGIN = Math.PI / 3;
 
 /**
- * How far a lean may reach, in any direction and in any pose, before the swivel zero follows
- * the phone (45 degrees), well past any useful speed. Beyond it the swivel is the player
- * turning on the spot, not steering (ADR 0013).
+ * How much of a roll about the screen's lost axis gravity must see, at the level pose, for the
+ * roll to be scaled back to its whole size (cos 60 degrees: the pose reclined up to 60 degrees
+ * from flat, a roll read at up to twice what gravity sees). Nearer upright, scaling further would
+ * blow sensor jitter up, so that movement of gravity is read as the screen turned like a
+ * steering wheel instead, at full size upright (ADR 0014).
  */
-const SWIVEL_REACH = Math.PI / 4;
+const WHEEL_FROM = 0.5;
 
-/** How quickly the swivel zero catches up once dragged: the time it takes to close all but 1/e (ms) */
-const SWIVEL_CATCH_UP_MS = 200;
-
-/** Swivel left (radians) at which the zero has caught up and stops following */
-const SWIVEL_CAUGHT_UP = Math.PI / 180;
+/** A level pose this near flat has no lost axis: every tip reads as gravity sees it */
+const FLAT_ENOUGH = 1e-6;
 
 /** Turns smaller than this (radians) read as none, where the turn's axis is lost in rounding */
 const NO_TURN = 1e-9;
@@ -149,7 +146,7 @@ export function gravityOf(attitude: Attitude): Gravity {
  * The level poses before any is set: flat on a table, and flat overhead, turned over about the
  * phone's short axis as lying back turns it, so its top edge points the other way in the room
  */
-export const FLAT_ATTITUDES: LevelAttitudes = {
+export const FLAT_ATTITUDES: Readonly<Record<PoseSide, Attitude>> = {
 	up: { xx: 1, xy: 0, xz: 0, yx: 0, yy: 1, yz: 0, zx: 0, zy: 0, zz: 1 },
 	down: { xx: 1, xy: 0, xz: 0, yx: 0, yy: -1, yz: 0, zx: 0, zy: 0, zz: -1 },
 };
@@ -231,20 +228,53 @@ function sideInUse(gravity: Gravity, up: Gravity, down: Gravity, was: PoseSide):
 }
 
 /**
- * Tilt of the phone held in `attitude`, from the level pose held in `pose`: the whole turn from
- * one to the other, swivel included, read along the phone's own long and short axes at the
- * pose. A roll about the long axis reads in full in every pose, flat, reclined, upright or on
- * your side, and the turn in the screen's own plane reads as nothing in every pose, as the flat
- * spin on a tabletop always did.
+ * Tilt of the phone held in `attitude`, from the level pose that reads gravity `pose`, from
+ * gravity alone, along the phone's own long and short axes. A turn about the vertical never
+ * moves gravity, so the player turning on the spot reads as nothing in every pose.
+ *
+ * Gravity's turn from the pose splits along two directions on the screen. Tipping about the one
+ * that lies level at the pose (the short axis, held reclined) moves gravity in full and reads as
+ * it is. Rolling about the other, which points downhill on the screen at the pose, moves gravity
+ * by only its share of the roll, cos of how far the pose is reclined: within WHEEL_FROM that
+ * share is scaled back to the whole roll. Turning the screen like a steering wheel moves gravity
+ * the same way, by the rest, so nearer upright the movement is read as the wheel, which
+ * upright reads in full: turned clockwise it lowers the right edge, as the roll it stands in
+ * for does reclined. Flat there is no lost axis and every tip reads as gravity sees it.
  *
  * The axes are the phone's own, so screen down a turn that tips an edge away from the eyes
- * reads the way it does screen up, swivel included.
+ * reads the way it does screen up. Near upright the wheel reads the same way round on either
+ * side of the vertical.
  */
-export function wholeTilt(attitude: Attitude, pose: Attitude): TiltAngles {
+export function gravityTilt(attitude: Attitude, pose: Gravity): TiltAngles {
 	"worklet";
-	const turn = turnFrom(pose, attitude);
-	// About the long axis is x, about the short axis is y; about the screen's axis is dropped
-	return { x: turn.y, y: turn.x };
+	const level = unitGravity(pose);
+	// The phone's turn from the pose to now, as gravity sees it: gravity turns one way in the
+	// phone's axes as the phone turns the other
+	const turn = directionTurn(gravityOf(attitude), level);
+	// Turned right over, no turn is shortest: read it as a half turn about the short axis
+	if (!turn) return { x: 0, y: Math.PI };
+	const lean = Math.hypot(level.x, level.y);
+	// About the long axis is x, about the short axis is y
+	if (lean < FLAT_ENOUGH) return { x: turn.y, y: turn.x };
+	// Downhill on the screen at the pose, and the screen's direction that lies level there
+	const downhill = { x: level.x / lean, y: level.y / lean, z: 0 };
+	const across = { x: -downhill.y, y: downhill.x, z: 0 };
+	// How far gravity moved along the wheel's way: the screen's axis, square to gravity
+	const wheelWay = {
+		x: (-level.z * level.x) / lean,
+		y: (-level.z * level.y) / lean,
+		z: (1 - level.z * level.z) / lean,
+	};
+	const moved = dot(turn, wheelWay);
+	const seen = Math.abs(level.z);
+	const roll =
+		seen >= WHEEL_FROM
+			? -moved / level.z
+			: moved * (1 + (1 / WHEEL_FROM - 1) * (seen / WHEEL_FROM));
+	const tip = dot(turn, across);
+	const x = across.x * tip + downhill.x * roll;
+	const y = across.y * tip + downhill.y * roll;
+	return { x: y, y: x };
 }
 
 /**
@@ -276,139 +306,19 @@ export interface LevelTilt extends TiltAngles {
 
 /**
  * Tilt of the phone held in `attitude`, from whichever of the level `poses` is in use, given
- * the one in use at the last reading, `was`. Which one is decided by gravity alone, with
- * TURN_OVER_MARGIN, so a swivel never turns the phone over to the other pose.
+ * the one in use at the last reading, `was`. Which one is decided by gravity, with
+ * TURN_OVER_MARGIN.
  */
-export function levelTilt(attitude: Attitude, poses: LevelAttitudes, was: PoseSide): LevelTilt {
-	const side = sideInUse(gravityOf(attitude), gravityOf(poses.up), gravityOf(poses.down), was);
-	const tilt = wholeTilt(attitude, poses[side]);
+export function levelTilt(attitude: Attitude, poses: LevelPoses, was: PoseSide): LevelTilt {
+	const side = sideInUse(gravityOf(attitude), unitGravity(poses.up), unitGravity(poses.down), was);
+	const tilt = gravityTilt(attitude, poses[side]);
 	return { x: tilt.x, y: tilt.y, side };
 }
 
 /**
- * Gravity's turn from flat on `side` for the phone held in `attitude`: its tilt from that flat
- * pose swung to face the way the phone faces, so no swivel reads, only how far and which way
- * the screen has tipped. Turned right over, it reads a half turn about the phone's short axis.
- */
-export function tiltFromFlat(attitude: Attitude, side: PoseSide): TiltAngles {
-	"worklet";
-	// The turn that takes gravity from now back to flat; the phone turned the other way about
-	// the same axis, from flat to now
-	const turn = directionTurn(gravityOf(attitude), FLAT[side]);
-	if (!turn) return { x: 0, y: Math.PI };
-	// About the long axis is x, about the short axis is y
-	return { x: turn.y, y: turn.x };
-}
-
-/**
- * `attitude` turned the shortest way to read `gravity`, so the turn has no swivel. Gravity
- * straight the other way has no shortest turn; then it turns over about the phone's short axis,
- * or its long axis if the short one points along gravity.
- */
-function swung(attitude: Attitude, gravity: Gravity): Attitude {
-	const from = gravityOf(attitude);
-	const turn = directionTurn(from, unitGravity(gravity));
-	// Gravity turns one way in the phone's axes as the phone turns the other
-	if (turn) return turnedBy(attitude, scaled(turn, -1));
-	// The short axis, or failing that the long one, made level
-	const axis: Vector = 1 - from.x * from.x > 0.5 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
-	const along = dot(axis, from);
-	const level = { x: axis.x - along * from.x, y: axis.y - along * from.y, z: -along * from.z };
-	return turnedBy(attitude, scaled(level, Math.PI / lengthOf(level)));
-}
-
-/**
- * The level poses to measure tilt from, zeroing the swivel where the phone is held now: each
- * reads its `saved` gravity, turned about the vertical to face the way the phone in `attitude`
- * faces. The swivel has no true zero and the saved poses keep none, so a pose is only ever
- * held as an attitude in memory, made here when the player is at their level pose by
- * definition.
- *
- * Both poses are zeroed at once. The one the phone is nearer is turned the shortest way from
- * it, so the phone reads no swivel from it now; the other is that one turned over about the
- * phone's short axis, as lying back turns it, then turned the shortest way to its own gravity.
- */
-export function zeroSwivel(saved: LevelPoses, attitude: Attitude): LevelAttitudes {
-	const gravity = gravityOf(attitude);
-	const up = angleBetween(gravity, saved.up) <= angleBetween(gravity, saved.down);
-	const near = swung(attitude, up ? saved.up : saved.down);
-	const far = swung(turnedBy(near, { x: Math.PI, y: 0, z: 0 }), up ? saved.down : saved.up);
-	return up ? { up: near, down: far } : { up: far, down: near };
-}
-
-/** The vertical in the room, pointing up */
-const UP: Vector = { x: 0, y: 0, z: 1 };
-
-/** The phone held in `attitude`, turned `angle` about the vertical, anticlockwise from above */
-export function swivelledBy(attitude: Attitude, angle: number): Attitude {
-	if (angle === 0) return attitude;
-	return attitudeOf(
-		rotated(axisX(attitude), UP, angle),
-		rotated(axisY(attitude), UP, angle),
-		rotated(axisZ(attitude), UP, angle),
-	);
-}
-
-/**
- * The swivel of the phone held in `attitude` from the pose held in `pose` (radians, -pi..pi,
- * anticlockwise from above): the turn between them, as it acts in the room, split into a turn
- * about a level axis and one about the vertical, which this is
- */
-function swivelFrom(pose: Attitude, attitude: Attitude): number {
-	const p = [axisX(pose), axisY(pose), axisZ(pose)];
-	const a = [axisX(attitude), axisY(attitude), axisZ(attitude)];
-	// From the room's turn matrix, the sum over the phone's axes of a pose axis taken to its
-	// place now: twice the swivel's half-angle sine, against one plus the trace
-	let across = 0;
-	let trace = 0;
-	for (let i = 0; i < 3; i++) {
-		across += a[i].y * p[i].x - a[i].x * p[i].y;
-		trace += dot(a[i], p[i]);
-	}
-	return 2 * Math.atan2(across, 1 + trace);
-}
-
-/** How far to swing the swivel zero for one sample, and whether it is still catching up after */
-export interface SwivelFollow {
-	/** About the vertical, anticlockwise from above (radians); see swivelledBy */
-	turn: number;
-	catchingUp: boolean;
-}
-
-/**
- * How the swivel zero follows the player turning on the spot, for the phone held in `attitude`
- * a sample `dtMs` after the last, measured from `pose`, the level pose in use (ADR 0013).
- *
- * Gravity cannot tell a player turning on the spot from a swivel that steers, but a lean only
- * ever reaches SWIVEL_REACH; the swivel such a lean holds is its share of the turn about the
- * vertical, which is all of it upright and none of it flat. A swivel past that is a turn, so
- * the zero is dragged along at once, and then catches up the rest of the way, until the phone
- * reads no swivel again. Inside the reach the zero stays put, so a held lean keeps its full
- * strength. Flat, where a swivel steers nothing, the zero follows every swivel at once and tilt
- * is gravity's turn, as before ADR 0010.
- */
-export function followSwivel(
-	attitude: Attitude,
-	pose: Attitude,
-	catchingUp: boolean,
-	dtMs: number,
-): SwivelFollow {
-	const swivel = swivelFrom(pose, attitude);
-	// How level the vertical lies in the phone at the pose: how much a swivel steers
-	const steers = Math.hypot(pose.xz, pose.yz);
-	const reach = 2 * Math.atan(steers * Math.tan(SWIVEL_REACH / 2));
-	const past = Math.abs(swivel) - reach;
-	if (past <= 0 && !catchingUp) return { turn: 0, catchingUp: false };
-	const dragged = past > 0 ? Math.sign(swivel) * past : 0;
-	const rest = (swivel - dragged) * (1 - Math.exp(-dtMs / SWIVEL_CATCH_UP_MS));
-	if (Math.abs(swivel - dragged - rest) < SWIVEL_CAUGHT_UP)
-		return { turn: swivel, catchingUp: false };
-	return { turn: dragged + rest, catchingUp: true };
-}
-
-/**
- * The attitude the phone is held in when tilted by `tilt` from the level pose held in `pose`;
- * undoes wholeTilt. The bench, the pilot and the scripted sensor build their samples with it.
+ * The phone held in `pose`, then turned by `tilt` about its own long and short axes. From a flat
+ * pose that undoes gravityTilt; the bench, the pilot and the scripted sensor build their
+ * samples with it.
  */
 export function attitudeAt(tilt: TiltAngles, pose: Attitude): Attitude {
 	"worklet";

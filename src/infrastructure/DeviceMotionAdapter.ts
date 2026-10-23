@@ -6,9 +6,9 @@ import { attitudeFromRotation } from "./attitudeFromRotation";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Reports the phone's attitude, swivel included (see `attitudeFromRotation`).
- * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its rotation
- * vector would lean on the compass alone for the swivel (ADR 0010).
+ * Reports the phone's attitude (see `attitudeFromRotation`), whose gravity steers (ADR 0014).
+ * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its gravity would
+ * come from the accelerometer alone, which shakes as the hand moves.
  * One native subscription fans out to every listener.
  */
 export class DeviceMotionAdapter implements SensorPort {

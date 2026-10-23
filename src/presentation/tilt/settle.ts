@@ -8,12 +8,12 @@
  */
 
 import {
+	FLAT,
 	FLAT_ATTITUDES,
 	gravityOf,
-	tiltFromFlat,
+	gravityTilt,
 	turnBetween,
 	turnedToward,
-	wholeTilt,
 } from "../../domain/levelPose";
 import type { Attitude, Gravity, PoseSide, TiltAngles } from "../../domain/types";
 
@@ -80,13 +80,14 @@ export function settleEase(progress: number): number {
 /**
  * Where the bowl's dot rolls (radians) for the phone held in `attitude`: at first gravity's turn
  * from flat, so it runs to the low edge as in a real bowl whichever way the player faces, then
- * more and more the whole turn from the mean as the hold levels the bowl to the hand
+ * more and more the tilt from the mean, as play will read it, as the hold levels the bowl to the
+ * hand
  */
 export function bowlTilt(state: SettleState, attitude: Attitude): TiltAngles {
 	"worklet";
 	const level = settleEase(state.progress);
-	const fromFlat = tiltFromFlat(attitude, state.side);
-	const fromMean = wholeTilt(attitude, state.mean);
+	const fromFlat = gravityTilt(attitude, FLAT[state.side]);
+	const fromMean = gravityTilt(attitude, gravityOf(state.mean));
 	return {
 		x: fromFlat.x + (fromMean.x - fromFlat.x) * level,
 		y: fromFlat.y + (fromMean.y - fromFlat.y) * level,

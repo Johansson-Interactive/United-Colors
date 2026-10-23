@@ -35,7 +35,7 @@ describe("Android sensor sampling", () => {
 		expect(app.expo.plugins).toContain("./plugins/withRequiredGyroscope.js");
 	});
 
-	it("requires a gyroscope, which the swivel cannot do without (ADR 0010)", () => {
+	it("requires a gyroscope, which keeps gravity steady as the hand moves (ADR 0014)", () => {
 		const touch = { $: { "android:name": "android.hardware.touchscreen" } };
 		const manifest = { manifest: { "uses-feature": [touch] } };
 		expect(requireGyroscope(manifest).manifest["uses-feature"]).toEqual([

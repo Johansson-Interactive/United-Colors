@@ -48,8 +48,7 @@ const PERIOD_X_S = 6.1;
 const PERIOD_Y_S = 4.3;
 
 /**
- * The reading the bench run steers with, `seconds` after it starts: tilted from flat, with no
- * swivel, so the path reads the same whatever zeroes the swivel
+ * The reading the bench run steers with, `seconds` after it starts: tilted from flat
  */
 export function benchTilt(seconds: number): Attitude {
 	const tilt = {
