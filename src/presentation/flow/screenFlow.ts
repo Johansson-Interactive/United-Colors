@@ -13,9 +13,10 @@
  * pause screen opens once the portal covers the field, and a finger lifted before then lets
  * play go on. A finger landing again within a second of that lift opens the pause whole: the
  * bloom's stepper commits a portal still draining, and once play has gone on the flow starts a
- * second touch's bloom, which plays out to the pause held or not (ADR 0015). On the pause screen a finger held on the pause opens Get ready and holds it open:
- * the game stays paused until the player has held level, then resumes with no flood; a finger
- * lifted before then shuts the cup and the pause screen comes back.
+ * second touch's bloom, which plays out to the pause held or not (ADR 0015). On the pause
+ * screen a finger held on the pause opens Get ready and holds it open: the game stays paused
+ * until the player has held level, then resumes with no flood; a finger lifted before then
+ * shuts the cup and the pause screen comes back.
  *
  * The swivel, the turn about the vertical that tilt reads but gravity cannot see, has no true
  * zero, so the flow zeroes it wherever the player is by definition at their level pose: as a run
@@ -27,7 +28,8 @@
 import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
-import { type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
+import { type BloomEnd, type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
+import type { FieldTouchState } from "../touch/fieldTouch";
 
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
 type SettleFrom = "start" | "pause" | "menu";
@@ -290,7 +292,10 @@ const closeOver = (state: FlowState): BareStep => ({ state: { ...state, over: nu
 /** The bloom is over, one way or the other, and any early lift's second with it */
 const endBloom = (state: FlowState): FlowState => ({ ...state, bloom: null, earlyLift: null });
 
-/** What a finger landing in play at `landedAt` starts: within an early lift's second, a second touch's bloom */
+/**
+ * What a finger landing in play at `landedAt` starts: within an early lift's second, a second
+ * touch's bloom
+ */
 const touchStart = (state: FlowState, landedAt: number): BloomStart =>
 	state.earlyLift !== null && landedAt - state.earlyLift < SECOND_TOUCH_MS
 		? "secondTouch"
@@ -304,6 +309,18 @@ const openingColor = (
 	event: Extract<FlowEvent, { type: "levelPressed" | "speedPressed" }>,
 	game: GameFacts,
 ) => (event.from === "menu" ? event.color : game.playerColor);
+
+/**
+ * What the bloom's end tells the flow, with the field's touch as it stands: covered, or cleared
+ * at the finger's lift. A finger already down again as the portal clears landed too late for the
+ * bloom's stepper and while the flow was still under the bloom, which ignores it; its landing
+ * follows the clearing, once play has gone on, so it counts as a second touch.
+ */
+export function bloomEndEvents(end: BloomEnd, touch: FieldTouchState): FlowEvent[] {
+	if (end === "covered") return [{ type: "bloomCovered" }];
+	const cleared: FlowEvent = { type: "bloomCleared", liftedAt: touch.liftedAt };
+	return touch.down ? [cleared, { type: "fieldTouched", landedAt: touch.landedAt }] : [cleared];
+}
 
 /** Step `event`, with `game` answering what the tap does not carry */
 export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): FlowStep {

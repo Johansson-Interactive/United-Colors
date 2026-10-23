@@ -1,5 +1,6 @@
 import type { GamePhase } from "../../domain/types";
 import {
+	bloomEndEvents,
 	type FlowEvent,
 	type FlowState,
 	type GameFacts,
@@ -9,6 +10,7 @@ import {
 	stepFlow,
 } from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
+import { FIELD_UNTOUCHED } from "../../presentation/touch/fieldTouch";
 
 const AT = { x: 10, y: 20 };
 const ZERO = { x: 0.3, y: -0.1, z: -0.9 };
@@ -717,6 +719,17 @@ describe("a second touch soon after an early lift", () => {
 		},
 	);
 
+	it("still counts a finger that landed as the portal cleared, before the flow had let play go on", () => {
+		const frosting = steps(RUNNING, [touch(LIFT - 120), phase("PAUSED")]).state;
+		const asCleared = { ...FIELD_UNTOUCHED, down: true, landedAt: LIFT + 30, liftedAt: LIFT };
+		const [cleared, landed] = bloomEndEvents("cleared", asCleared);
+		// Resuming reports play at once, so the landing follows the run back in play
+		expect(steps(frosting, [cleared, phase("RUNNING"), landed]).screen).toEqual({
+			kind: "frosting",
+			start: "secondTouch",
+		});
+	});
+
 	it("leaves the dev pause dot's bloom as it was", () => {
 		expect(stepFlow(afterLift, { type: "pausePressed" }, GAME).screen).toEqual({
 			kind: "frosting",
@@ -786,5 +799,28 @@ describe("a second touch soon after an early lift", () => {
 			kind: "frosting",
 			start: "finger",
 		});
+	});
+});
+
+describe("what the bloom's end tells the flow", () => {
+	const lifted = { ...FIELD_UNTOUCHED, landedAt: 100, liftedAt: 400 };
+
+	it("covered: the pause screen opens", () => {
+		expect(bloomEndEvents("covered", lifted)).toEqual([{ type: "bloomCovered" }]);
+		expect(bloomEndEvents("covered", { ...lifted, down: true })).toEqual([
+			{ type: "bloomCovered" },
+		]);
+	});
+
+	it("cleared: play goes on, with when the finger lifted", () => {
+		expect(bloomEndEvents("cleared", lifted)).toEqual([{ type: "bloomCleared", liftedAt: 400 }]);
+	});
+
+	it("cleared with a finger down again: its landing follows the clearing", () => {
+		const again = { ...lifted, down: true, landedAt: 420 };
+		expect(bloomEndEvents("cleared", again)).toEqual([
+			{ type: "bloomCleared", liftedAt: 400 },
+			{ type: "fieldTouched", landedAt: 420 },
+		]);
 	});
 });

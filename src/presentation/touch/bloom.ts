@@ -5,9 +5,9 @@
  * pause screen opens (covered). A finger lifted before then drains the portal back into the
  * fingertip, faster than it grew, and play goes on from the frozen frame (cleared). A finger
  * landing again while it drains commits to the pause: the portal grows again from where it is
- * and plays out to the walls, held or not (ADR 0015). The bloom
- * is Get ready's portal run the other way (see getReady.ts): the same ease, rim and fade, with
- * the pause inside the portal instead of the play. The dev pause dot has no finger to open
+ * and plays out to the walls, held or not (ADR 0015). The bloom is Get ready's portal run the
+ * other way (see getReady.ts): the same ease, rim and fade, with the pause inside the portal
+ * instead of the play. The dev pause dot has no finger to open
  * under, so its bloom opens at the seat instead, at the rest size around the player dot.
  *
  * Steps run on the UI thread, one a frame, with whether the bloom is held; the overlay only

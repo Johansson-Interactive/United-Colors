@@ -20,7 +20,7 @@ import { PauseHint } from "./components/PauseHint";
 import { PauseWorld } from "./components/PauseWorld";
 import { FloodOverlay, useFlood } from "./effects/Flood";
 import { pauseContent } from "./flow/pauseContent";
-import type { MenuOpening, Screen } from "./flow/screenFlow";
+import { bloomEndEvents, type MenuOpening, type Screen } from "./flow/screenFlow";
 import { GameCanvas } from "./GameCanvas";
 import { useAutoStart } from "./hooks/useAutoStart";
 import { useBenchStats } from "./hooks/useBenchStats";
@@ -178,12 +178,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	);
 	// A drained bloom hands on when its finger lifted, which a second touch is timed from
 	const handleBloomEnd = useCallback(
-		(end: BloomEnd) =>
-			dispatch(
-				end === "covered"
-					? { type: "bloomCovered" }
-					: { type: "bloomCleared", liftedAt: touch.get().liftedAt },
-			),
+		(end: BloomEnd) => {
+			for (const event of bloomEndEvents(end, touch.get())) dispatch(event);
+		},
 		[dispatch, touch],
 	);
 	// Dev only: where touch steers the dot in play, the field cannot pause it, so a corner dot

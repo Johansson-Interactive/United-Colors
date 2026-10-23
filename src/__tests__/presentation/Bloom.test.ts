@@ -133,11 +133,7 @@ describe("what holds the bloom", () => {
 
 	it("is held for good when a second touch started it, so it plays out to the pause with no hold", () => {
 		expect(bloomHeld("secondTouch", false)).toBe(true);
-		let state = OPEN_BLOOM;
-		for (let t = 0; t < BLOOM_MS * 2; t += FRAME_DT) {
-			state = stepBloom(state, bloomHeld("secondTouch", false), FRAME_DT);
-		}
-		expect(state.outcome).toBe("covered");
+		expect(run(OPEN_BLOOM, bloomHeld("secondTouch", false), BLOOM_MS * 2).outcome).toBe("covered");
 	});
 
 	it("is held for good when the dev pause dot started it, so it plays out to the pause with no hold", () => {
@@ -207,7 +203,7 @@ describe("what the bloom draws", () => {
 
 describe("where the bloom opens", () => {
 	/** Where the finger landed, well away from the seat */
-	const LANDED = { down: true, x: 120, y: 200, liftedAt: 0 };
+	const LANDED = { ...FIELD_UNTOUCHED, down: true, x: 120, y: 200 };
 
 	it("opens a finger's bloom where the finger landed, from nothing", () => {
 		expect(bloomOrigin("finger", LANDED, SEAT)).toEqual({ x: 120, y: 200, radius: 0 });
