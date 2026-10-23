@@ -28,20 +28,16 @@ The 9:16 box the whole game is played and shown in, eight player widths across a
 _Avoid_: arena, stage, playfield, board, screen
 
 **Level pose**:
-The way the player holds the phone for the dot to lie still. There are two, screen up and turned over.
-_Avoid_: calibration, zero, neutral
+The whole way the phone is held when play starts or resumes; tilt is measured from it. It is taken afresh each time, in whatever grip the player has, and never kept between runs.
+_Avoid_: calibration, zero, neutral, recenter
 
 **Tilt**:
 How far the phone has turned from the level pose, as the hand turns it: about its long axis and about its short axis.
 _Avoid_: angle, orientation, attitude
 
 **Swivel**:
-A turn of the phone about the vertical, as in a swivel chair or the player turning on the spot. Gravity cannot see it, so it never steers.
+A turn of the phone about the vertical, as in a swivel chair or the player turning on the spot. Gravity cannot see it. With the level pose flat or leaning it never steers; with the level pose near upright it steers like the roll it looks like there, unless it swings the phone along an arc, which is the player turning on the spot.
 _Avoid_: heading, yaw, compass, azimuth
-
-**Steering wheel**:
-Turning the screen in its own plane. Near upright it steers left and right, standing in for the roll that gravity can no longer see there.
-_Avoid_: twist, spin
 
 **Run**:
 One game, from its start until the refusal that ends it.
@@ -94,7 +90,7 @@ The thin line in the player's colour, over a soft glow, on the portal's edge: in
 _Avoid_: ring, progress ring, loading circle
 
 **Get ready**:
-The step between the pause and play, held open by a finger on the pause: a portal back into play opens at the seat and grows into the cup, and a solid copy of the player dot rolls around inside it with the tilt from the moment the finger lands. The player rolls it home and holds their level pose; the portal widens from the cup to the walls, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the portal and the pause is whole again. The game stays paused throughout. On a device without tilt, a finger on the pause resumes play directly.
+The step between the pause and play, held open by a finger on the pause: a portal back into play opens at the seat and grows into the cup, and a solid copy of the player dot rolls around inside it with the tilt from the moment the finger lands. The cup leans to match the hand, so whatever grip the player steadies in, the dot rolls home and settles; that grip becomes the level pose, and the portal widens from the cup to the walls, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the portal and the pause is whole again. The game stays paused throughout. On a device without tilt, a finger on the pause resumes play directly.
 _Avoid_: calibrate, level gate, resume screen, roll it home
 
 **Seat**:
@@ -102,8 +98,8 @@ Where the player dot froze when the run paused, and where Get ready's portal ope
 _Avoid_: socket, target, home position
 
 **Cup**:
-The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Fully open, it arms Get ready: only then does the level hold count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
-_Avoid_: window, hole, spotlight, bowl (that is the title's and the settle screen's)
+The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Its bottom slowly leans to match the hand, so the dot sloshes when the grip changes and rolls home once it is steady. Fully open, it arms Get ready: only then does settling home count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
+_Avoid_: window, hole, spotlight, bowl (that is the title's)
 
 **Run record**:
 What a run did, as the game keeps it for its game over: its catches in order (each with the tick it landed on, what it paid, its combo step, its colour and whether it was a point dot) and its run time. It is never stored, and it is not the personal best.
