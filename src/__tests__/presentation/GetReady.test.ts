@@ -20,6 +20,7 @@ import {
 	type GetReadyFrameState,
 	type GetReadyState,
 	HOLD_MS,
+	holdInCup,
 	INITIAL_GET_READY,
 	openGetReady,
 	PULSE_MS,
@@ -361,6 +362,34 @@ describe("get-ready roll", () => {
 	});
 });
 
+describe("get-ready glass", () => {
+	const roll = (x: number, y: number, vx: number, vy: number): Roll => ({ x, y, vx, vy });
+
+	it("leaves a dot inside the cup as it is", () => {
+		const inside = roll(seat.x + 10, seat.y, 50, 0);
+		expect(holdInCup(inside, seat, 1)).toBe(inside);
+	});
+
+	it("stops a dot at the rim, taking only the speed that carried it out", () => {
+		const held = holdInCup(roll(seat.x + TRAVEL + 10, seat.y, 80, -30), seat, 1);
+		expect(held.x).toBeCloseTo(seat.x + TRAVEL, 9);
+		expect(held.y).toBe(seat.y);
+		expect(held.vx).toBe(0);
+		expect(held.vy).toBe(-30);
+	});
+
+	it("keeps a dot heading back in moving in", () => {
+		const held = holdInCup(roll(seat.x + TRAVEL + 10, seat.y, -40, 0), seat, 1);
+		expect(held.vx).toBe(-40);
+	});
+
+	it("holds the dot on the seat while the cup is too small for it to move", () => {
+		expect(holdInCup(roll(seat.x + 5, seat.y - 5, 10, 10), seat, 0.1)).toEqual(
+			roll(seat.x, seat.y, 10, 10),
+		);
+	});
+});
+
 describe("get-ready seat", () => {
 	it("counts the dot as seated on the seat, and less so as it rolls off", () => {
 		expect(seated(seat, seat)).toBe(1);
@@ -459,14 +488,28 @@ describe("get-ready cup", () => {
 		expect(frames[OPEN_FRAMES - 1].opened).toBe(1);
 	});
 
-	it("keeps the dot copy on the seat and counts no hold until fully open, however tilted", () => {
-		for (const tilt of [LEVEL, TIPPED]) {
-			const { frames } = play(landing(), tilt, OPENING_MS);
-			for (const f of frames) {
-				expect(f.dot).toEqual({ x: seat.x, y: seat.y });
-				expect(f.portal.radius).toBeLessThanOrEqual(CUP_RADIUS);
-				expect(f.end).not.toBe("ready");
-			}
+	it("counts no hold until fully open, however level", () => {
+		const { frames } = play(landing(), LEVEL, OPENING_MS);
+		for (const f of frames) {
+			expect(f.dot).toEqual({ x: seat.x, y: seat.y });
+			expect(f.portal.radius).toBeLessThanOrEqual(CUP_RADIUS);
+			expect(f.end).not.toBe("ready");
+		}
+	});
+
+	it("rolls the dot copy off the seat as the finger lands, inside the glass as it grows", () => {
+		const { frames } = play(landing(), TIPPED, OPENING_MS);
+		const opening = frames.slice(0, OPEN_FRAMES - 1);
+		// Off the seat well before the cup is open, and further each frame as the glass lets it
+		expect(opening[Math.floor(opening.length / 2)].dot.x).toBeGreaterThan(seat.x);
+		expect(opening[opening.length - 1].dot.x - seat.x).toBeGreaterThan(seat.radius);
+		for (let i = 1; i < opening.length; i++) {
+			expect(opening[i].dot.x).toBeGreaterThanOrEqual(opening[i - 1].dot.x);
+		}
+		for (const f of opening) {
+			const travel = Math.max(0, CUP_RADIUS * f.opened - seat.radius - 6);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(travel + 1e-9);
+			expect(f.end).not.toBe("ready");
 		}
 	});
 
@@ -484,23 +527,26 @@ describe("get-ready cup", () => {
 	});
 
 	it("wears the bloom's rim, steady and in full, from its first frame while opening", () => {
-		const { frames } = play(landing(), TIPPED, OPENING_MS);
+		const { frames } = play(landing(), TIPPED, OPENING_MS - FRAME_DT);
 		for (const f of frames) expect(f.rim).toBe(RIM);
 	});
 
 	it("pulses the rim only once open, taking over from the opening's rim with no jump", () => {
 		const { frames } = play(landing(), TIPPED, OPENING_MS + 2000);
-		const opening = frames.slice(0, OPEN_FRAMES).map((f) => f.rim);
-		const open = frames.slice(OPEN_FRAMES).map((f) => f.rim);
+		// The dot has rolled off the seat by the time the cup is open
+		expect(Math.hypot(frames[OPEN_FRAMES - 1].dot.x - seat.x, 0)).toBeGreaterThan(seat.radius);
+		const opening = frames.slice(0, OPEN_FRAMES - 1).map((f) => f.rim);
+		const open = frames.slice(OPEN_FRAMES - 1).map((f) => f.rim);
 		expect(Math.max(...open) - Math.min(...open)).toBeGreaterThan(0.3);
-		// The pulse takes over where the opening left off: no jump
-		expect(Math.abs(open[0] - opening[opening.length - 1])).toBeLessThan(0.05);
+		// The pulse takes over where the opening left off, at the top of its beat: no jump
+		expect(Math.abs(open[0] - opening[opening.length - 1])).toBeLessThan(0.06);
+		expect(open[1]).toBeLessThan(open[0]);
 	});
 
 	it("keeps the dot inside the cup, however the phone is tilted", () => {
 		const { frames } = play(landing(), { x: 3, y: -2 }, 2000);
 		for (const f of frames) {
-			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThan(TRAVEL + 20);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(TRAVEL + 1e-9);
 		}
 		const last = frames[frames.length - 1];
 		expect(Math.hypot(last.dot.x - seat.x, last.dot.y - seat.y)).toBeCloseTo(TRAVEL, 0);
@@ -523,6 +569,20 @@ describe("get-ready finger lifted before the cup is open", () => {
 			expect(f.portal.x).toBe(seat.x);
 			expect(f.end).not.toBe("ready");
 		}
+	});
+});
+
+describe("get-ready finger lifted with the dot off the seat", () => {
+	it("herds the dot home inside the draining glass, onto the seat as the cup shuts", () => {
+		const away = play(landing(), TIPPED, OPENING_MS + 1000);
+		const { frames } = play(away.state, TIPPED, 1000, seat, false);
+		const at = frames.findIndex((f) => f.end === "shut");
+		expect(at).toBeGreaterThan(0);
+		for (const f of frames.slice(0, at + 1)) {
+			const travel = Math.max(0, CUP_RADIUS * f.opened - seat.radius - 6);
+			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(travel + 1e-9);
+		}
+		expect(frames[at].dot).toEqual({ x: seat.x, y: seat.y });
 	});
 });
 
@@ -573,16 +633,20 @@ describe("get-ready frame step", () => {
 		const reach = portalReach(seat, field);
 		const homeReach = seat.radius * 1.5;
 		const off = (f: GetReadyFrame) => Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y);
-		// Tipped hard off level, so the hold never grows and the dot rolls off the seat
-		const { frames } = play(landing(), TIPPED, 1000);
+		// Just off level, so the hold never grows but the dot stays home while the cup opens and
+		// the pulse gets going; then tipped hard, so the dot rolls off the seat
+		const NEAR = { x: 0.15, y: 0 };
+		const settled = play(landing(), NEAR, OPENING_MS + 400);
+		expect(settled.frames.every((f) => off(f) < homeReach)).toBe(true);
+		const { frames } = play(settled.state, TIPPED, 1000);
 		// The frame the dot leaves home on: on the last frame it was still home
 		const left = frames.findIndex((f) => off(f) >= homeReach);
 		expect(left).toBeGreaterThan(0);
 		const before = frames[left - 1];
 		expect(off(before)).toBeLessThan(homeReach);
-		// The pulse's clock starts as the cup is fully open
-		expect(left).toBeGreaterThanOrEqual(OPEN_FRAMES);
-		const pulse = seatPulse((left + 1 - OPEN_FRAMES) * FRAME_DT);
+		// The pulse's clock started as the cup was fully open
+		const pulse = seatPulse(settled.state.openMs + (left + 1) * FRAME_DT);
+		expect(pulse).toBeGreaterThan(0.2);
 		// Away from home the portal breathes in full; by the last frame's roll it would breathe less
 		expect(frames[left].portal.radius).toBeCloseTo(portalRadius(0, reach, pulse), 9);
 		const lagging = portalRadius(0, reach, pulse * (1 - seated(before.dot, seat)));

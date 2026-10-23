@@ -74,8 +74,8 @@ const COVER_MARGIN = 0.5;
  * Get ready: a portal into play opens at the seat, where the player dot froze, growing with the
  * held finger at the bloom's pace to the title's bowl: the cup, wearing the rim in the player's
  * colour, which pulses like a point dot once the cup is fully open. A solid copy of the dot
- * waits on the seat until then, and then rolls around inside the cup with the tilt, with a
- * little weight to it, and presses into a wall as the player does in play. Rolling it home and
+ * rolls around inside the cup with the tilt from the finger's landing, held in by its glass as
+ * it grows, with a little weight to it, and presses into a wall as the player does in play. Rolling it home and
  * holding level widens the portal to the walls, and the moment the field is clear play resumes;
  * the portal is left open, so the pause world goes behind it unseen. Lift the finger first and the
  * portal drains back into the seat, and Get ready is over. Nothing here fades in; on resume all

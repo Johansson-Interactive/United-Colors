@@ -86,11 +86,11 @@ The circle between the pause and play, with one world inside it, the other outsi
 _Avoid_: frost edge, mask, clip, cutout, window
 
 **Rim**:
-The thin line in the player's colour, over a soft glow, on the portal's edge: in full while the bloom grows and while the cup opens, then pulsing like a point dot while the Get ready dot is away from the seat, steady once it is home. In code it is `PortalRim`.
+The thin line in the player's colour, over a soft glow, on the portal's edge: in full while the bloom grows and while the cup opens, then pulsing like a point dot, from the top of its beat, while the Get ready dot is away from the seat, steady once it is home. In code it is `PortalRim`.
 _Avoid_: ring, progress ring, loading circle
 
 **Get ready**:
-The step between the pause and play, held open by a finger on the pause: a portal back into play opens at the seat and grows into the cup, and once the cup is fully open a solid copy of the player dot rolls around inside it with the tilt. The player rolls it home and holds their level pose; the portal widens from the cup to the walls, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the portal and the pause is whole again. The game stays paused throughout. On a device without tilt, a finger on the pause resumes play directly.
+The step between the pause and play, held open by a finger on the pause: a portal back into play opens at the seat and grows into the cup, and a solid copy of the player dot rolls around inside it with the tilt from the moment the finger lands. The player rolls it home and holds their level pose; the portal widens from the cup to the walls, and play resumes the instant the whole field is clear, the finger still down. That finger is spent: play ignores it until it lifts. Lifting before the field is clear shuts the portal and the pause is whole again. The game stays paused throughout. On a device without tilt, a finger on the pause resumes play directly.
 _Avoid_: calibrate, level gate, resume screen, roll it home
 
 **Seat**:
@@ -98,7 +98,7 @@ Where the player dot froze when the run paused, and where Get ready's portal ope
 _Avoid_: socket, target, home position
 
 **Cup**:
-The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. Fully open, it arms Get ready: only then does the copy of the player dot roll, inside the glass it cannot leave, and the level hold count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
+The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Fully open, it arms Get ready: only then does the level hold count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
 _Avoid_: window, hole, spotlight, bowl (that is the title's and the settle screen's)
 
 **Run record**:
