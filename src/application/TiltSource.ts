@@ -5,7 +5,7 @@ import {
 	levelPosesOf,
 	levelTilt,
 } from "../domain/levelPose";
-import type { Gravity, PoseSide } from "../domain/types";
+import type { Gravity, MotionSample, PoseSide } from "../domain/types";
 import type { GameStore } from "./GameStore";
 import type { SensorPort } from "./ports";
 
@@ -41,7 +41,7 @@ export class TiltSource {
 
 	start(): void {
 		if (this.unbind) return;
-		const stopListening = this.sensor.onSample((gravity) => this.read(gravity));
+		const stopListening = this.sensor.onSample((sample) => this.read(sample));
 		const stopFollowing = this.store.subscribe((state, previous) => {
 			if (state.settings.levelPoses !== previous.settings.levelPoses) this.remake();
 		});
@@ -77,9 +77,9 @@ export class TiltSource {
 		if (this.latest) this.emit(this.latest);
 	}
 
-	private read(gravity: Gravity): void {
-		this.latest = gravity;
-		this.emit(gravity);
+	private read(sample: MotionSample): void {
+		this.latest = sample.gravity;
+		this.emit(sample.gravity);
 	}
 
 	private emit(gravity: Gravity): void {

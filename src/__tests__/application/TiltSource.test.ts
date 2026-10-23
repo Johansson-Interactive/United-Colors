@@ -4,7 +4,7 @@ import { type TiltReading, TiltSource } from "../../application/TiltSource";
 import { calibrateTilt } from "../../application/useCases/CalibrateTilt";
 import { loadSettings } from "../../application/useCases/LoadSettings";
 import { FLAT, gravityAt } from "../../domain/levelPose";
-import type { GameSettings, Gravity } from "../../domain/types";
+import type { GameSettings, Gravity, MotionSample } from "../../domain/types";
 
 function memoryStorage(initial: GameSettings): StoragePort {
 	let settings = initial;
@@ -20,7 +20,7 @@ function memoryStorage(initial: GameSettings): StoragePort {
 
 /** A sensor the test feeds by hand */
 function handSensor() {
-	const listeners = new Set<(gravity: Gravity) => void>();
+	const listeners = new Set<(sample: MotionSample) => void>();
 	let started = false;
 	const sensor: SensorPort = {
 		start: () => {
@@ -37,7 +37,9 @@ function handSensor() {
 	return {
 		sensor,
 		hold: (gravity: Gravity) => {
-			for (const listener of listeners) listener(gravity);
+			const still = { x: 0, y: 0, z: 0 };
+			const sample = { gravity, rotationRate: still, acceleration: still, timeMs: 0 };
+			for (const listener of listeners) listener(sample);
 		},
 		get started() {
 			return started;

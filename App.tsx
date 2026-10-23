@@ -66,7 +66,7 @@ const sensor = BENCH
 					() => session.getScreen(),
 				),
 			)
-		: new DeviceMotionAdapter();
+		: new DeviceMotionAdapter(Platform.OS === "ios" ? "ios" : "android");
 
 /** The tilt from the level pose in use, read once per sample for the interface and the game */
 const tiltSource = new TiltSource(sensor, store);

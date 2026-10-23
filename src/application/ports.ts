@@ -1,16 +1,15 @@
-import type { GameSettings, Gravity } from "../domain/types";
+import type { GameSettings, MotionSample } from "../domain/types";
 
 /**
- * The device's motion sensor, reporting which way gravity points in the phone's axes, at unit
- * length. Tilt is read from it alone (ADR 0014), so the player turning on the spot never
- * reaches the game. One source can feed several listeners; whoever owns it starts and stops it,
- * the others only subscribe.
+ * The device's motion sensors: which way gravity points in the phone's axes, at unit length, how
+ * fast the phone turns and how hard the hand pushes it (see MotionSample). One source can feed
+ * several listeners; whoever owns it starts and stops it, the others only subscribe.
  */
 export interface SensorPort {
 	start(): void;
 	stop(): void;
 	/** Returns a function that removes this listener */
-	onSample(listener: (gravity: Gravity) => void): () => void;
+	onSample(listener: (sample: MotionSample) => void): () => void;
 }
 
 /** Persistent storage for the high score and settings */

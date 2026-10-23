@@ -13,8 +13,10 @@ describe("ScriptedTiltSensor", () => {
 		);
 		const a: number[] = [];
 		const b: number[] = [];
-		sensor.onSample((sample) => a.push(gravityTilt(sample, FLAT.up, "up").x));
-		const unsubscribe = sensor.onSample((sample) => b.push(gravityTilt(sample, FLAT.up, "up").y));
+		sensor.onSample((sample) => a.push(gravityTilt(sample.gravity, FLAT.up, "up").x));
+		const unsubscribe = sensor.onSample((sample) =>
+			b.push(gravityTilt(sample.gravity, FLAT.up, "up").y),
+		);
 		sensor.start();
 		now = 1500;
 		vi.advanceTimersByTime(17);

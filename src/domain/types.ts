@@ -4,14 +4,25 @@
  */
 export type GamePhase = "KIOSK" | "RUNNING" | "REJECTING" | "PAUSED" | "GAME_OVER";
 
-/**
- * Which way gravity points, in the device's own axes: x to the right of the screen, y to its
- * top, z out of its face. Any length; only the direction counts.
- */
-export interface Gravity {
+/** A vector in the device's own axes: x to the right of the screen, y to its top, z out of its face */
+export interface Vector3 {
 	x: number;
 	y: number;
 	z: number;
+}
+
+/** Which way gravity points, in the device's own axes. Any length; only the direction counts. */
+export type Gravity = Vector3;
+
+/** One reading of the phone's motion sensors, all in the device's own axes */
+export interface MotionSample {
+	gravity: Gravity;
+	/** How fast the phone turns (radians a second), right-handed about each axis: the gyroscope */
+	rotationRate: Vector3;
+	/** The acceleration the hand gives the phone, gravity left out (metres a second squared) */
+	acceleration: Vector3;
+	/** When the sensors read it (ms), on a clock of their own; only differences count */
+	timeMs: number;
 }
 
 /**

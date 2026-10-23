@@ -1,7 +1,7 @@
 import { DeviceMotion } from "expo-sensors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-type Rotation = { alpha: number; beta: number; gamma: number };
+type Rotation = { alpha: number; beta: number; gamma: number; timestamp: number };
 type MotionListener = (data: { rotation?: Rotation }) => void;
 
 const motion = vi.hoisted(() => ({
@@ -25,13 +25,14 @@ vi.mock("expo-sensors", () => ({
 import { DeviceMotionAdapter } from "../../infrastructure/DeviceMotionAdapter";
 
 function emit(beta: number, gamma: number, alpha = 0) {
-	for (const listener of motion.listeners) listener({ rotation: { alpha, beta, gamma } });
+	for (const listener of motion.listeners)
+		listener({ rotation: { alpha, beta, gamma, timestamp: 0 } });
 }
 
 /** Let the adapter's gyroscope check settle */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-async function started(sensor = new DeviceMotionAdapter()) {
+async function started(sensor = new DeviceMotionAdapter("android")) {
 	sensor.start();
 	await settle();
 	return sensor;
@@ -56,7 +57,7 @@ describe("DeviceMotionAdapter", () => {
 	});
 
 	it("reports the gravity of the device rotation", async () => {
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		const listener = vi.fn();
 		sensor.onSample(listener);
 		await started(sensor);
@@ -64,14 +65,14 @@ describe("DeviceMotionAdapter", () => {
 		// Top edge raised 0.7, right edge lowered 0.4, swivelled 2 radians
 		emit(0.7, 0.4, 2);
 
-		const g = listener.mock.calls[0][0];
+		const g = listener.mock.calls[0][0].gravity;
 		expect(g.x).toBeCloseTo(Math.cos(0.7) * Math.sin(0.4));
 		expect(g.y).toBeCloseTo(-Math.sin(0.7));
 		expect(g.z).toBeCloseTo(-Math.cos(0.7) * Math.cos(0.4));
 	});
 
-	it("reports the same sample whichever way the player faces, so turning on the spot never steers", async () => {
-		const sensor = new DeviceMotionAdapter();
+	it("reports the same gravity whichever way the player faces", async () => {
+		const sensor = new DeviceMotionAdapter("android");
 		const listener = vi.fn();
 		sensor.onSample(listener);
 		await started(sensor);
@@ -81,12 +82,12 @@ describe("DeviceMotionAdapter", () => {
 		emit(Math.PI / 4, 0.2, Math.PI / 2);
 
 		const [[facing], [turned]] = listener.mock.calls;
-		expect(turned).toEqual(facing);
+		expect(turned.gravity).toEqual(facing.gravity);
 	});
 
 	it("reports nothing on a phone without a gyroscope", async () => {
 		motion.hasGyroscope = false;
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		const listener = vi.fn();
 		sensor.onSample(listener);
 		await started(sensor);
@@ -98,7 +99,7 @@ describe("DeviceMotionAdapter", () => {
 	});
 
 	it("does not subscribe if stopped before the gyroscope check answers", async () => {
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		sensor.start();
 		sensor.stop();
 		await settle();
@@ -107,7 +108,7 @@ describe("DeviceMotionAdapter", () => {
 	});
 
 	it("feeds every listener from one native subscription", async () => {
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		const a = vi.fn();
 		const b = vi.fn();
 		sensor.onSample(a);
@@ -125,7 +126,7 @@ describe("DeviceMotionAdapter", () => {
 	});
 
 	it("stops feeding a listener once it unsubscribes, and keeps feeding the rest", async () => {
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		const a = vi.fn();
 		const b = vi.fn();
 		const unsubscribeA = sensor.onSample(a);
@@ -140,7 +141,7 @@ describe("DeviceMotionAdapter", () => {
 	});
 
 	it("keeps its listeners across a stop and start", async () => {
-		const sensor = new DeviceMotionAdapter();
+		const sensor = new DeviceMotionAdapter("android");
 		const listener = vi.fn();
 		sensor.onSample(listener);
 		await started(sensor);
