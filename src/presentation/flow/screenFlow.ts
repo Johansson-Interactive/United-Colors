@@ -65,8 +65,9 @@ export interface FlowState {
 	 */
 	bloom: BloomStart | null;
 	/**
-	 * When the finger lifted (ms) from the last bloom it drained, while that lift's second may
-	 * still be running; a finger landing in play within it starts a second touch's bloom
+	 * When the finger lifted (ms) from the last bloom it drained, kept while play goes on from it
+	 * and forgotten as soon as it stops; a finger landing in play within the lift's second starts
+	 * a second touch's bloom
 	 */
 	earlyLift: number | null;
 	/** The kiosk has been started, by the stage's first layout; later layouts leave it be */
@@ -289,8 +290,8 @@ const startFlood = (state: FlowState, flood: NonNullable<FlowStep["flood"]>): Ba
 /** Back to the title or the pause screen from whatever is over it */
 const closeOver = (state: FlowState): BareStep => ({ state: { ...state, over: null } });
 
-/** The bloom is over, one way or the other, and any early lift's second with it */
-const endBloom = (state: FlowState): FlowState => ({ ...state, bloom: null, earlyLift: null });
+/** The bloom is over, one way or the other */
+const endBloom = (state: FlowState): FlowState => ({ ...state, bloom: null });
 
 /**
  * What a finger landing in play at `landedAt` starts: within an early lift's second, a second
@@ -318,10 +319,11 @@ export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): F
 
 function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep {
 	// The phase is the game's to report, flood or not; a run that ends under the bloom (its
-	// refusal was already playing out as the finger landed) takes the bloom with it, and an
-	// early lift's second too, so the next run starts clean
+	// refusal was already playing out as the finger landed) takes the bloom with it. An early
+	// lift's second only runs through play that goes on: whatever stops it forgets the lift
 	if (event.type === "phaseChanged") {
-		const next = { ...state, phase: event.phase };
+		const earlyLift = event.phase === "RUNNING" ? state.earlyLift : null;
+		const next = { ...state, phase: event.phase, earlyLift };
 		return { state: bloomable(event.phase) ? next : endBloom(next) };
 	}
 	// So are the slivers, which only the score meter sees land
@@ -425,15 +427,13 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			return screenOf(state).kind === "hud" && state.phase === "RUNNING"
 				? { state: { ...state, bloom: "pauseDot" }, act: PAUSE }
 				: { state };
-		case "appLeft": {
+		case "appLeft":
 			// Back from away on the pause screen: a run in play pauses, the bloom's frozen run keeps
 			// the pause it already has, and Get ready closes so a hold cannot complete while the
-			// player is away. An early lift's second is forgotten either way
+			// player is away
 			if (gettingReady) return closeOver(state);
 			if (blooming) return { state: endBloom(state) };
-			const away = { ...state, earlyLift: null };
-			return state.phase === "RUNNING" ? { state: away, act: PAUSE } : { state: away };
-		}
+			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
 			// The hold is the countdown; play picks up the moment the portal clears the field, no flood
 			return { ...closeOver(state), act: RESUME };
