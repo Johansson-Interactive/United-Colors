@@ -31,6 +31,19 @@ export type LevelAttitudes = Readonly<Record<PoseSide, Attitude>>;
  */
 const TURN_OVER_MARGIN = Math.PI / 3;
 
+/**
+ * How far a lean may reach, in any direction and in any pose, before the swivel zero follows
+ * the phone (45 degrees), well past any useful speed. Beyond it the swivel is the player
+ * turning on the spot, not steering (ADR 0013).
+ */
+const SWIVEL_REACH = Math.PI / 4;
+
+/** How quickly the swivel zero catches up once dragged: the time it takes to close all but 1/e (ms) */
+const SWIVEL_CATCH_UP_MS = 200;
+
+/** Swivel left (radians) at which the zero has caught up and stops following */
+const SWIVEL_CAUGHT_UP = Math.PI / 180;
+
 /** Turns smaller than this (radians) read as none, where the turn's axis is lost in rounding */
 const NO_TURN = 1e-9;
 
@@ -321,6 +334,76 @@ export function zeroSwivel(saved: LevelPoses, attitude: Attitude): LevelAttitude
 	const near = swung(attitude, up ? saved.up : saved.down);
 	const far = swung(turnedBy(near, { x: Math.PI, y: 0, z: 0 }), up ? saved.down : saved.up);
 	return up ? { up: near, down: far } : { up: far, down: near };
+}
+
+/** The vertical in the room, pointing up */
+const UP: Vector = { x: 0, y: 0, z: 1 };
+
+/** The phone held in `attitude`, turned `angle` about the vertical, anticlockwise from above */
+export function swivelledBy(attitude: Attitude, angle: number): Attitude {
+	if (angle === 0) return attitude;
+	return attitudeOf(
+		rotated(axisX(attitude), UP, angle),
+		rotated(axisY(attitude), UP, angle),
+		rotated(axisZ(attitude), UP, angle),
+	);
+}
+
+/**
+ * The swivel of the phone held in `attitude` from the pose held in `pose` (radians, -pi..pi,
+ * anticlockwise from above): the turn between them, as it acts in the room, split into a turn
+ * about a level axis and one about the vertical, which this is
+ */
+function swivelFrom(pose: Attitude, attitude: Attitude): number {
+	const p = [axisX(pose), axisY(pose), axisZ(pose)];
+	const a = [axisX(attitude), axisY(attitude), axisZ(attitude)];
+	// From the room's turn matrix, the sum over the phone's axes of a pose axis taken to its
+	// place now: twice the swivel's half-angle sine, against one plus the trace
+	let across = 0;
+	let trace = 0;
+	for (let i = 0; i < 3; i++) {
+		across += a[i].y * p[i].x - a[i].x * p[i].y;
+		trace += dot(a[i], p[i]);
+	}
+	return 2 * Math.atan2(across, 1 + trace);
+}
+
+/** How far to swing the swivel zero for one sample, and whether it is still catching up after */
+export interface SwivelFollow {
+	/** About the vertical, anticlockwise from above (radians); see swivelledBy */
+	turn: number;
+	catchingUp: boolean;
+}
+
+/**
+ * How the swivel zero follows the player turning on the spot, for the phone held in `attitude`
+ * a sample `dtMs` after the last, measured from `pose`, the level pose in use (ADR 0013).
+ *
+ * Gravity cannot tell a player turning on the spot from a swivel that steers, but a lean only
+ * ever reaches SWIVEL_REACH; the swivel such a lean holds is its share of the turn about the
+ * vertical, which is all of it upright and none of it flat. A swivel past that is a turn, so
+ * the zero is dragged along at once, and then catches up the rest of the way, until the phone
+ * reads no swivel again. Inside the reach the zero stays put, so a held lean keeps its full
+ * strength. Flat, where a swivel steers nothing, the zero follows every swivel at once and tilt
+ * is gravity's turn, as before ADR 0010.
+ */
+export function followSwivel(
+	attitude: Attitude,
+	pose: Attitude,
+	catchingUp: boolean,
+	dtMs: number,
+): SwivelFollow {
+	const swivel = swivelFrom(pose, attitude);
+	// How level the vertical lies in the phone at the pose: how much a swivel steers
+	const steers = Math.hypot(pose.xz, pose.yz);
+	const reach = 2 * Math.atan(steers * Math.tan(SWIVEL_REACH / 2));
+	const past = Math.abs(swivel) - reach;
+	if (past <= 0 && !catchingUp) return { turn: 0, catchingUp: false };
+	const dragged = past > 0 ? Math.sign(swivel) * past : 0;
+	const rest = (swivel - dragged) * (1 - Math.exp(-dtMs / SWIVEL_CATCH_UP_MS));
+	if (Math.abs(swivel - dragged - rest) < SWIVEL_CAUGHT_UP)
+		return { turn: swivel, catchingUp: false };
+	return { turn: dragged + rest, catchingUp: true };
 }
 
 /**
