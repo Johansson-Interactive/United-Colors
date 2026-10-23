@@ -26,11 +26,11 @@ interface BloomOverlayProps {
 	/** The player's colour, which the rim wears */
 	color: string;
 	/**
-	 * What started the bloom: a finger, whose hold it follows, or a second touch or the dev
-	 * pause dot, which play out whole
+	 * What started the bloom: a finger, whose hold it follows until a finger lands again, or a
+	 * second touch or the dev pause dot, which play out whole
 	 */
 	start: BloomStart;
-	/** Where the finger landed and whether it is still down, as the field touch layer keeps it */
+	/** Where and when the finger landed and whether it is still down, as the field touch layer keeps it */
 	touch: SharedValue<FieldTouchState>;
 	/** How the stage's corners are rounded (null: square) */
 	corners: Corners | null;
@@ -63,13 +63,16 @@ export const BloomOverlay: React.FC<BloomOverlayProps> = ({
 	onEnd,
 }) => {
 	const field = useFieldSize(corners);
-	// Where the finger landed, or for the pause dot the seat in the frozen scene, for the bloom's life
-	const [origin] = useState(() =>
-		bloomOrigin(start, touch.get(), seatOf(playerDisc(scene.get()), field)),
-	);
+	// Where the finger landed, or for the pause dot the seat in the frozen scene, and when the
+	// finger landed, which a finger landing again replaces, for the bloom's life
+	const [{ origin, openedOn }] = useState(() => {
+		const opened = touch.get();
+		const seat = seatOf(playerDisc(scene.get()), field);
+		return { origin: bloomOrigin(start, opened, seat), openedOn: opened.landedAt };
+	});
 	const advance = (state: BloomState, dt: number) => {
 		"worklet";
-		return advanceBloom(state, bloomHeld(start, touch.get().down), dt, origin, field);
+		return advanceBloom(state, bloomHeld(start, touch.get(), openedOn), dt, origin, field);
 	};
 	const frame = usePortalStepper(() => openBloom(origin, field), advance, portal, onEnd);
 

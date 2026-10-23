@@ -99,49 +99,68 @@ describe("the bloom's hold", () => {
 	});
 });
 
+/** A finger landing at 0 and holding, then lifting at 200, landing again at 300 and lifting at 320 */
+const DOWN = { ...FIELD_UNTOUCHED, down: true, landedAt: 0 };
+const LIFTED = { ...DOWN, down: false, liftedAt: 200 };
+const AGAIN = { ...LIFTED, down: true, landedAt: 300 };
+const LIFTED_AGAIN = { ...AGAIN, down: false, liftedAt: 320 };
+
 describe("a finger landing again while the portal drains", () => {
+	/** Whether a finger's bloom, opened on the landing at 0, is held with the touch at `touch` */
+	const held = (touch: typeof DOWN) => bloomHeld("finger", touch, DOWN.landedAt);
 	/** Held for 200 ms, then lifted for a frame: the portal is draining */
-	const draining = () => run(run(OPEN_BLOOM, true, 200), false, FRAME_DT);
+	const draining = () => run(run(OPEN_BLOOM, held(DOWN), 200), held(LIFTED), FRAME_DT);
 
 	it("grows the portal again from where it is, and opens the pause whole", () => {
 		const slipped = draining();
 		expect(slipped.outcome).toBeNull();
-		const back = stepBloom(slipped, true, FRAME_DT);
+		const back = stepBloom(slipped, held(AGAIN), FRAME_DT);
 		expect(back.progress).toBeGreaterThan(slipped.progress);
-		expect(run(back, true, BLOOM_MS).outcome).toBe("covered");
+		expect(run(back, held(AGAIN), BLOOM_MS).outcome).toBe("covered");
 	});
 
 	it("still opens the pause whole when the finger lifts straight after landing again", () => {
-		const back = stepBloom(draining(), true, FRAME_DT);
-		const lifted = frames(back, false, BLOOM_MS * 2);
+		const back = stepBloom(draining(), held(AGAIN), FRAME_DT);
+		const lifted = frames(back, held(LIFTED_AGAIN), BLOOM_MS * 2);
 		for (let i = 1; i < lifted.length; i++) {
 			expect(lifted[i].progress).toBeGreaterThanOrEqual(lifted[i - 1].progress);
 		}
 		expect(lifted[lifted.length - 1].outcome).toBe("covered");
 	});
 
+	it("opens the pause whole when the finger lifted and landed again between two frames", () => {
+		// No frame ever saw the finger off, only that it had landed again
+		const slipped = stepBloom(run(OPEN_BLOOM, held(DOWN), 200), held(AGAIN), FRAME_DT);
+		expect(run(slipped, held(LIFTED_AGAIN), BLOOM_MS * 2).outcome).toBe("covered");
+	});
+
 	it("drains and clears as before when no finger lands again", () => {
-		expect(run(draining(), false, BLOOM_MS).outcome).toBe("cleared");
+		expect(run(draining(), held(LIFTED), BLOOM_MS).outcome).toBe("cleared");
 	});
 });
 
 describe("what holds the bloom", () => {
 	it("follows the finger that started it", () => {
-		expect(bloomHeld("finger", true)).toBe(true);
-		expect(bloomHeld("finger", false)).toBe(false);
+		expect(bloomHeld("finger", DOWN, DOWN.landedAt)).toBe(true);
+		expect(bloomHeld("finger", LIFTED, DOWN.landedAt)).toBe(false);
+	});
+
+	it("is held for good once a finger lands again, down or not", () => {
+		expect(bloomHeld("finger", AGAIN, DOWN.landedAt)).toBe(true);
+		expect(bloomHeld("finger", LIFTED_AGAIN, DOWN.landedAt)).toBe(true);
 	});
 
 	it("is held for good when a second touch started it, so it plays out to the pause with no hold", () => {
-		expect(bloomHeld("secondTouch", false)).toBe(true);
-		expect(run(OPEN_BLOOM, bloomHeld("secondTouch", false), BLOOM_MS * 2).outcome).toBe("covered");
+		const held = bloomHeld("secondTouch", LIFTED_AGAIN, LIFTED_AGAIN.landedAt);
+		expect(held).toBe(true);
+		expect(run(OPEN_BLOOM, held, BLOOM_MS * 2).outcome).toBe("covered");
 	});
 
 	it("is held for good when the dev pause dot started it, so it plays out to the pause with no hold", () => {
-		expect(bloomHeld("pauseDot", false)).toBe(true);
+		const held = bloomHeld("pauseDot", FIELD_UNTOUCHED, FIELD_UNTOUCHED.landedAt);
+		expect(held).toBe(true);
 		let state = OPEN_BLOOM;
-		for (let t = 0; t < BLOOM_MS * 2; t += FRAME_DT) {
-			state = stepBloom(state, bloomHeld("pauseDot", false), FRAME_DT);
-		}
+		for (let t = 0; t < BLOOM_MS * 2; t += FRAME_DT) state = stepBloom(state, held, FRAME_DT);
 		expect(state.outcome).toBe("covered");
 	});
 });
