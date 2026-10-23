@@ -30,6 +30,13 @@ export type LevelPoses = Readonly<Record<PoseSide, Gravity>>;
 const TURN_OVER_MARGIN = Math.PI / 3;
 
 /**
+ * How far past upright a level pose may lie and still belong to the side it was set on (sine of
+ * 30 degrees, half TURN_OVER_MARGIN, as far past upright as the flat poses hand over). Nearer
+ * upright than this, gravity can't tell which side the player came from; further, it can.
+ */
+const UPRIGHT_BAND = Math.sin(TURN_OVER_MARGIN / 2);
+
+/**
  * How much of a roll about the screen's lost axis gravity must see, at the level pose, for the
  * roll to be scaled back to its whole size (cos 60 degrees: the pose reclined up to 60 degrees
  * from flat, a roll read at up to twice what gravity sees). Nearer upright, scaling further would
@@ -145,12 +152,39 @@ export const FLAT: LevelPoses = {
 	down: { x: 0, y: 0, z: 1 },
 };
 
-/** The level poses to measure from: each saved one at unit length, and flat where none is set */
+/** Whether the pose reading `pose` (unit) lies on `side`, or within UPRIGHT_BAND past upright */
+function liesOn(pose: Gravity, side: PoseSide): boolean {
+	"worklet";
+	return SENSE[side] * pose.z <= UPRIGHT_BAND;
+}
+
+/**
+ * The side a level pose reading `pose` belongs on, set while the pose on `inUse` was in use: the
+ * side its screen faces, or near upright, where gravity can't tell, the side in use. The side in
+ * use alone can't say: it holds until the other pose is nearer by TURN_OVER_MARGIN, so between
+ * two saved poses it can outlast the screen turning over, and a pose set flat while the
+ * screen-down one was in use would read every roll backwards.
+ */
+export function poseSide(pose: Gravity, inUse: PoseSide): PoseSide {
+	"worklet";
+	if (liesOn(unitGravity(pose), inUse)) return inUse;
+	return inUse === "up" ? "down" : "up";
+}
+
+/**
+ * The level poses to measure from: each saved one at unit length, and flat where none is set or
+ * where one lies on the other side, as builds before poseSide could save them
+ */
 export function levelPosesOf(saved: SavedLevelPoses): LevelPoses {
-	return {
-		up: saved.up ? unitGravity(saved.up) : FLAT.up,
-		down: saved.down ? unitGravity(saved.down) : FLAT.down,
-	};
+	return { up: savedPose(saved, "up"), down: savedPose(saved, "down") };
+}
+
+/** The saved pose on `side` at unit length, or flat on `side` if it is unset or doesn't lie there */
+function savedPose(saved: SavedLevelPoses, side: PoseSide): Gravity {
+	const pose = saved[side];
+	if (!pose) return FLAT[side];
+	const unit = unitGravity(pose);
+	return liesOn(unit, side) ? unit : FLAT[side];
 }
 
 /**
@@ -193,7 +227,8 @@ function rollGain(seen: number): number {
  * The axes are the phone's own, so screen down a turn that tips an edge away from the eyes
  * reads the way it does screen up: SENSE keeps a roll and the wheel the hand's way round on
  * each side, the same either side of the vertical, so a pose saved past upright reads as one
- * just short of it.
+ * just short of it. That holds while the pose lies on `side` (see poseSide and levelPosesOf):
+ * a pose on the other side would read every roll backwards.
  */
 export function gravityTilt(gravity: Gravity, pose: Gravity, side: PoseSide): TiltAngles {
 	"worklet";

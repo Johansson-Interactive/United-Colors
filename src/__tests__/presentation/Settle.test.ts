@@ -24,6 +24,9 @@ function at(x: number, y: number): Gravity {
 /** Held upright, facing the player */
 const UPRIGHT = at(0, 90 * DEG);
 
+/** Reclined 10 degrees past upright, where gravity can't tell which side the player came from */
+const PAST_UPRIGHT = 100 * DEG;
+
 /** Upright, turned about the vertical by `angle`: upright, that is a turn about the long axis */
 function swivelledUpright(angle: number): Gravity {
 	return gravityAt({ x: angle, y: 0 }, UPRIGHT);
@@ -163,11 +166,23 @@ describe("settle", () => {
 			expect(settleOutcome(hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS / 2))).toBeNull();
 		});
 
-		it("takes the pose and the side it was held on together", () => {
-			const s = hold(INITIAL_SETTLE, 0.6, -0.2, SETTLE_HOLD_MS + 200, 0.01, "down");
-			const outcome = settleOutcome(s);
-			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.pose, at(0.6, -0.2));
+		it("near upright, takes the pose and the side it was held on together", () => {
+			for (const side of ["up", "down"] as const) {
+				const s = hold(INITIAL_SETTLE, 0.2, PAST_UPRIGHT, SETTLE_HOLD_MS + 200, 0.01, side);
+				const outcome = settleOutcome(s);
+				expect(outcome?.side).toBe(side);
+				expectGravity(outcome?.pose, at(0.2, PAST_UPRIGHT));
+			}
+		});
+
+		it("held flat while the screen-down pose is still in use, replaces the screen-up pose", () => {
+			const s = hold(INITIAL_SETTLE, 0.1, 0.05, SETTLE_HOLD_MS + 200, 0.01, "down");
+			expect(settleOutcome(s)?.side).toBe("up");
+		});
+
+		it("held screen down while the screen-up pose is still in use, replaces the screen-down pose", () => {
+			const s = hold(INITIAL_SETTLE, 0.1, 160 * DEG, SETTLE_HOLD_MS + 200, 0.01, "up");
+			expect(settleOutcome(s)?.side).toBe("down");
 		});
 
 		it("turning over after the dot rests does not change the side", () => {
@@ -198,13 +213,13 @@ describe("settle", () => {
 	});
 
 	describe("tap to set now", () => {
-		it("sets the running mean and the side of the sample it last took", () => {
-			const s = setSettleNow(hold(INITIAL_SETTLE, 0.5, 0.1, 400, 0.01, "down"), "up");
+		it("sets the running mean and its side as of the sample it last took", () => {
+			const s = setSettleNow(hold(INITIAL_SETTLE, 0.5, PAST_UPRIGHT, 400, 0.01, "down"), "up");
 			expect(s.phase).toBe("settled");
 			expect(s.progress).toBe(1);
 			const outcome = settleOutcome(s);
 			expect(outcome?.side).toBe("down");
-			expectGravity(outcome?.pose, at(0.5, 0.1));
+			expectGravity(outcome?.pose, at(0.5, PAST_UPRIGHT));
 		});
 
 		it("sets a flat pose if no tilt has been measured yet", () => {

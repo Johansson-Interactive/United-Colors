@@ -7,7 +7,7 @@
  * over), so a turn-over afterwards can't move it.
  */
 
-import { angleBetween, FLAT, gravityTilt, turnedToward } from "../../domain/levelPose";
+import { angleBetween, FLAT, gravityTilt, poseSide, turnedToward } from "../../domain/levelPose";
 import type { Gravity, PoseSide, TiltAngles } from "../../domain/types";
 
 /**
@@ -20,7 +20,7 @@ export interface SettleState {
 	phase: SettlePhase;
 	/** Running mean of the gravity read; the pose once settled */
 	mean: Gravity;
-	/** The level pose in use at the latest sample; the one the pose replaces once settled */
+	/** The side the mean belongs on (see poseSide); the level pose it replaces once settled */
 	side: PoseSide;
 	/** Gravity when the current hold began; the hold survives while within STILL_RAD of it */
 	anchor: Gravity;
@@ -86,7 +86,10 @@ export function bowlTilt(state: SettleState, gravity: Gravity): TiltAngles {
 	};
 }
 
-/** Advance one frame with the latest gravity and the level pose in use (see levelTilt) */
+/**
+ * Advance one frame with the latest gravity and the level pose in use (see levelTilt), which
+ * decides the mean's side only near upright (see poseSide)
+ */
 export function stepSettle(
 	state: SettleState,
 	gravity: Gravity,
@@ -107,7 +110,7 @@ export function stepSettle(
 		? Math.min(1, state.progress + dt / SETTLE_HOLD_MS)
 		: Math.max(0, state.progress - dt / (SETTLE_HOLD_MS * 0.5));
 	const phase: SettlePhase = progress >= 1 ? "settled" : progress > 0 ? "settling" : "moving";
-	return { phase, mean, side, anchor, progress, elapsedMs };
+	return { phase, mean, side: poseSide(mean, side), anchor, progress, elapsedMs };
 }
 
 /**
@@ -122,7 +125,7 @@ export function startSettle(state: SettleState, tiltAvailable: boolean): SettleS
 }
 
 /**
- * A tap once started: settle now on the running mean and the pose in use at the sample it last
+ * A tap once started: settle now on the running mean and its side as of the sample it last
  * took. Before any tilt has been measured the pose is flat, for the pose in use at the tap. A
  * settled pose is final.
  */

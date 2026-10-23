@@ -5,6 +5,7 @@ import {
 	gravityTilt,
 	levelPosesOf,
 	levelTilt,
+	poseSide,
 	turnedToward,
 	unitGravity,
 } from "../../domain/levelPose";
@@ -243,6 +244,43 @@ describe("levelPosesOf", () => {
 		const poses = levelPosesOf({ up: { x: 0, y: -2, z: 0 }, down: null });
 		expectGravity(poses.up, { x: 0, y: -1, z: 0 });
 		expect(poses.down).toBe(FLAT.down);
+	});
+
+	it("keeps a saved pose up to 30 degrees past upright on its side", () => {
+		const down = reclined(115, "down").gravity;
+		const up = reclined(115).gravity;
+		expect(levelPosesOf({ up, down })).toEqual({ up, down });
+	});
+
+	it("reads a saved pose that lies on the other side as flat", () => {
+		const poses = levelPosesOf({ up: reclined(125).gravity, down: reclined(125, "down").gravity });
+		expect(poses).toEqual(FLAT);
+	});
+
+	it("a pose set flat while the screen-down pose was in use no longer steers backwards", () => {
+		const flat = gravityAt({ x: 0, y: 0.02 }, FLAT.up);
+		const poses = levelPosesOf({ up: HELD.upright.gravity, down: flat });
+		const tilt = levelTilt(turnedAbout(flat, "y", 0.2), poses, "up");
+		expect(tilt.x).toBeGreaterThan(0);
+	});
+});
+
+describe("poseSide", () => {
+	it("a pose belongs on the side its screen faces, whichever pose is in use", () => {
+		for (const inUse of ["up", "down"] as const) {
+			expect(poseSide(HELD.flat.gravity, inUse)).toBe("up");
+			expect(poseSide(HELD["reclined 45°"].gravity, inUse)).toBe("up");
+			expect(poseSide(HELD["screen down, tipped"].gravity, inUse)).toBe("down");
+			expect(poseSide(HELD["screen down"].gravity, inUse)).toBe("down");
+		}
+	});
+
+	it("within 30 degrees of upright, a pose belongs on the side in use", () => {
+		for (const degrees of [65, 90, 115]) {
+			for (const inUse of ["up", "down"] as const) {
+				expect(poseSide(reclined(degrees).gravity, inUse), `${degrees}`).toBe(inUse);
+			}
+		}
 	});
 });
 
