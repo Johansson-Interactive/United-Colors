@@ -11,9 +11,12 @@
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
  * field in play freezes the game at once and opens a portal into the pause under it; the
  * pause screen opens once the portal covers the field, and a finger lifted before then lets
- * play go on. On the pause screen a finger held on the pause opens Get ready and holds it open:
- * the game stays paused until the player has held level, then resumes with no flood; a finger
- * lifted before then shuts the cup and the pause screen comes back.
+ * play go on. A finger landing again within a second of that lift opens the pause whole: a
+ * portal still draining is held for good by its stepper, and one that has drained gives way to
+ * a second touch's bloom, which plays out to the pause held or not (ADR 0015). On the pause
+ * screen a finger held on the pause opens Get ready and holds it open: the game stays paused
+ * until the player has held level, then resumes with no flood; a finger lifted before then
+ * shuts the cup and the pause screen comes back.
  *
  * The swivel, the turn about the vertical that tilt reads but gravity cannot see, has no true
  * zero, so the flow zeroes it wherever the player is by definition at their level pose: as a run
@@ -25,7 +28,7 @@
 import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
-import type { BloomStart } from "../touch/bloom";
+import { type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
 
 /** Where the settle bowl was opened from, which decides where play continues afterwards */
 type SettleFrom = "start" | "pause" | "menu";
@@ -61,6 +64,12 @@ export interface FlowState {
 	 * the field or the dev pause dot; the pause screen opens once it covers the field (see bloom.ts)
 	 */
 	bloom: BloomStart | null;
+	/**
+	 * When the finger lifted (ms) from the last bloom it drained, kept while play goes on from it
+	 * and forgotten as soon as it stops; a finger landing in play within the lift's second starts
+	 * a second touch's bloom
+	 */
+	earlyLift: number | null;
 	/** The kiosk has been started, by the stage's first layout; later layouts leave it be */
 	kioskStarted: boolean;
 	/** Score slivers are still on their way into the score; the game over waits for the last */
@@ -75,6 +84,7 @@ const NO_SCREEN: ScreenState = { settle: null, over: null, flooding: false, bloo
 export const INITIAL_FLOW: FlowState = {
 	...NO_SCREEN,
 	phase: "KIOSK",
+	earlyLift: null,
 	kioskStarted: false,
 	sliversInAir: false,
 };
@@ -133,14 +143,19 @@ export type FlowEvent =
 	/** QUIT on the pause or BACK on the game over */
 	| { type: "leavePressed"; at: PressPoint }
 	/**
-	 * A finger landed on the field, clear of any button: in play it freezes the run and opens
-	 * the bloom under it; on the pause screen it opens Get ready, held
+	 * A finger landed on the field, clear of any button, at `landedAt` (ms, on the clock
+	 * `bloomCleared`'s lift is timed on): in play it freezes the run and opens the bloom under
+	 * it; on the pause screen it opens Get ready, held
 	 */
-	| { type: "fieldTouched" }
+	| { type: "fieldTouched"; landedAt: number }
 	/** The bloom's portal covers the field: the pause screen opens */
 	| { type: "bloomCovered" }
-	/** The finger lifted before the portal covered the field, and it has drained: play goes on */
-	| { type: "bloomCleared" }
+	/**
+	 * The finger lifted at `liftedAt` (ms) before the portal covered the field, and it has
+	 * drained: play goes on. Unless a finger is `relanded`, down again as the portal clears:
+	 * too late for the bloom's stepper, and ignored by the flow as it landed under the bloom
+	 */
+	| { type: "bloomCleared"; liftedAt: number; relanded: boolean }
 	/** Dev only: the corner pause dot, kept where touch steers the dot instead of the gyro */
 	| { type: "pausePressed" }
 	/** The player left the app (home, app switcher, an incoming call) */
@@ -278,6 +293,15 @@ const closeOver = (state: FlowState): BareStep => ({ state: { ...state, over: nu
 /** The bloom is over, one way or the other */
 const endBloom = (state: FlowState): FlowState => ({ ...state, bloom: null });
 
+/**
+ * What a finger landing in play at `landedAt` starts: within an early lift's second, a second
+ * touch's bloom
+ */
+const touchStart = (state: FlowState, landedAt: number): BloomStart =>
+	state.earlyLift !== null && landedAt - state.earlyLift < SECOND_TOUCH_MS
+		? "secondTouch"
+		: "finger";
+
 /** Whether `phase` has a run the bloom can be frosting: in play, or frozen by it */
 const bloomable = (phase: GamePhase) => phase === "RUNNING" || phase === "PAUSED";
 
@@ -295,10 +319,12 @@ export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): F
 
 function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep {
 	// The phase is the game's to report, flood or not; a run that ends under the bloom (its
-	// refusal was already playing out as the finger landed) takes the bloom with it
+	// refusal was already playing out as the finger landed) takes the bloom with it. An early
+	// lift's second only runs through play that goes on: whatever stops it forgets the lift
 	if (event.type === "phaseChanged") {
-		const bloom = bloomable(event.phase) ? state.bloom : null;
-		return { state: { ...state, phase: event.phase, bloom } };
+		const earlyLift = event.phase === "RUNNING" ? state.earlyLift : null;
+		const next = { ...state, phase: event.phase, earlyLift };
+		return { state: bloomable(event.phase) ? next : endBloom(next) };
 	}
 	// So are the slivers, which only the score meter sees land
 	if (event.type === "sliversChanged") {
@@ -379,7 +405,7 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			const screen = screenOf(state);
 			// The run freezes the moment the finger lands; the portal then opens under it
 			if (screen.kind === "hud" && state.phase === "RUNNING") {
-				return { state: { ...state, bloom: "finger" }, act: PAUSE };
+				return { state: { ...state, bloom: touchStart(state, event.landedAt) }, act: PAUSE };
 			}
 			if (screen.kind !== "pause") return { state };
 			// Without tilt there is no level to hold, so nothing stands between the pause and play
@@ -390,8 +416,12 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 		case "bloomCovered":
 			return { state: endBloom(state) };
 		case "bloomCleared":
-			// The frozen frame is where play goes on from; the pose has not had time to change
-			return { state: endBloom(state), act: RESUME };
+			// A finger already down again is a second touch: the run stays frozen and its bloom
+			// takes over from the drained one, the only bloom to follow another with no play between
+			if (event.relanded) return { state: { ...state, bloom: "secondTouch" } };
+			// The frozen frame is where play goes on from; the pose has not had time to change.
+			// The lift's second runs on into play
+			return { state: { ...endBloom(state), earlyLift: event.liftedAt }, act: RESUME };
 		case "pausePressed":
 			// As a finger on the field does, but with no finger to hold it the bloom plays out whole
 			return screenOf(state).kind === "hud" && state.phase === "RUNNING"

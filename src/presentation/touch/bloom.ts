@@ -3,9 +3,11 @@
  * freezes the run at once and opens a portal into the pause from under the finger. It grows
  * from the fingertip, wears the rim and grows with the hold; once it has passed the walls the
  * pause screen opens (covered). A finger lifted before then drains the portal back into the
- * fingertip, faster than it grew, and play goes on from the frozen frame (cleared). The bloom
- * is Get ready's portal run the other way (see getReady.ts): the same ease, rim and fade, with
- * the pause inside the portal instead of the play. The dev pause dot has no finger to open
+ * fingertip, faster than it grew, and play goes on from the frozen frame (cleared). A finger
+ * landing again while it drains holds the bloom for good: the portal grows again from where it
+ * is and plays out to the walls, held or not (ADR 0015). The bloom is Get ready's portal run the
+ * other way (see getReady.ts): the same ease, rim and fade, with the pause inside the portal
+ * instead of the play. The dev pause dot has no finger to open
  * under, so its bloom opens at the seat instead, at the rest size around the player dot.
  *
  * Steps run on the UI thread, one a frame, with whether the bloom is held; the overlay only
@@ -46,25 +48,45 @@ export const OPEN_BLOOM: BloomState = { progress: 0, outcome: null };
 export const BLOOM_MS = EDGE_GROW_MS;
 
 /**
- * What started the bloom: a finger on the field, whose hold it follows, or the dev-only pause
- * dot, which no finger holds, so the bloom plays out to the pause on its own
+ * How soon after an early lift a finger landing again opens the pause whole: through the
+ * frozen drain and on into play (ADR 0015). Open to tuning on a device.
  */
-export type BloomStart = "finger" | "pauseDot";
+export const SECOND_TOUCH_MS = 1000;
 
-/** Whether the bloom started by `start` is held this frame, with whether a finger is on the field */
-export function bloomHeld(start: BloomStart, fingerDown: boolean): boolean {
+/**
+ * What started the bloom: a finger on the field, whose hold it follows; a second touch, a finger
+ * landing again soon after an early lift, which commits to the pause; or the dev-only pause dot.
+ */
+export type BloomStart = "finger" | "secondTouch" | "pauseDot";
+
+/**
+ * What each start means for its bloom: whether it opens under the finger or at the seat, and
+ * whether it plays out to the pause whole, with no finger to hold it
+ */
+const STARTS: Record<BloomStart, { under: "finger" | "seat"; whole: boolean }> = {
+	finger: { under: "finger", whole: false },
+	secondTouch: { under: "finger", whole: true },
+	pauseDot: { under: "seat", whole: true },
+};
+
+/**
+ * Whether the bloom started by `start` is held this frame, with the field's touch as it stands
+ * and `openedOn`, when the finger it opened under landed: a finger's while that finger is down,
+ * and for good once a finger lands again, however briefly it was off (ADR 0015)
+ */
+export function bloomHeld(start: BloomStart, touch: FieldTouchState, openedOn: number): boolean {
 	"worklet";
-	return start === "pauseDot" || fingerDown;
+	return STARTS[start].whole || touch.down || touch.landedAt !== openedOn;
 }
 
 /**
- * Where the bloom started by `start` opens, and around what size of dot: a finger's under the
- * fingertip, from nothing, where `touch` says it landed; the pause dot's at `seat`, where the
- * player dot froze, at the rest size around it
+ * Where the bloom started by `start` opens, and around what size of dot: under the fingertip,
+ * from nothing, where `touch` says it landed; the pause dot's at `seat`, where the player dot
+ * froze, at the rest size around it
  */
 export function bloomOrigin(start: BloomStart, touch: FieldTouchState, seat: Disc): Disc {
 	"worklet";
-	return start === "finger" ? { x: touch.x, y: touch.y, radius: 0 } : seat;
+	return STARTS[start].under === "seat" ? seat : { x: touch.x, y: touch.y, radius: 0 };
 }
 
 /** Advance one frame, with whether the bloom is still held; a lifted finger drains it faster than it grew */

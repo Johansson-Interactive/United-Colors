@@ -12,6 +12,7 @@ import {
 	openBloom,
 	stepBloom,
 } from "../../presentation/touch/bloom";
+import { FIELD_UNTOUCHED } from "../../presentation/touch/fieldTouch";
 
 const field = { width: 400, height: 800, cornerExtent: 0 };
 /** The player dot's radius: the portal opens at the rest size around it */
@@ -42,7 +43,7 @@ describe("the bloom's hold", () => {
 		const almost = run(OPEN_BLOOM, true, BLOOM_MS - 10, 10);
 		expect(almost.outcome).toBeNull();
 		expect(almost.progress).toBeCloseTo(1 - 10 / BLOOM_MS, 9);
-		expect(run(almost, true, 10, 10)).toEqual({ progress: 1, outcome: "covered" });
+		expect(run(almost, true, 10, 10)).toMatchObject({ progress: 1, outcome: "covered" });
 	});
 
 	it("takes about 900 ms to reach the walls", () => {
@@ -75,7 +76,7 @@ describe("the bloom's hold", () => {
 		expect(lifted.progress).toBeLessThan(0.5 - 100 / BLOOM_MS);
 		expect(lifted.outcome).toBeNull();
 		const cleared = run(half, false, BLOOM_MS / 2, 15);
-		expect(cleared).toEqual({ progress: 0, outcome: "cleared" });
+		expect(cleared).toMatchObject({ progress: 0, outcome: "cleared" });
 	});
 
 	it("clears once only, and is inert after", () => {
@@ -88,27 +89,78 @@ describe("the bloom's hold", () => {
 		expect(stepBloom(OPEN_BLOOM, false, FRAME_DT).outcome).toBe("cleared");
 	});
 
-	it("grows again if the finger comes back before the portal has drained", () => {
-		const slipped = run(run(OPEN_BLOOM, true, 200), false, FRAME_DT);
+	it("follows a hold that never lifts as it always has", () => {
+		const held = frames(OPEN_BLOOM, true, BLOOM_MS * 2);
+		for (let i = 1; i < held.length; i++) {
+			expect(held[i].progress).toBeGreaterThanOrEqual(held[i - 1].progress);
+		}
+		expect(held.some((s) => s.outcome === "cleared")).toBe(false);
+		expect(held[held.length - 1].outcome).toBe("covered");
+	});
+});
+
+/** A finger landing at 0 and holding, then lifting at 200, landing again at 300 and lifting at 320 */
+const DOWN = { ...FIELD_UNTOUCHED, down: true, landedAt: 0 };
+const LIFTED = { ...DOWN, down: false, liftedAt: 200 };
+const AGAIN = { ...LIFTED, down: true, landedAt: 300 };
+const LIFTED_AGAIN = { ...AGAIN, down: false, liftedAt: 320 };
+
+describe("a finger landing again while the portal drains", () => {
+	/** Whether a finger's bloom, opened on the landing at 0, is held with the touch at `touch` */
+	const held = (touch: typeof DOWN) => bloomHeld("finger", touch, DOWN.landedAt);
+	/** Held for 200 ms, then lifted for a frame: the portal is draining */
+	const draining = () => run(run(OPEN_BLOOM, held(DOWN), 200), held(LIFTED), FRAME_DT);
+
+	it("grows the portal again from where it is, and opens the pause whole", () => {
+		const slipped = draining();
 		expect(slipped.outcome).toBeNull();
-		const back = run(slipped, true, 100);
+		const back = stepBloom(slipped, held(AGAIN), FRAME_DT);
 		expect(back.progress).toBeGreaterThan(slipped.progress);
-		expect(back.outcome).toBeNull();
+		expect(run(back, held(AGAIN), BLOOM_MS).outcome).toBe("covered");
+	});
+
+	it("still opens the pause whole when the finger lifts straight after landing again", () => {
+		const back = stepBloom(draining(), held(AGAIN), FRAME_DT);
+		const lifted = frames(back, held(LIFTED_AGAIN), BLOOM_MS * 2);
+		for (let i = 1; i < lifted.length; i++) {
+			expect(lifted[i].progress).toBeGreaterThanOrEqual(lifted[i - 1].progress);
+		}
+		expect(lifted[lifted.length - 1].outcome).toBe("covered");
+	});
+
+	it("opens the pause whole when the finger lifted and landed again between two frames", () => {
+		// No frame ever saw the finger off, only that it had landed again
+		const slipped = stepBloom(run(OPEN_BLOOM, held(DOWN), 200), held(AGAIN), FRAME_DT);
+		expect(run(slipped, held(LIFTED_AGAIN), BLOOM_MS * 2).outcome).toBe("covered");
+	});
+
+	it("drains and clears as before when no finger lands again", () => {
+		expect(run(draining(), held(LIFTED), BLOOM_MS).outcome).toBe("cleared");
 	});
 });
 
 describe("what holds the bloom", () => {
 	it("follows the finger that started it", () => {
-		expect(bloomHeld("finger", true)).toBe(true);
-		expect(bloomHeld("finger", false)).toBe(false);
+		expect(bloomHeld("finger", DOWN, DOWN.landedAt)).toBe(true);
+		expect(bloomHeld("finger", LIFTED, DOWN.landedAt)).toBe(false);
+	});
+
+	it("is held for good once a finger lands again, down or not", () => {
+		expect(bloomHeld("finger", AGAIN, DOWN.landedAt)).toBe(true);
+		expect(bloomHeld("finger", LIFTED_AGAIN, DOWN.landedAt)).toBe(true);
+	});
+
+	it("is held for good when a second touch started it, so it plays out to the pause with no hold", () => {
+		const held = bloomHeld("secondTouch", LIFTED_AGAIN, LIFTED_AGAIN.landedAt);
+		expect(held).toBe(true);
+		expect(run(OPEN_BLOOM, held, BLOOM_MS * 2).outcome).toBe("covered");
 	});
 
 	it("is held for good when the dev pause dot started it, so it plays out to the pause with no hold", () => {
-		expect(bloomHeld("pauseDot", false)).toBe(true);
+		const held = bloomHeld("pauseDot", FIELD_UNTOUCHED, FIELD_UNTOUCHED.landedAt);
+		expect(held).toBe(true);
 		let state = OPEN_BLOOM;
-		for (let t = 0; t < BLOOM_MS * 2; t += FRAME_DT) {
-			state = stepBloom(state, bloomHeld("pauseDot", false), FRAME_DT);
-		}
+		for (let t = 0; t < BLOOM_MS * 2; t += FRAME_DT) state = stepBloom(state, held, FRAME_DT);
 		expect(state.outcome).toBe("covered");
 	});
 });
@@ -170,14 +222,18 @@ describe("what the bloom draws", () => {
 
 describe("where the bloom opens", () => {
 	/** Where the finger landed, well away from the seat */
-	const LANDED = { down: true, x: 120, y: 200 };
+	const LANDED = { ...FIELD_UNTOUCHED, down: true, x: 120, y: 200 };
 
 	it("opens a finger's bloom where the finger landed, from nothing", () => {
 		expect(bloomOrigin("finger", LANDED, SEAT)).toEqual({ x: 120, y: 200, radius: 0 });
 	});
 
+	it("opens a second touch's bloom under the finger too, from nothing", () => {
+		expect(bloomOrigin("secondTouch", LANDED, SEAT)).toEqual({ x: 120, y: 200, radius: 0 });
+	});
+
 	it("opens the dev pause dot's bloom at the seat, which no finger marks", () => {
-		expect(bloomOrigin("pauseDot", { down: false, x: 0, y: 0 }, SEAT)).toBe(SEAT);
+		expect(bloomOrigin("pauseDot", FIELD_UNTOUCHED, SEAT)).toBe(SEAT);
 	});
 
 	it("grows a finger's portal from the fingertip to the farthest corner from it", () => {

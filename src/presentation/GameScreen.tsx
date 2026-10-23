@@ -172,10 +172,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	// The field is the way into and out of the pause: a finger landing on it is the flow's to
 	// place, and whether it is still down is the bloom's and Get ready's to follow each frame
 	const touch = useSharedValue(FIELD_UNTOUCHED);
-	const handleFieldTouch = useCallback(() => dispatch({ type: "fieldTouched" }), [dispatch]);
-	const handleBloomEnd = useCallback(
-		(end: BloomEnd) => dispatch({ type: end === "covered" ? "bloomCovered" : "bloomCleared" }),
+	const handleFieldTouch = useCallback(
+		(landedAt: number) => dispatch({ type: "fieldTouched", landedAt }),
 		[dispatch],
+	);
+	// A drained bloom hands on when its finger lifted, which a second touch is timed from, and
+	// whether a finger is down again already
+	const handleBloomEnd = useCallback(
+		(end: BloomEnd) => {
+			if (end === "covered") return dispatch({ type: "bloomCovered" });
+			const { liftedAt, down } = touch.get();
+			dispatch({ type: "bloomCleared", liftedAt, relanded: down });
+		},
+		[dispatch, touch],
 	);
 	// Dev only: where touch steers the dot in play, the field cannot pause it, so a corner dot
 	// does, and a drag on the stage moves the dot
@@ -292,7 +301,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					/>
 
 					{screen.kind === "frosting" && (
+						// Keyed on the start, so a second touch's bloom taking over from a drained one
+						// opens afresh under the new finger
 						<BloomOverlay
+							key={screen.start}
 							scene={scene}
 							color={restingColor}
 							start={screen.start}
