@@ -9,7 +9,7 @@ import { PlaySide } from "./components/PlaySide";
 import { FROST_MAX_DIM, FROST_MAX_SIGMA, Room, SceneLayers } from "./components/StageScene";
 import type { Burst } from "./effects/burstFrames";
 import type { PortalCut } from "./hooks/useStageLook";
-import type { StageScene } from "./hooks/useStageScene";
+import { type StageScene, useRoomUniforms } from "./hooks/useStageScene";
 import { recordPicture } from "./recordPicture";
 import { stageCover } from "./room";
 import { drawBursts } from "./sceneDrawer";
@@ -56,7 +56,7 @@ const OPAQUE_CANVAS = Platform.OS !== "android";
  * play side gets it (see FieldTouch), except where touch steers the dot in play.
  */
 export const GameCanvas: React.FC<GameCanvasProps> = ({
-	stage: { room, layers },
+	stage,
 	onLayout,
 	frost,
 	cut,
@@ -66,6 +66,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 	burstClock,
 	onDragDelta,
 }) => {
+	const room = useRoomUniforms(stage);
 	const [frosted, setFrosted] = useState(false);
 	const [fading, setFading] = useState(false);
 	const opaque = cut === null;
@@ -147,7 +148,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 					<Room uniforms={room} />
 					<Group transform={shakeTransform}>
 						<Group layer={scenePaint}>
-							<SceneLayers {...layers} />
+							<SceneLayers {...stage.layers} />
 						</Group>
 						<Picture picture={burstPicture} />
 					</Group>

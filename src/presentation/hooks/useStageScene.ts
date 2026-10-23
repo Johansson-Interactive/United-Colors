@@ -24,10 +24,13 @@ export interface SceneLayerValues {
 	above: SharedValue<SkPicture>;
 }
 
-/** What the stage draws from, the play side and the pause world alike: the room and the scene */
+/** What the stage draws from, the play side and the pause world alike: the light, the wash and the scene */
 export interface StageScene {
-	/** The room shader's uniforms: the light follows the tilt, the wash the accent */
-	room: SharedValue<RoomUniforms>;
+	/** Where the light the room and the dots are lit from is, by tilt axis */
+	lightX: SharedValue<number>;
+	lightY: SharedValue<number>;
+	/** The edge wash's colour, parsed */
+	accentRgb: SharedValue<Float32Array>;
 	layers: SceneLayerValues;
 }
 
@@ -39,7 +42,8 @@ const INK_RGB = Array.from(Skia.Color(INK));
  * pictures, with the wall drops and the liquid body as shader nodes between them. The light the
  * room and the dots are lit from follows the device tilt, and stands still while the run is
  * `frozen` under the pause world or the play side is frosted. The play side and the pause world
- * both draw from these, so the frozen frame is recorded once for both.
+ * both draw from these, so the frozen frame is recorded once for both. It reads no stage box,
+ * so it can run above the stage frame (see useRoomUniforms for what needs it).
  */
 export function useStageScene(
 	scene: SharedValue<Float32Array>,
@@ -47,7 +51,6 @@ export function useStageScene(
 	frost: SharedValue<number>,
 	frozen: boolean,
 ): StageScene {
-	const { width, height } = useStageBox();
 	const tilt = useTilt();
 	const lightX = useSharedValue(0);
 	const lightY = useSharedValue(0);
@@ -70,10 +73,6 @@ export function useStageScene(
 
 	// The accent is parsed only when it changes, not with the light every frame
 	const accentRgb = useDerivedValue(() => Skia.Color(accent.get()));
-	const pixelRatio = PixelRatio.get();
-	const room = useDerivedValue(() =>
-		roomUniforms(width, height, lightX.get(), lightY.get(), INK_RGB, accentRgb.get(), pixelRatio),
-	);
 
 	// Each layer is recorded every frame and so into the same recorder each time (see recordPicture.ts)
 	const [belowRecorder] = useState(() => Skia.PictureRecorder());
@@ -98,7 +97,23 @@ export function useStageScene(
 	const body = useDerivedValue(() => liquidBody(scene.get()));
 
 	return useMemo(
-		() => ({ room, layers: { below, drops, dropGlares, body, above } }),
-		[room, below, drops, dropGlares, body, above],
+		() => ({ lightX, lightY, accentRgb, layers: { below, drops, dropGlares, body, above } }),
+		[lightX, lightY, accentRgb, below, drops, dropGlares, body, above],
+	);
+}
+
+/**
+ * The room shader's uniforms for `stage` (see room.ts): sized to the stage box, so it runs in a
+ * canvas inside the stage frame
+ */
+export function useRoomUniforms({
+	lightX,
+	lightY,
+	accentRgb,
+}: StageScene): SharedValue<RoomUniforms> {
+	const { width, height } = useStageBox();
+	const pixelRatio = PixelRatio.get();
+	return useDerivedValue(() =>
+		roomUniforms(width, height, lightX.get(), lightY.get(), INK_RGB, accentRgb.get(), pixelRatio),
 	);
 }

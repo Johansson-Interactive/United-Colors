@@ -1,7 +1,7 @@
 import { Blur, Canvas, Fill, Group, Paint } from "@shopify/react-native-skia";
 import type React from "react";
 import { StyleSheet } from "react-native";
-import type { StageScene } from "../hooks/useStageScene";
+import { type StageScene, useRoomUniforms } from "../hooks/useStageScene";
 import { INK } from "../theme/theme";
 import { FROST_MAX_DIM, FROST_MAX_SIGMA, Room, SceneLayers } from "./StageScene";
 
@@ -23,12 +23,15 @@ interface PauseWorldProps {
  * in effect a snapshot, with nothing read back from the screen. It is only mounted while the run
  * is not in play, so play pays nothing for it. It takes no touch.
  */
-export const PauseWorld: React.FC<PauseWorldProps> = ({ stage: { room, layers } }) => (
-	<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-		<Room uniforms={room} />
-		<Group layer={FROST}>
-			<SceneLayers {...layers} />
-		</Group>
-		<Fill color={INK} opacity={FROST_MAX_DIM} />
-	</Canvas>
-);
+export const PauseWorld: React.FC<PauseWorldProps> = ({ stage }) => {
+	const room = useRoomUniforms(stage);
+	return (
+		<Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+			<Room uniforms={room} />
+			<Group layer={FROST}>
+				<SceneLayers {...stage.layers} />
+			</Group>
+			<Fill color={INK} opacity={FROST_MAX_DIM} />
+		</Canvas>
+	);
+};
