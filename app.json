@@ -26,7 +26,9 @@
 			},
 			"package": "com.johanssoninteractive.tiltling",
 			"predictiveBackGestureEnabled": false,
-			"permissions": ["android.permission.HIGH_SAMPLING_RATE_SENSORS"],
+			"permissions": [
+				"android.permission.HIGH_SAMPLING_RATE_SENSORS"
+			],
 			"blockedPermissions": [
 				"android.permission.RECORD_AUDIO",
 				"android.permission.ACTIVITY_RECOGNITION"
