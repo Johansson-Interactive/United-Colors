@@ -1,4 +1,5 @@
-import type { Gravity, MotionSample, Vector3 } from "./types";
+import type { Gravity, MotionSample } from "./types";
+import { dot, lengthOf, unit, without } from "./vector3";
 
 /**
  * Telling a swivel the wrist makes from a turn on the spot (ADR 0016). Both turn the phone about
@@ -104,37 +105,21 @@ export interface ArcGauge {
 
 export const ARC_GAUGE_START: ArcGauge = { timeMs: null, rate: 0, restingPush: 0, current: null };
 
-function dot(a: Vector3, b: Vector3): number {
-	return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function length(v: Vector3): number {
-	return Math.sqrt(dot(v, v));
-}
-
 /** How fast the phone turns about the vertical (radians a second), anticlockwise seen from above */
 export function swivelRate(sample: MotionSample): number {
-	const g = sample.gravity;
-	const gLength = length(g);
-	if (gLength === 0) return 0;
-	return -dot(sample.rotationRate, g) / gLength;
+	return -dot(sample.rotationRate, unit(sample.gravity));
 }
 
 /** How hard the hand pushes the phone level, along the floor (metres a second squared) */
 export function levelAcceleration(sample: MotionSample): number {
-	const g = sample.gravity;
-	const a = sample.acceleration;
-	const gSquared = dot(g, g);
-	if (gSquared === 0) return length(a);
-	const along = dot(a, g) / gSquared;
-	return length({ x: a.x - along * g.x, y: a.y - along * g.y, z: a.z - along * g.z });
+	return lengthOf(without(sample.acceleration, unit(sample.gravity)));
 }
 
 /** How far the screen stands from lying flat (radians): 0 flat, face up or down, pi/2 upright */
 export function uprightness(gravity: Gravity): number {
-	const gLength = length(gravity);
-	if (gLength === 0) return 0;
-	return Math.acos(Math.min(1, Math.abs(gravity.z) / gLength));
+	const down = unit(gravity);
+	if (lengthOf(down) === 0) return 0;
+	return Math.acos(Math.min(1, Math.abs(down.z)));
 }
 
 function radiusOf(sums: Sums): number | null {
