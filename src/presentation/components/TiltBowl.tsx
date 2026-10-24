@@ -10,7 +10,7 @@ import Animated, {
 	useSharedValue,
 } from "react-native-reanimated";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM, shade } from "../theme/theme";
-import { leanTowards } from "../tilt/lean";
+import { followLean, type Lean } from "../tilt/lean";
 import { useTilt } from "../tilt/TiltProvider";
 
 /** The dot's shadow on the bowl, dark under it and fading out */
@@ -53,18 +53,16 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, sensitivity =
 	const rim = size / 2;
 	const travel = rim - dotSize / 2 - 6;
 
-	// The bowl's "down", as a tilt; it starts where the tilt is, so the dot starts at rest
-	const leanX = useSharedValue(tilt.x.get());
-	const leanY = useSharedValue(tilt.y.get());
+	const lean = useSharedValue<Lean | null>(null);
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		leanX.set(leanTowards(leanX.get(), tilt.x.get(), dt));
-		leanY.set(leanTowards(leanY.get(), tilt.y.get(), dt));
+		lean.set(followLean(lean.get(), { x: tilt.x.get(), y: tilt.y.get() }, dt));
 	});
 
 	const offset = useDerivedValue((): BowlOffset => {
-		let x = (tilt.x.get() - leanX.get()) * gain;
-		let y = (tilt.y.get() - leanY.get()) * gain;
+		const rolling = lean.get()?.tilt ?? { x: 0, y: 0 };
+		let x = rolling.x * gain;
+		let y = rolling.y * gain;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;

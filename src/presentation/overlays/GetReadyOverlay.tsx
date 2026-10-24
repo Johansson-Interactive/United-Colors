@@ -132,8 +132,9 @@ export const GetReadyOverlay: React.FC<GetReadyOverlayProps> = ({
 	const glassRimRadius = useDerivedValue(() => Math.max(0, frame.get().portal.radius - 1));
 
 	const shadeCentre = useDerivedValue(() => {
-		const { dot } = frame.get();
-		return vec(dot.x + tilt.x.get() * SHADE_TRAIL, dot.y + tilt.y.get() * SHADE_TRAIL + 2);
+		// The shade trails the dot by the tilt that rolls it, the one the cup reads (see lean.ts)
+		const { dot, tilt: rolling } = frame.get();
+		return vec(dot.x + rolling.x * SHADE_TRAIL, dot.y + rolling.y * SHADE_TRAIL + 2);
 	});
 	const shadeOpacity = useDerivedValue(() => {
 		const { dot } = frame.get();

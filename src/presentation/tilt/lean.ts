@@ -1,4 +1,5 @@
-import { SNAP_RAD } from "./smoothTilt";
+import type { TiltAngles } from "../../domain/types";
+import { followTowards } from "./smoothTilt";
 
 /**
  * The lean of a bowl that follows the hand (ADR 0016): the title's bowl and Get ready's cup read
@@ -12,13 +13,26 @@ import { SNAP_RAD } from "./smoothTilt";
  */
 const LEAN_MS = 250;
 
+/** A bowl that follows the hand, as of one frame */
+export interface Lean {
+	/** The bowl's "down", as a tilt: the grip its dot rests in */
+	down: TiltAngles;
+	/** The tilt as the bowl reads it, from its own down: what rolls its dot */
+	tilt: TiltAngles;
+}
+
 /**
- * One axis of a bowl's "down" (radians) after a frame of `dtMs`, followed towards `tilt`; it
- * snaps onto the tilt once the gap is below notice, so a bowl at rest stops changing
+ * The lean after a frame of `dtMs` with the hand at `tilt`. With no lean yet, the bowl starts
+ * leaning to the hand as it is, so its dot starts at rest in whatever grip. A bowl at rest gets
+ * `lean` itself back, so a shared value holding it is not written again.
  */
-export function leanTowards(lean: number, tilt: number, dtMs: number): number {
+export function followLean(lean: Lean | null, tilt: TiltAngles, dtMs: number): Lean {
 	"worklet";
-	const remaining = tilt - lean;
-	if (Math.abs(remaining) < SNAP_RAD) return tilt;
-	return lean + remaining * (1 - Math.exp(-dtMs / LEAN_MS));
+	if (lean === null) return { down: tilt, tilt: { x: 0, y: 0 } };
+	const x = followTowards(lean.down.x, tilt.x, dtMs, LEAN_MS);
+	const y = followTowards(lean.down.y, tilt.y, dtMs, LEAN_MS);
+	const read = { x: tilt.x - x, y: tilt.y - y };
+	const resting =
+		x === lean.down.x && y === lean.down.y && read.x === lean.tilt.x && read.y === lean.tilt.y;
+	return resting ? lean : { down: { x, y }, tilt: read };
 }

@@ -621,6 +621,15 @@ describe("get-ready frame step", () => {
 		expect(regripped[regripped.length - 1].dot.x).toBeCloseTo(seat.x, 0);
 	});
 
+	it("carries the tilt the cup reads, for the dot's shade: none in a steady grip, some as it changes", () => {
+		const opened = openGetReady(seat, field).frame;
+		expect(opened.tilt).toEqual(LEVEL);
+		const steady = play(landing(), TIPPED, 400).frames;
+		for (const f of steady) expect(f.tilt).toEqual(LEVEL);
+		const regripped = play(landing(), DRIFTING, 1000).frames;
+		expect(regripped[regripped.length - 1].tilt.x).toBeCloseTo(TIPPED.x, 1);
+	});
+
 	it("takes whatever grip the finger landed in as level, and fires from it", () => {
 		const { frames } = play(landing(), TIPPED, PLENTY);
 		for (const f of frames) expect(f.dot).toEqual({ x: seat.x, y: seat.y });
