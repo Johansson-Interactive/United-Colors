@@ -7,8 +7,7 @@ import { type MotionPlatform, motionSampleOf } from "./motionSampleOf";
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
  * Reports gravity from the gyroscope-fused rotation (see `gravityFromRotation`), with the
- * gyroscope's rate and the hand's push alongside, the same way round on both platforms (see
- * `motionSampleOf`).
+ * gyroscope's rate alongside, the same way round on both platforms (see `motionSampleOf`).
  * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its gravity would
  * come from the accelerometer alone, which shakes as the hand moves.
  * One native subscription fans out to every listener.

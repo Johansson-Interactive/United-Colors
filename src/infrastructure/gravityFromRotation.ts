@@ -9,8 +9,9 @@ import type { Gravity } from "../domain/types";
  * both describe the same rotation, fused with the gyroscope. The angles wrap screen down and
  * lose an axis upright, but the gravity they describe never does.
  *
- * Alpha, the player turning on the spot, never moves gravity, so it isn't read at all: tilt is
- * gravity alone (ADR 0014).
+ * Alpha, the turn about the room's vertical, never moves gravity, so it isn't read at all. Where
+ * that turn steers, held upright, tilt sums it from the gyroscope's rate instead, free of the
+ * compass's steps (ADR 0016, ADR 0017).
  */
 export function gravityFromRotation(beta: number, gamma: number): Gravity {
 	return {
