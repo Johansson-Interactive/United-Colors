@@ -9,6 +9,7 @@ import {
 	uprightness,
 } from "../../domain/swivelArc";
 import type { Gravity, MotionSample } from "../../domain/types";
+import { trace } from "../fixtures/motion/traces";
 
 const DEG = Math.PI / 180;
 const STILL = { x: 0, y: 0, z: 0 };
@@ -131,6 +132,18 @@ describe("stepArcGauge", () => {
 		const [a] = swivelsOf(at100);
 		const [b] = swivelsOf(at50);
 		expect(b.radius).toBeCloseTo(a.radius ?? 0, 1);
+	});
+
+	it("calls no wrist roll a turn on the spot in a recording from a real phone", () => {
+		// iPhone held upright on a sofa: ten seconds held still, then rolls about the long side,
+		// five steering-sized (38 to 79 degrees end to end) and two big (123 and 167); an eighth
+		// runs on past the recording's end
+		const swivels = swivelsOf(trace("ios-upright-still-and-rolls.json"));
+		expect(swivels).toHaveLength(7);
+		for (const roll of swivels) {
+			expect(roll.decided).toBeNull();
+			expect(roll.radius ?? 0).toBeLessThan(0.08);
+		}
 	});
 
 	it("skips a sample read again at the same moment, as Android resends the last", () => {

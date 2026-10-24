@@ -14,6 +14,11 @@ import type { Gravity, MotionSample, Vector3 } from "./types";
  * that radius, weighted by time so the sample rate doesn't count. Play can't wait for a swivel
  * to end, so the fit is also read as it goes: once it has LEAST_EVIDENCE behind it and reaches
  * BODY_ARC, the swivel is a turn on the spot from then on.
+ *
+ * A hand never holds a phone quite still: held upright on a sofa it pushes it about by 0.1 to
+ * 0.3 m/s^2 with no swivel at all, which against the small lever early in a swivel reads as a
+ * wide arc. So the push the hand gives between swivels is followed too, and only what a swivel
+ * pushes beyond it counts.
  */
 
 /** How fast the phone must turn about the vertical to count as swivelling (radians a second) */
@@ -39,10 +44,13 @@ const BODY_ARC = 0.1;
 
 /**
  * How much of the radius's lever the fit needs behind it (the time integral of its square)
- * before it is read as it goes: the lever at 1 for 50 ms. Before that, a few samples of hand
+ * before it is read as it goes: the lever at 1 for 200 ms. Before that, a few samples of hand
  * shake against a barely moving phone could read as any radius.
  */
-const LEAST_EVIDENCE = 0.05;
+const LEAST_EVIDENCE = 0.2;
+
+/** How long the resting push takes to close all but a third of a change (ms) */
+const RESTING_PUSH_MS = 500;
 
 /** When a swivel was first read as a turn on the spot, as it went */
 interface Decision {
@@ -87,10 +95,12 @@ export interface ArcGauge {
 	timeMs: number | null;
 	/** The swivel rate, smoothed (radians a second) */
 	rate: number;
+	/** The level push the hand gives between swivels, smoothed (metres a second squared) */
+	restingPush: number;
 	current: Sums | null;
 }
 
-export const ARC_GAUGE_START: ArcGauge = { timeMs: null, rate: 0, current: null };
+export const ARC_GAUGE_START: ArcGauge = { timeMs: null, rate: 0, restingPush: 0, current: null };
 
 function dot(a: Vector3, b: Vector3): number {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -164,13 +174,19 @@ export function stepArcGauge(
 	// A sample read at the same moment again (Android resends the last) says nothing new
 	if (gauge.timeMs !== null && dtMs === 0) return { gauge, ended: null };
 	if (gauge.timeMs === null || dtMs < 0 || dtMs > LONGEST_GAP_MS) {
-		const restarted: ArcGauge = { timeMs: sample.timeMs, rate: raw, current: null };
+		const restarted: ArcGauge = {
+			timeMs: sample.timeMs,
+			rate: raw,
+			restingPush: gauge.restingPush,
+			current: null,
+		};
 		return { gauge: restarted, ended: gauge.current ? ended(gauge.current) : null };
 	}
 
 	const rate = gauge.rate + (raw - gauge.rate) * (1 - Math.exp(-dtMs / RATE_SMOOTHING_MS));
 	const angularAcceleration = ((rate - gauge.rate) * 1000) / dtMs;
 	const fast = Math.abs(rate) >= SWIVEL_RATE;
+	const push = levelAcceleration(sample);
 
 	let current = gauge.current;
 	if (!current && fast) {
@@ -184,10 +200,18 @@ export function stepArcGauge(
 			lastFastMs: sample.timeMs,
 		};
 	}
-	if (!current) return { gauge: { timeMs: sample.timeMs, rate, current: null }, ended: null };
+	if (!current) {
+		const resting = gauge.restingPush;
+		const restingPush = resting + (push - resting) * (1 - Math.exp(-dtMs / RESTING_PUSH_MS));
+		return { gauge: { timeMs: sample.timeMs, rate, restingPush, current: null }, ended: null };
+	}
 
+	const { restingPush } = gauge;
 	if (!fast && sample.timeMs - current.lastFastMs >= QUIET_MS) {
-		return { gauge: { timeMs: sample.timeMs, rate, current: null }, ended: ended(current) };
+		return {
+			gauge: { timeMs: sample.timeMs, rate, restingPush, current: null },
+			ended: ended(current),
+		};
 	}
 
 	const dt = dtMs / 1000;
@@ -195,12 +219,12 @@ export function stepArcGauge(
 	const summed: Sums = {
 		turned: current.turned + rate * dt,
 		peakRate: Math.max(current.peakRate, Math.abs(rate)),
-		pushTimesLever: current.pushTimesLever + levelAcceleration(sample) * lever * dt,
+		pushTimesLever: current.pushTimesLever + Math.max(0, push - restingPush) * lever * dt,
 		leverSquared: current.leverSquared + lever * lever * dt,
 		decided: current.decided,
 		startMs: current.startMs,
 		lastFastMs: fast ? sample.timeMs : current.lastFastMs,
 	};
 	const next = { ...summed, decided: decide(summed, sample.timeMs) };
-	return { gauge: { timeMs: sample.timeMs, rate, current: next }, ended: null };
+	return { gauge: { timeMs: sample.timeMs, rate, restingPush, current: next }, ended: null };
 }
