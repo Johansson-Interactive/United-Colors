@@ -3,7 +3,6 @@ import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SensorPort } from "../../application/ports";
 import { glass, shade, TRIO, WHITE, whiteAt } from "../theme/theme";
-import { LeaningBowlPrototype } from "./LeaningBowlPrototype";
 import {
 	EMPTY_RECORDING,
 	type MotionRecording,
@@ -36,14 +35,12 @@ const NO_TAPE: Tape = { on: false, ms: 0, samples: 0 };
  * The motion probe, drawn over the top of the screen in a probe build: the live motion, and each
  * finished swivel with the arc it swung the phone along and whether it was called a turn on the
  * spot. Tap it to clear the list. Each swivel is also logged, for Metro's console. Its rec
- * button records the raw samples, up to LONGEST_RECORDING_MS, for share to send off the phone;
- * its bowl button opens the leaning bowl prototype.
+ * button records the raw samples, up to LONGEST_RECORDING_MS, for share to send off the phone.
  */
 export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 	const insets = useSafeAreaInsets();
 	const probe = useRef<ProbeState>(PROBE_START);
 	const [shown, setShown] = useState<ProbeState>(PROBE_START);
-	const [bowlOpen, setBowlOpen] = useState(false);
 	const recording = useRef<MotionRecording>(EMPTY_RECORDING);
 	const recordingOn = useRef(false);
 	const [tape, setTape] = useState<Tape>(NO_TAPE);
@@ -86,8 +83,6 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 		void Share.share({ message: recordingText(recording.current, Platform.OS) });
 	};
 
-	if (bowlOpen) return <LeaningBowlPrototype sensor={sensor} onClose={() => setBowlOpen(false)} />;
-
 	return (
 		<View
 			pointerEvents="box-none"
@@ -108,9 +103,6 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 							<Text style={styles.live}>share {Math.floor(tape.ms / 1000)} s</Text>
 						</Pressable>
 					)}
-					<Pressable onPress={() => setBowlOpen(true)} style={styles.button}>
-						<Text style={styles.live}>bowl</Text>
-					</Pressable>
 				</View>
 				{shown.swivels.map((swivel) => (
 					<Text key={swivel.endMs} numberOfLines={1} style={styles.swivel}>

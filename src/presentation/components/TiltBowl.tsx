@@ -6,8 +6,11 @@ import Animated, {
 	type SharedValue,
 	useAnimatedStyle,
 	useDerivedValue,
+	useFrameCallback,
+	useSharedValue,
 } from "react-native-reanimated";
 import { BOWL_GLAZE, BOWL_GLAZE_STOPS, BOWL_MARK, BOWL_RIM, shade } from "../theme/theme";
+import { leanTowards } from "../tilt/lean";
 import { useTilt } from "../tilt/TiltProvider";
 
 /** The dot's shadow on the bowl, dark under it and fading out */
@@ -40,7 +43,9 @@ const ROLL_GAIN = 150;
 
 /**
  * A shallow bowl: whatever sits inside rolls with the device tilt, the same way the player
- * dot moves in the game, so the title screen quietly teaches the controls before play.
+ * dot moves in the game, so the title screen quietly teaches the controls before play. It leans
+ * to match the hand (see lean.ts): the dot rolls as the grip changes and glides home once it is
+ * steady, in any grip, before any level pose is taken.
  */
 export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, sensitivity = 1, children }) => {
 	const tilt = useTilt();
@@ -48,9 +53,18 @@ export const TiltBowl: React.FC<TiltBowlProps> = ({ size, dotSize, sensitivity =
 	const rim = size / 2;
 	const travel = rim - dotSize / 2 - 6;
 
+	// The bowl's "down", as a tilt; it starts where the tilt is, so the dot starts at rest
+	const leanX = useSharedValue(tilt.x.get());
+	const leanY = useSharedValue(tilt.y.get());
+	useFrameCallback((info) => {
+		const dt = info.timeSincePreviousFrame ?? 16;
+		leanX.set(leanTowards(leanX.get(), tilt.x.get(), dt));
+		leanY.set(leanTowards(leanY.get(), tilt.y.get(), dt));
+	});
+
 	const offset = useDerivedValue((): BowlOffset => {
-		let x = tilt.x.get() * gain;
-		let y = tilt.y.get() * gain;
+		let x = (tilt.x.get() - leanX.get()) * gain;
+		let y = (tilt.y.get() - leanY.get()) * gain;
 		const d = Math.hypot(x, y);
 		if (d > travel) {
 			x = (x / d) * travel;
