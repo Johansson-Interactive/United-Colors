@@ -7,7 +7,7 @@ import type { MotionSample } from "../../domain/types";
  */
 
 /** The longest recording (ms of sample time); it stops itself there */
-export const LONGEST_RECORDING_MS = 30_000;
+export const LONGEST_RECORDING_MS = 60_000;
 
 /** The columns of each row, in order */
 const COLUMNS = ["t", "gx", "gy", "gz", "rx", "ry", "rz", "ax", "ay", "az"] as const;
