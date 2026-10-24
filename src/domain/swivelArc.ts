@@ -161,7 +161,9 @@ export function stepArcGauge(
 ): { gauge: ArcGauge; ended: Swivel | null } {
 	const raw = swivelRate(sample);
 	const dtMs = gauge.timeMs === null ? 0 : sample.timeMs - gauge.timeMs;
-	if (gauge.timeMs === null || dtMs <= 0 || dtMs > LONGEST_GAP_MS) {
+	// A sample read at the same moment again (Android resends the last) says nothing new
+	if (gauge.timeMs !== null && dtMs === 0) return { gauge, ended: null };
+	if (gauge.timeMs === null || dtMs < 0 || dtMs > LONGEST_GAP_MS) {
 		const restarted: ArcGauge = { timeMs: sample.timeMs, rate: raw, current: null };
 		return { gauge: restarted, ended: gauge.current ? ended(gauge.current) : null };
 	}

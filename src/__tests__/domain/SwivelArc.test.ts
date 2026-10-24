@@ -133,6 +133,12 @@ describe("stepArcGauge", () => {
 		expect(b.radius).toBeCloseTo(a.radius ?? 0, 1);
 	});
 
+	it("skips a sample read again at the same moment, as Android resends the last", () => {
+		const turn = quarterTurn(0.3).flatMap((s) => [s, s]);
+		const [once] = swivelsOf(quarterTurn(0.3));
+		expect(swivelsOf(turn)).toEqual([once]);
+	});
+
 	it("ends a swivel at a gap in the samples, and starts over", () => {
 		const turn = quarterTurn(0.3).slice(0, 60);
 		const after = sample({ gravity: UPRIGHT, timeMs: 5000 });
