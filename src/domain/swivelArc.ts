@@ -37,10 +37,12 @@ const LEAST_TURN = (5 * Math.PI) / 180;
 const LONGEST_GAP_MS = 200;
 
 /**
- * The radius (metres) that marks a turn on the spot. Recorded upright on an iPhone, wrist rolls
- * read 5 to 6 cm and torso turns 13 to 30 cm.
+ * The radius (metres) that marks a turn on the spot, as the fit reads it while a swivel goes on.
+ * Recorded on an iPhone held upright on a sofa (fixtures/motion), wrist rolls never read more
+ * than 7.2 cm at any point, and torso turns read 18 to 30 cm within 30 ms of starting, from the
+ * swing of the body getting under way; 11 cm is the middle of that gap, by ratio.
  */
-const BODY_ARC = 0.1;
+const BODY_ARC = 0.11;
 
 /**
  * How much of the radius's lever the fit needs behind it (the time integral of its square)

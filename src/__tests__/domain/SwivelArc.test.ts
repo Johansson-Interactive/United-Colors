@@ -146,6 +146,20 @@ describe("stepArcGauge", () => {
 		}
 	});
 
+	it("calls each torso turn a turn on the spot as it starts, in a recording from a real phone", () => {
+		// iPhone held upright on a sofa: held still, six torso turns of about 80 degrees, then six
+		// wrist rolls
+		const swivels = swivelsOf(trace("ios-upright-turns-and-rolls.json"));
+		expect(swivels).toHaveLength(12);
+		const turns = swivels.slice(0, 6);
+		const rolls = swivels.slice(6);
+		for (const turn of turns) {
+			expect(turn.decided?.afterMs).toBeLessThanOrEqual(50);
+			expect(turn.decided?.afterTurn).toBeLessThan(3 * DEG);
+		}
+		for (const roll of rolls) expect(roll.decided).toBeNull();
+	});
+
 	it("skips a sample read again at the same moment, as Android resends the last", () => {
 		const turn = quarterTurn(0.3).flatMap((s) => [s, s]);
 		const [once] = swivelsOf(quarterTurn(0.3));
