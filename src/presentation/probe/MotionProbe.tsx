@@ -49,33 +49,50 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 	if (bowlOpen) return <LeaningBowlPrototype sensor={sensor} onClose={() => setBowlOpen(false)} />;
 
 	return (
-		<View pointerEvents="box-none" style={[styles.anchor, { paddingTop: insets.top }]}>
+		<View
+			pointerEvents="box-none"
+			style={[styles.anchor, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+		>
 			<Pressable onPress={clear} style={styles.panel}>
-				<Text style={styles.live}>{describeLive(shown)}</Text>
+				<View style={styles.header}>
+					<Text style={styles.live}>{describeLive(shown)}</Text>
+					<Pressable onPress={() => setBowlOpen(true)} style={styles.bowlButton}>
+						<Text style={styles.live}>bowl</Text>
+					</Pressable>
+				</View>
 				{shown.swivels.map((swivel) => (
-					<Text key={swivel.endMs} style={styles.swivel}>
+					<Text key={swivel.endMs} numberOfLines={1} style={styles.swivel}>
 						{describeSwivel(swivel)}
 					</Text>
 				))}
-			</Pressable>
-			<Pressable onPress={() => setBowlOpen(true)} style={styles.bowlButton}>
-				<Text style={styles.live}>bowl</Text>
 			</Pressable>
 		</View>
 	);
 }
 
 const styles = StyleSheet.create({
-	anchor: { position: "absolute", top: 0, left: 0, right: 0 },
-	panel: { margin: 8, padding: 8, borderRadius: 8, backgroundColor: shade(0.7) },
+	// The whole screen's height, so a long list grows down to its foot and no further
+	anchor: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0 },
+	panel: {
+		flexShrink: 1,
+		overflow: "hidden",
+		margin: 8,
+		padding: 8,
+		borderRadius: 8,
+		backgroundColor: shade(0.7),
+	},
+	header: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		marginBottom: 4,
+	},
 	live: { color: WHITE, fontSize: 12, fontVariant: ["tabular-nums"] },
-	swivel: { color: whiteAt(0.8), fontSize: 12, fontVariant: ["tabular-nums"] },
+	swivel: { color: whiteAt(0.8), fontSize: 11, lineHeight: 15, fontVariant: ["tabular-nums"] },
 	bowlButton: {
-		alignSelf: "flex-end",
-		marginRight: 8,
-		paddingHorizontal: 16,
-		paddingVertical: 10,
-		borderRadius: 20,
+		paddingHorizontal: 14,
+		paddingVertical: 8,
+		borderRadius: 16,
 		backgroundColor: glass(0.15),
 	},
 });

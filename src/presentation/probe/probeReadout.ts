@@ -14,8 +14,8 @@ import type { MotionSample } from "../../domain/types";
  * (ADR 0016). Shipped builds never show it.
  */
 
-/** How many finished swivels the readout keeps, latest first */
-const KEPT_SWIVELS = 8;
+/** How many finished swivels the readout keeps, latest first: about a screenful */
+const KEPT_SWIVELS = 40;
 
 const DEGREES = 180 / Math.PI;
 
