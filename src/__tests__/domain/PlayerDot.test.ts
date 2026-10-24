@@ -1,9 +1,10 @@
-import { PlayerDot } from "../../domain/entities/PlayerDot";
+import { PlayerDot, shapeTilt } from "../../domain/entities/PlayerDot";
 
 const STEP_MS = 100;
 const SCREEN = { width: 800, height: 600 };
+const DEG = Math.PI / 180;
 /** The most tilt the dot moves by (radians, 20 degrees); see shapeTilt */
-const TOP_TILT = (20 * Math.PI) / 180;
+const TOP_TILT = 20 * DEG;
 
 describe("PlayerDot", () => {
 	it("starts at given position", () => {
@@ -128,5 +129,25 @@ describe("PlayerDot", () => {
 		expect(player.x).toBe(25); // halfSize = 25, clamped left
 		player.applyMovementDelta(0, 1000, SCREEN);
 		expect(player.y).toBe(575); // 600 - 25, clamped bottom
+	});
+});
+
+describe("shapeTilt", () => {
+	it("rests inside the dead zone", () => {
+		expect(shapeTilt({ x: 0.9 * DEG, y: 0 })).toEqual({ x: 0, y: 0 });
+	});
+
+	it("eases in from the dead zone, then moves as the tilt says", () => {
+		const easing = shapeTilt({ x: 2 * DEG, y: 0 }).x;
+		expect(easing).toBeGreaterThan(0);
+		expect(easing).toBeLessThan(2 * DEG);
+		expect(shapeTilt({ x: 10 * DEG, y: 0 }).x).toBeCloseTo(10 * DEG);
+		expect(shapeTilt({ x: -10 * DEG, y: 0 }).x).toBeCloseTo(-10 * DEG);
+	});
+
+	it("goes no faster past the top tilt, diagonals included", () => {
+		expect(shapeTilt({ x: 0, y: 40 * DEG }).y).toBeCloseTo(20 * DEG);
+		const diagonal = shapeTilt({ x: 30 * DEG, y: 30 * DEG });
+		expect(Math.hypot(diagonal.x, diagonal.y)).toBeCloseTo(20 * DEG);
 	});
 });

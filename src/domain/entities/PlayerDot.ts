@@ -1,7 +1,21 @@
 import { holdInside } from "../arena";
-import { shapeTilt } from "../tilt";
-import type { ScreenSize } from "../types";
+import { PLAYER_DEAD_ZONE_RAD, PLAYER_FULL_TILT_FROM_RAD, PLAYER_TOP_TILT_RAD } from "../constants";
+import { smoothstep } from "../smoothstep";
+import type { ScreenSize, TiltAngles } from "../types";
 import { Dot } from "./Dot";
+
+/**
+ * The tilt the player moves by: none inside the dead zone, easing in up to
+ * PLAYER_FULL_TILT_FROM_RAD, as it is from there, and no more than PLAYER_TOP_TILT_RAD in any
+ * direction, so a diagonal is no faster than straight
+ */
+export function shapeTilt(tilt: TiltAngles): TiltAngles {
+	const size = Math.hypot(tilt.x, tilt.y);
+	if (size <= PLAYER_DEAD_ZONE_RAD) return { x: 0, y: 0 };
+	const ease = smoothstep(PLAYER_DEAD_ZONE_RAD, PLAYER_FULL_TILT_FROM_RAD, size);
+	const shaped = Math.min(PLAYER_TOP_TILT_RAD, size * ease);
+	return { x: (tilt.x * shaped) / size, y: (tilt.y * shaped) / size };
+}
 
 /**
  * The player-controlled dot. Movement via gyro (orientation) or direct touch (pixel delta).

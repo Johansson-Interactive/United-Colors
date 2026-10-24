@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
 	FLAT_GRAVITY,
 	gravityAt,
-	shapeTilt,
 	stepTilt,
 	swivelRate,
 	TILT_START,
@@ -183,25 +182,5 @@ describe("uprightness", () => {
 		expect(uprightness(OVERHEAD)).toBe(0);
 		expect(uprightness({ x: 0, y: -1, z: 0 })).toBeCloseTo(90 * DEG);
 		expect(uprightness({ x: 0, y: -1, z: -1 })).toBeCloseTo(45 * DEG);
-	});
-});
-
-describe("shapeTilt", () => {
-	it("rests inside the dead zone", () => {
-		expect(shapeTilt({ x: 0.9 * DEG, y: 0 })).toEqual({ x: 0, y: 0 });
-	});
-
-	it("eases in from the dead zone, then moves as the tilt says", () => {
-		const easing = shapeTilt({ x: 2 * DEG, y: 0 }).x;
-		expect(easing).toBeGreaterThan(0);
-		expect(easing).toBeLessThan(2 * DEG);
-		expect(shapeTilt({ x: 10 * DEG, y: 0 }).x).toBeCloseTo(10 * DEG);
-		expect(shapeTilt({ x: -10 * DEG, y: 0 }).x).toBeCloseTo(-10 * DEG);
-	});
-
-	it("goes no faster past the top tilt, diagonals included", () => {
-		expect(shapeTilt({ x: 0, y: 40 * DEG }).y).toBeCloseTo(20 * DEG);
-		const diagonal = shapeTilt({ x: 30 * DEG, y: 30 * DEG });
-		expect(Math.hypot(diagonal.x, diagonal.y)).toBeCloseTo(20 * DEG);
 	});
 });
