@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	ARC_GAUGE_START,
+	isTurnOnTheSpot,
 	levelAcceleration,
 	type Swivel,
 	stepArcGauge,
@@ -108,6 +109,28 @@ describe("stepArcGauge", () => {
 			sample({ rotationRate: { x: 0, y: 0, z: 0.2 * Math.sin(i) }, timeMs: i * 10 }),
 		);
 		expect(swivelsOf(shake)).toEqual([]);
+	});
+
+	it("reads a turn on the spot as one early in the turn, and keeps that reading", () => {
+		const [turn] = swivelsOf(quarterTurn(0.3));
+		expect(turn.decided).not.toBeNull();
+		expect(turn.decided?.afterTurn).toBeLessThan(15 * DEG);
+	});
+
+	it("never reads a wrist roll as a turn on the spot", () => {
+		let gauge = ARC_GAUGE_START;
+		for (const s of quarterTurn(0.03, 0.4)) {
+			gauge = stepArcGauge(gauge, s).gauge;
+			expect(isTurnOnTheSpot(gauge)).toBe(false);
+		}
+	});
+
+	it("reads the same radius at any sample rate", () => {
+		const at100 = quarterTurn(0.3);
+		const at50 = at100.filter((_, i) => i % 2 === 0);
+		const [a] = swivelsOf(at100);
+		const [b] = swivelsOf(at50);
+		expect(b.radius).toBeCloseTo(a.radius ?? 0, 1);
 	});
 
 	it("ends a swivel at a gap in the samples, and starts over", () => {

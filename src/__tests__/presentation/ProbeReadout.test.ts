@@ -43,7 +43,7 @@ describe("motion probe", () => {
 		const state = played([...turn(0, 3), ...turn(2000, -2)]);
 		expect(state.swivels.map((s) => Math.sign(s.turned))).toEqual([-1, 1]);
 		expect(describeSwivel(state.swivels[1])).toMatch(
-			/^arc \d+ cm {2}turned 90° {2}peak 172°\/s {2}\d+ ms$/,
+			/^(turn @ \d+ ms \d+°|roll) {2}arc \d+ cm {2}turned 90° {2}peak 172°\/s {2}\d+ ms$/,
 		);
 		expect(clearProbe(state).swivels).toEqual([]);
 	});

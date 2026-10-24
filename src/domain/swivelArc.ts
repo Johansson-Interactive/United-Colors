@@ -11,7 +11,9 @@ import type { Gravity, MotionSample, Vector3 } from "./types";
  *
  * The gauge follows the swivel sample by sample and sums each swivel, from the moment it turns
  * faster than SWIVEL_RATE until it has been slower for QUIET_MS, into a least-squares fit of
- * that radius.
+ * that radius, weighted by time so the sample rate doesn't count. Play can't wait for a swivel
+ * to end, so the fit is also read as it goes: once it has LEAST_EVIDENCE behind it and reaches
+ * BODY_ARC, the swivel is a turn on the spot from then on.
  */
 
 /** How fast the phone must turn about the vertical to count as swivelling (radians a second) */
@@ -29,6 +31,27 @@ const LEAST_TURN = (5 * Math.PI) / 180;
 /** A gap in the samples longer than this (ms) starts the gauge over, as after a pause */
 const LONGEST_GAP_MS = 200;
 
+/**
+ * The radius (metres) that marks a turn on the spot. Recorded upright on an iPhone, wrist rolls
+ * read 5 to 6 cm and torso turns 13 to 30 cm.
+ */
+export const BODY_ARC = 0.1;
+
+/**
+ * How much of the radius's lever the fit needs behind it (the time integral of its square)
+ * before it is read as it goes: the lever at 1 for 50 ms. Before that, a few samples of hand
+ * shake against a barely moving phone could read as any radius.
+ */
+const LEAST_EVIDENCE = 0.05;
+
+/** When a swivel was first read as a turn on the spot, as it went */
+export interface Decision {
+	/** How long after the swivel began (ms) */
+	afterMs: number;
+	/** How far it had turned by then (radians, unsigned) */
+	afterTurn: number;
+}
+
 /** One swivel from start to end, as the gauge measured it */
 export interface Swivel {
 	/** How far it turned about the vertical (radians), anticlockwise seen from above */
@@ -40,16 +63,19 @@ export interface Swivel {
 	durationMs: number;
 	/** When it last turned fast enough to count (ms, on the samples' clock) */
 	endMs: number;
+	/** When it was first read as a turn on the spot; null if it never was */
+	decided: Decision | null;
 }
 
 /** The swivel under way: its sums so far */
 interface Sums {
 	turned: number;
 	peakRate: number;
-	/** Sum of level acceleration times the radius's lever, sqrt(w^4 + a^2) */
+	/** Time integral of level acceleration times the radius's lever, sqrt(w^4 + a^2) */
 	pushTimesLever: number;
-	/** Sum of the lever squared */
+	/** Time integral of the lever squared */
 	leverSquared: number;
+	decided: Decision | null;
 	startMs: number;
 	/** When it last turned faster than SWIVEL_RATE */
 	lastFastMs: number;
@@ -99,15 +125,33 @@ export function uprightness(gravity: Gravity): number {
 	return Math.acos(Math.min(1, Math.abs(gravity.z) / gLength));
 }
 
+function radiusOf(sums: Sums): number | null {
+	return sums.leverSquared > 0 ? sums.pushTimesLever / sums.leverSquared : null;
+}
+
 function ended(sums: Sums): Swivel | null {
 	if (Math.abs(sums.turned) < LEAST_TURN) return null;
 	return {
 		turned: sums.turned,
 		peakRate: sums.peakRate,
-		radius: sums.leverSquared > 0 ? sums.pushTimesLever / sums.leverSquared : null,
+		radius: radiusOf(sums),
 		durationMs: sums.lastFastMs - sums.startMs,
 		endMs: sums.lastFastMs,
+		decided: sums.decided,
 	};
+}
+
+/** Whether the swivel under way reads as a turn on the spot, as far as it has gone */
+export function isTurnOnTheSpot(gauge: ArcGauge): boolean {
+	return gauge.current?.decided != null;
+}
+
+/** The decision on a swivel so far: kept once made, else made now if the fit says so */
+function decide(sums: Sums, nowMs: number): Decision | null {
+	if (sums.decided) return sums.decided;
+	const radius = radiusOf(sums);
+	if (sums.leverSquared < LEAST_EVIDENCE || radius === null || radius < BODY_ARC) return null;
+	return { afterMs: nowMs - sums.startMs, afterTurn: Math.abs(sums.turned) };
 }
 
 /** The gauge after one more sample, and the swivel that sample ended, if any */
@@ -133,6 +177,7 @@ export function stepArcGauge(
 			peakRate: 0,
 			pushTimesLever: 0,
 			leverSquared: 0,
+			decided: null,
 			startMs: sample.timeMs,
 			lastFastMs: sample.timeMs,
 		};
@@ -143,14 +188,17 @@ export function stepArcGauge(
 		return { gauge: { timeMs: sample.timeMs, rate, current: null }, ended: ended(current) };
 	}
 
+	const dt = dtMs / 1000;
 	const lever = Math.sqrt(rate ** 4 + angularAcceleration ** 2);
-	const next: Sums = {
-		turned: current.turned + (rate * dtMs) / 1000,
+	const summed: Sums = {
+		turned: current.turned + rate * dt,
 		peakRate: Math.max(current.peakRate, Math.abs(rate)),
-		pushTimesLever: current.pushTimesLever + levelAcceleration(sample) * lever,
-		leverSquared: current.leverSquared + lever * lever,
+		pushTimesLever: current.pushTimesLever + levelAcceleration(sample) * lever * dt,
+		leverSquared: current.leverSquared + lever * lever * dt,
+		decided: current.decided,
 		startMs: current.startMs,
 		lastFastMs: fast ? sample.timeMs : current.lastFastMs,
 	};
+	const next = { ...summed, decided: decide(summed, sample.timeMs) };
 	return { gauge: { timeMs: sample.timeMs, rate, current: next }, ended: null };
 }

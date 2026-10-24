@@ -63,7 +63,11 @@ export function describeSwivel(swivel: Swivel): string {
 	const arc = swivel.radius === null ? "arc ?" : `arc ${Math.round(swivel.radius * 100)} cm`;
 	const turned = Math.round(swivel.turned * DEGREES);
 	const peak = Math.round(swivel.peakRate * DEGREES);
-	return `${arc}  turned ${turned}°  peak ${peak}°/s  ${Math.round(swivel.durationMs)} ms`;
+	const { decided } = swivel;
+	const call = decided
+		? `turn @ ${Math.round(decided.afterMs)} ms ${Math.round(decided.afterTurn * DEGREES)}°`
+		: "roll";
+	return `${call}  ${arc}  turned ${turned}°  peak ${peak}°/s  ${Math.round(swivel.durationMs)} ms`;
 }
 
 /** The live part of the readout */
