@@ -75,8 +75,8 @@ const sensor = BENCH
 			)
 		: new DeviceMotionAdapter(Platform.OS === "ios" ? "ios" : "android");
 
-/** The tilt from the level pose in use, read once per sample for the interface and the game */
-const tiltSource = new TiltSource(sensor, store);
+/** The tilt from the level pose, read once per sample for the interface and the game */
+const tiltSource = new TiltSource(sensor);
 
 const audio = new AudioService(
 	{

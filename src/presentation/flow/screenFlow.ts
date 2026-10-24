@@ -1,12 +1,13 @@
 /**
- * Pure state machine behind the screens: the title, the settle bowl, the pause, the speed
- * view, Get ready and the game over, and the floods between them. A flood is a dot growing from
- * under the finger until it covers the screen; the scene changes underneath, then it lifts. A
- * first game starts by setting the level pose; the settled dot then floods into play. Setting it
- * again from the title or the pause only saves it and returns there. While a flood is on its way
+ * Pure state machine behind the screens: the title, the pause, the speed view, Get ready and the
+ * game over, and the floods between them. A flood is a dot growing from under the finger until
+ * it covers the screen; the scene changes underneath, then it lifts. While a flood is on its way
  * the screen under it is already decided, so taps on that screen are ignored. The game's phase
- * comes in as an event too, and every step answers with the one screen to show. While the bowl
- * or the speed view is open over the title the kiosk halts.
+ * comes in as an event too, and every step answers with the one screen to show. While the speed
+ * view is open over the title the kiosk halts.
+ *
+ * The level pose is taken wherever the phone is held as a run is started and as Get ready ends
+ * (ADR 0016), so whatever grip the player is in is level.
  *
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
  * field in play freezes the game at once and opens a portal into the pause under it; the
@@ -19,25 +20,16 @@
  * shuts the cup and the pause screen comes back.
  */
 
-import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
+import type { GamePhase } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import { INK_LIFT } from "../theme/theme";
 import { type BloomStart, SECOND_TOUCH_MS } from "../touch/bloom";
 
-/** Where the settle bowl was opened from, which decides where play continues afterwards */
-type SettleFrom = "start" | "pause" | "menu";
-
 /**
- * Where the level bowl or the speed view was opened from: the title's menu, with the colour the
- * play dot showed at the tap, or the pause, whose views open in the player's colour
+ * Where the speed view was opened from: the title's menu, with the colour the play dot showed
+ * at the tap, or the pause, whose views open in the player's colour
  */
 export type MenuOpening = { from: "menu"; color: string } | { from: "pause" };
-
-/** The settle bowl is open: where play continues afterwards, and the colour of its dot */
-interface SettleRequest {
-	from: SettleFrom;
-	color: string;
-}
 
 /**
  * A screen in place of the title's or the pause's own: the speed view, opened from either, its
@@ -49,7 +41,6 @@ type Over = { kind: "speed"; from: MenuOpening["from"]; color: string } | { kind
 export interface FlowState {
 	/** The game's phase, as the session last reported it */
 	phase: GamePhase;
-	settle: SettleRequest | null;
 	over: Over | null;
 	/** A flood is growing towards covering the screen */
 	flooding: boolean;
@@ -71,9 +62,9 @@ export interface FlowState {
 }
 
 /** The flow's own screen state, which a flood's cover clears; the rest it follows from outside */
-type ScreenState = Pick<FlowState, "settle" | "over" | "flooding" | "bloom">;
+type ScreenState = Pick<FlowState, "over" | "flooding" | "bloom">;
 
-const NO_SCREEN: ScreenState = { settle: null, over: null, flooding: false, bloom: null };
+const NO_SCREEN: ScreenState = { over: null, flooding: false, bloom: null };
 
 export const INITIAL_FLOW: FlowState = {
 	...NO_SCREEN,
@@ -95,7 +86,6 @@ export type Screen =
 	| { kind: "pause" }
 	| { kind: "speed"; color: string }
 	| { kind: "getReady" }
-	| { kind: "settle"; color: string }
 	| { kind: "gameOver" };
 
 /**
@@ -103,8 +93,6 @@ export type Screen =
  * knows; the rest is asked for here.
  */
 export interface GameFacts {
-	/** A level pose is set, so PLAY needs no bowl first */
-	levelPoseSet: boolean;
 	/** There is tilt to hold level with, so a touch on the pause goes through Get ready */
 	tiltPresent: boolean;
 	/** The player's colour, which play from the pause or the game over keeps */
@@ -113,21 +101,16 @@ export interface GameFacts {
 
 /**
  * The taps carry what the tap itself knows: where it landed, and on the title the colour the play
- * dot showed, which the run, the bowl's dot or the speed view's dot takes
+ * dot showed, which the run or the speed view's dot takes
  */
 export type FlowEvent =
 	/** PLAY on the title */
 	| { type: "startPressed"; color: string; at: PressPoint }
 	/**
-	 * Not a tap: the bench run starts itself (see useAutoStart), straight into play with no bowl
-	 * whether a level pose is set or not
+	 * Not a tap: the bench run starts itself (see useAutoStart), steered by its scripted tilt
+	 * from flat, so it takes no level pose
 	 */
 	| { type: "autoStarted"; color: string; at: PressPoint }
-	/** The level button on the title or the pause; from the pause the bowl's dot is the player's colour */
-	| ({ type: "levelPressed" } & MenuOpening)
-	/** The bowl's dot came to rest at `at`, with the screen facing up or down */
-	| { type: "settled"; pose: Gravity; side: PoseSide; at: PressPoint }
-	| { type: "settleBacked" }
 	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
 	| ({ type: "speedPressed" } & MenuOpening)
 	/** BACK on the speed view */
@@ -183,8 +166,8 @@ export interface FlowStep {
 	state: FlowState;
 	/** The screen to show for `state` */
 	screen: Screen;
-	/** Adopt this pose as level for the side it was set on */
-	calibrate?: { pose: Gravity; side: PoseSide };
+	/** Take the level pose where the phone is held now */
+	takeLevelPose?: true;
 	/** Do this to the game now */
 	act?: FlowAction;
 	/** Grow a dot of `color` from `at`; run `action` once it covers the screen */
@@ -196,33 +179,30 @@ const RESUME: FlowAction = { kind: "resume" };
 const PAUSE: FlowAction = { kind: "pause" };
 
 /**
- * Over the title the drifting dots would pull the eye from the bowl's one dot, so the kiosk
- * halts while the bowl or the speed view is open; the pause already holds a frozen game. A game started from the bowl
- * replaces the kiosk under its flood, so only closing the bowl back to the title runs it again.
+ * Over the title the drifting dots would pull the eye from the speed view's one dot, so the
+ * kiosk halts while it is open; the pause already holds a frozen game
  */
 const HALT_KIOSK: FlowAction = { kind: "haltKiosk" };
 const RUN_KIOSK: FlowAction = { kind: "runKiosk" };
 
 /**
- * The screen for a phase and the flow over it. The bowl and the speed view open over the
- * screen they were opened from, and Get ready over the pause; anywhere else they cannot be
+ * The screen for a phase and the flow over it. The speed view opens over the screen it was
+ * opened from, and Get ready over the pause; anywhere else they cannot be
  * open, and the phase's own screen shows. A flood leaves the screen under it as it is until it
  * covers. The bloom keeps the HUD up over the run it is freezing, so the pause screen opens
  * only once the portal has covered the field, and a run's end keeps it up until the last of
  * its score slivers has arrived, so the game over opens on the score complete.
  */
 export function screenOf(state: FlowState): Screen {
-	const { phase, settle, over, bloom, sliversInAir } = state;
+	const { phase, over, bloom, sliversInAir } = state;
 	if (bloom && (phase === "RUNNING" || phase === "PAUSED"))
 		return { kind: "frosting", start: bloom };
 	switch (phase) {
 		case "KIOSK":
-			if (settle && settle.from !== "pause") return { kind: "settle", color: settle.color };
 			return over?.kind === "speed" && over.from === "menu"
 				? { kind: "speed", color: over.color }
 				: { kind: "title" };
 		case "PAUSED":
-			if (settle?.from === "pause") return { kind: "settle", color: settle.color };
 			if (over?.kind === "getReady") return over;
 			return over?.kind === "speed" && over.from === "pause"
 				? { kind: "speed", color: over.color }
@@ -290,11 +270,9 @@ const touchStart = (state: FlowState, landedAt: number): BloomStart =>
 /** Whether `phase` has a run the bloom can be frosting: in play, or frozen by it */
 const bloomable = (phase: GamePhase) => phase === "RUNNING" || phase === "PAUSED";
 
-/** The colour the bowl or the speed view opens in: the play dot's on the title, the player's on the pause */
-const openingColor = (
-	event: Extract<FlowEvent, { type: "levelPressed" | "speedPressed" }>,
-	game: GameFacts,
-) => (event.from === "menu" ? event.color : game.playerColor);
+/** The colour the speed view opens in: the play dot's on the title, the player's on the pause */
+const openingColor = (event: Extract<FlowEvent, { type: "speedPressed" }>, game: GameFacts) =>
+	event.from === "menu" ? event.color : game.playerColor;
 
 /** Step `event`, with `game` answering what the tap does not carry */
 export function stepFlow(state: FlowState, event: FlowEvent, game: GameFacts): FlowStep {
@@ -332,36 +310,13 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	if (!gettingReady && !blooming && HOLD_EVENTS.has(event.type)) return { state };
 	switch (event.type) {
 		case "startPressed":
-			return game.levelPoseSet
-				? startFlood(state, { color: event.color, at: event.at, action: play(event.color) })
-				: { state: { ...state, settle: { from: "start", color: event.color } }, act: HALT_KIOSK };
+			// The grip the player presses PLAY in is the one they play in
+			return {
+				...startFlood(state, { color: event.color, at: event.at, action: play(event.color) }),
+				takeLevelPose: true,
+			};
 		case "autoStarted":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
-		case "levelPressed":
-			return {
-				state: { ...state, settle: { from: event.from, color: openingColor(event, game) } },
-				...(event.from === "menu" && { act: HALT_KIOSK }),
-			};
-		case "settled": {
-			const settle = state.settle;
-			if (!settle) return { state };
-			const written = { calibrate: { pose: event.pose, side: event.side } };
-			// From the title the pose is only saved; the title comes straight back
-			if (settle.from === "menu") {
-				return { state: { ...state, settle: null }, ...written, act: RUN_KIOSK };
-			}
-			// From the pause too: the pause screen comes back, so play never picks up unannounced;
-			// the play dot then leads through Get ready as usual
-			if (settle.from === "pause") return { state: { ...state, settle: null }, ...written };
-			// The bowl stays under the flood until it has covered the screen
-			const flood = { color: settle.color, at: event.at, action: play(settle.color) };
-			return { ...startFlood(state, flood), ...written };
-		}
-		case "settleBacked":
-			return {
-				state: { ...state, settle: null },
-				...(state.settle && state.settle.from !== "pause" && { act: RUN_KIOSK }),
-			};
 		case "speedPressed":
 			return {
 				state: {
@@ -375,11 +330,14 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			return { ...closeOver(state), ...(fromMenu && { act: RUN_KIOSK }) };
 		}
 		case "retryPressed":
-			return startFlood(state, {
-				color: game.playerColor,
-				at: event.at,
-				action: play(game.playerColor),
-			});
+			return {
+				...startFlood(state, {
+					color: game.playerColor,
+					at: event.at,
+					action: play(game.playerColor),
+				}),
+				takeLevelPose: true,
+			};
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "startKiosk" } });
 		case "fieldTouched": {
@@ -416,8 +374,9 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			if (blooming) return { state: endBloom(state) };
 			return state.phase === "RUNNING" ? { state, act: PAUSE } : { state };
 		case "readyHeld":
-			// The hold is the countdown; play picks up the moment the portal clears the field, no flood
-			return { ...closeOver(state), act: RESUME };
+			// The hold is the countdown; play picks up the moment the portal clears the field, no
+			// flood, from the grip the cup's dot settled home in
+			return { ...closeOver(state), act: RESUME, takeLevelPose: true };
 		case "readyShut":
 			return closeOver(state);
 		case "covered":

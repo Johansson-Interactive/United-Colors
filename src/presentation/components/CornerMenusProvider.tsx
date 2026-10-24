@@ -18,8 +18,6 @@ interface CornerMenus {
 	toggleMusic: () => void;
 	/** Tilt sensitivity, a multiple of the default speed */
 	sensitivity: number;
-	/** Open the settle bowl to set the level pose */
-	openLevel: (opening: MenuOpening) => void;
 	/** Open the speed view to choose how fast the dot moves */
 	openSpeed: (opening: MenuOpening) => void;
 }
@@ -31,7 +29,6 @@ interface CornerMenusProviderProps {
 	storage: StoragePort;
 	/** The tilt sensitivity, from useSensitivitySetting, which also binds it to the session */
 	sensitivity: number;
-	onLevel: (opening: MenuOpening) => void;
 	onSpeed: (opening: MenuOpening) => void;
 	children: React.ReactNode;
 }
@@ -41,7 +38,6 @@ export const CornerMenusProvider: React.FC<CornerMenusProviderProps> = ({
 	store,
 	storage,
 	sensitivity,
-	onLevel,
 	onSpeed,
 	children,
 }) => {
@@ -57,18 +53,9 @@ export const CornerMenusProvider: React.FC<CornerMenusProviderProps> = ({
 			toggleSound: handleToggleSound,
 			toggleMusic: handleToggleMusic,
 			sensitivity,
-			openLevel: onLevel,
 			openSpeed: onSpeed,
 		}),
-		[
-			soundEnabled,
-			musicEnabled,
-			handleToggleSound,
-			handleToggleMusic,
-			sensitivity,
-			onLevel,
-			onSpeed,
-		],
+		[soundEnabled, musicEnabled, handleToggleSound, handleToggleMusic, sensitivity, onSpeed],
 	);
 	return <CornerMenusContext value={value}>{children}</CornerMenusContext>;
 };

@@ -6,7 +6,7 @@
 
 import { createStore } from "zustand/vanilla";
 import type { GameStore } from "../../application/GameStore";
-import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
+import type { GamePhase } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import {
 	type FlowAction,
@@ -37,8 +37,8 @@ export interface GameControls {
 	runKiosk: () => void;
 	/** Grow a dot of `color` from `at` until it covers the screen, then call `onCovered` */
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
-	/** Adopt `pose` as the level pose on `side` */
-	calibrate: (pose: Gravity, side: PoseSide) => void;
+	/** Take the level pose where the phone is held now */
+	takeLevelPose: () => void;
 	/** The game's answers to what the flow asks, as they stand at this moment */
 	facts: () => GameFacts;
 }
@@ -52,7 +52,7 @@ function perform(controls: GameControls, action: FlowAction) {
 export interface FlowStoreState {
 	/** The screen to show */
 	screen: Screen;
-	/** Step a tap, then carry out what the step asks: calibrate, act, flood */
+	/** Step a tap, then carry out what the step asks: take the level pose, act, flood */
 	dispatch: (event: FlowEvent) => void;
 }
 
@@ -77,7 +77,7 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
-		if (step.calibrate) controls.calibrate(step.calibrate.pose, step.calibrate.side);
+		if (step.takeLevelPose) controls.takeLevelPose();
 		if (step.act) perform(controls, step.act);
 		if (step.flood) {
 			const { color, at, action } = step.flood;

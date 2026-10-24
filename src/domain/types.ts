@@ -26,27 +26,13 @@ export interface MotionSample {
 }
 
 /**
- * How far the phone is tipped from a level pose (radians): `x` turns its right edge away from
- * the player's eyes, `y` its top edge towards them (see levelPose.ts)
+ * How far the phone is tipped from the level pose (radians): `x` turns its right edge away from
+ * the player's eyes, `y` its top edge towards them (see tilt.ts)
  */
 export interface TiltAngles {
 	x: number;
 	y: number;
 }
-
-/**
- * Which of the two level poses: `up`, held screen up, or `down`, turned over (lying back, phone
- * overhead). Set on your side, a pose is still one of these two.
- */
-export type PoseSide = "up" | "down";
-
-/**
- * The level poses the player has set, each as the gravity it reads; tilt is measured from
- * them, so the dot rests wherever the phone is comfortably held rather than flat on a table.
- * Null until set, which reads flat. Whichever pose the phone is nearer is the one in use (see
- * levelTilt).
- */
-export type SavedLevelPoses = Readonly<Record<PoseSide, Gravity | null>>;
 
 /** Persisted user settings */
 export interface GameSettings {
@@ -58,7 +44,6 @@ export interface GameSettings {
 	 * TILT_SENSITIVITY_MIN / MAX
 	 */
 	tiltSensitivity: number;
-	levelPoses: SavedLevelPoses;
 }
 
 /** The player's own dot, a small drifting dot, or a point dot to collect */

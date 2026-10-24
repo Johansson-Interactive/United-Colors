@@ -96,8 +96,8 @@ export const COMBO_WINDOW_TICKS = 16;
 export const PLAYER_DOT_SIZE_RATIO = 0.125;
 
 /**
- * Player speed in px/s per degree of tilt at the default sensitivity. Speed follows tilt
- * linearly with no threshold.
+ * Player speed in px/s per degree of tilt at the default sensitivity, between the dead zone and
+ * the top tilt (see shapeTilt)
  */
 export const PLAYER_SPEED_PER_DEGREE = 40;
 
@@ -147,5 +147,4 @@ export const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
 	tiltSensitivity: 1,
-	levelPoses: { up: null, down: null },
 };

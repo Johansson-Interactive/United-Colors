@@ -1,5 +1,5 @@
-import { gravityTilt } from "../../domain/levelPose";
 import { gravityFromRotation } from "../../infrastructure/gravityFromRotation";
+import { tiltFrom } from "../fixtures/tiltFrom";
 
 /** `angle` wrapped into [-pi, pi], as the sensor reports it */
 function wrapped(angle: number): number {
@@ -33,7 +33,7 @@ describe("gravityFromRotation", () => {
 		for (let beta = 80; beta <= 90; beta++) samples.push([beta * DEG, gamma]);
 		for (let beta = 89; beta >= 80; beta--) samples.push([beta * DEG, wrapped(gamma + Math.PI)]);
 		const pose = gravityFromRotation(...samples[0]);
-		const tilts = samples.map((s) => gravityTilt(gravityFromRotation(...s), pose, "up"));
+		const tilts = samples.map((s) => tiltFrom(gravityFromRotation(...s), pose));
 		for (let i = 1; i < tilts.length; i++) {
 			const step = Math.hypot(tilts[i].x - tilts[i - 1].x, tilts[i].y - tilts[i - 1].y);
 			expect(step).toBeLessThan(1.5 * DEG);

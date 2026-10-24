@@ -1,27 +1,17 @@
-import { createGameStore } from "../../application/GameStore";
-import type { SensorPort, StoragePort } from "../../application/ports";
+import { describe, expect, it } from "vitest";
+import type { SensorPort } from "../../application/ports";
 import { type TiltReading, TiltSource } from "../../application/TiltSource";
-import { calibrateTilt } from "../../application/useCases/CalibrateTilt";
-import { loadSettings } from "../../application/useCases/LoadSettings";
-import { FLAT, gravityAt } from "../../domain/levelPose";
-import type { GameSettings, Gravity, MotionSample } from "../../domain/types";
+import { FLAT_GRAVITY, gravityAt } from "../../domain/tilt";
+import type { Gravity, MotionSample } from "../../domain/types";
 
-function memoryStorage(initial: GameSettings): StoragePort {
-	let settings = initial;
-	return {
-		loadHighScore: async () => 0,
-		saveHighScore: async () => {},
-		loadSettings: async () => settings,
-		saveSettings: async (s) => {
-			settings = s;
-		},
-	};
-}
+const DEG = Math.PI / 180;
+const STILL = { x: 0, y: 0, z: 0 };
 
-/** A sensor the test feeds by hand */
+/** A sensor the test feeds by hand, a sample 10 ms after the last */
 function handSensor() {
 	const listeners = new Set<(sample: MotionSample) => void>();
 	let started = false;
+	let timeMs = 0;
 	const sensor: SensorPort = {
 		start: () => {
 			started = true;
@@ -37,8 +27,8 @@ function handSensor() {
 	return {
 		sensor,
 		hold: (gravity: Gravity) => {
-			const still = { x: 0, y: 0, z: 0 };
-			const sample = { gravity, rotationRate: still, acceleration: still, timeMs: 0 };
+			timeMs += 10;
+			const sample = { gravity, rotationRate: STILL, acceleration: STILL, timeMs };
 			for (const listener of listeners) listener(sample);
 		},
 		get started() {
@@ -50,131 +40,56 @@ function handSensor() {
 	};
 }
 
-const DEG = Math.PI / 180;
-
-const UPRIGHT = gravityAt({ x: 0, y: 90 * DEG }, FLAT.up);
-const RECLINED = gravityAt({ x: 0, y: 45 * DEG }, FLAT.up);
-
-const UNSET: GameSettings = {
-	soundEnabled: true,
-	musicEnabled: true,
-	tiltSensitivity: 1,
-	levelPoses: { up: null, down: null },
-};
-
-/** A started tilt source on a hand sensor, over a store holding `settings`, and its readings */
-function setup(settings: Partial<GameSettings> = {}) {
-	const store = createGameStore();
-	store.getState().updateSettings(settings);
-	const hand = handSensor();
-	const source = new TiltSource(hand.sensor, store);
+function listen(source: TiltSource): TiltReading[] {
 	const readings: TiltReading[] = [];
 	source.onReading((reading) => readings.push(reading));
-	source.start();
-	/** How far the latest reading is from level */
-	const tilt = () => {
-		const latest = readings.at(-1);
-		if (!latest) throw new Error("no reading");
-		return Math.hypot(latest.x, latest.y);
-	};
-	return { store, hand, source, readings, tilt };
+	return readings;
 }
 
-describe("calibrateTilt", () => {
-	it("stores the pose and keeps the other settings", async () => {
-		const store = createGameStore();
-		const storage = memoryStorage({ ...UNSET, soundEnabled: false });
-		await loadSettings(store, storage);
-		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, "up", store, storage);
-		expect(store.getState().settings).toEqual({
-			soundEnabled: false,
-			musicEnabled: true,
-			tiltSensitivity: 1,
-			levelPoses: { up: { x: 0.5, y: -0.3, z: -0.8 }, down: null },
-		});
-	});
-
-	it("keeps a pose set turned over apart from the screen-up one", async () => {
-		const store = createGameStore();
-		const storage = memoryStorage(UNSET);
-		await calibrateTilt({ x: 0.5, y: -0.3, z: -0.8 }, "up", store, storage);
-		await calibrateTilt({ x: 0.1, y: 0.2, z: 1 }, "down", store, storage);
-		const both = { up: { x: 0.5, y: -0.3, z: -0.8 }, down: { x: 0.1, y: 0.2, z: 1 } };
-		expect(store.getState().settings.levelPoses).toEqual(both);
-		const reloaded = createGameStore();
-		await loadSettings(reloaded, storage);
-		expect(reloaded.getState().settings.levelPoses).toEqual(both);
-	});
-});
+const RECLINED = gravityAt({ x: 0, y: 45 * DEG }, FLAT_GRAVITY);
 
 describe("TiltSource", () => {
-	it("owns the sensor: reads only while started, and starts and stops it", () => {
-		const store = createGameStore();
+	it("starts and stops the sensor it wraps, following it only while started", () => {
 		const hand = handSensor();
-		const source = new TiltSource(hand.sensor, store);
-		const readings: TiltReading[] = [];
-		source.onReading((reading) => readings.push(reading));
-		hand.hold(FLAT.up);
-		expect(readings).toHaveLength(0);
+		const source = new TiltSource(hand.sensor);
 		source.start();
 		expect(hand.started).toBe(true);
-		hand.hold(FLAT.up);
-		expect(readings).toHaveLength(1);
+		expect(hand.listening).toBe(1);
 		source.stop();
 		expect(hand.started).toBe(false);
 		expect(hand.listening).toBe(0);
-		hand.hold(FLAT.up);
-		expect(readings).toHaveLength(1);
 	});
 
-	it("reads tilt from flat until a level pose is set", () => {
-		const { hand, readings } = setup();
-		const tipped = gravityAt({ x: 0.3, y: -0.2 }, FLAT.up);
-		hand.hold(tipped);
-		expect(readings[0].x).toBeCloseTo(0.3);
-		expect(readings[0].y).toBeCloseTo(-0.2);
-		expect(readings[0]).toMatchObject({ side: "up", gravity: tipped });
-	});
-
-	it("reads the saved level pose as level", () => {
-		const desk = gravityAt({ x: 0.5, y: 0.3 }, FLAT.up);
-		const { hand, tilt } = setup({ levelPoses: { up: desk, down: null } });
-		hand.hold(desk);
-		expect(tilt()).toBeCloseTo(0);
-	});
-
-	it("turned over, reads from the screen-down pose", () => {
-		const overhead = gravityAt({ x: 0.5, y: 0 }, FLAT.down);
-		const { hand, readings, tilt } = setup({ levelPoses: { up: FLAT.up, down: overhead } });
-		hand.hold(overhead);
-		expect(readings.at(-1)?.side).toBe("down");
-		expect(tilt()).toBeCloseTo(0);
-	});
-
-	it("gives every listener the same reading, so the game and the interface agree", () => {
-		const { source, hand, readings } = setup();
-		const other: TiltReading[] = [];
-		source.onReading((reading) => other.push(reading));
-		hand.hold(UPRIGHT);
-		expect(other[0]).toBe(readings.at(-1));
-	});
-
-	it("keeps the pose in use near upright, whichever way the phone is turning", () => {
-		const { hand, readings } = setup();
-		hand.hold(gravityAt({ x: 0, y: 125 * DEG }, FLAT.up));
-		expect(readings.at(-1)?.side).toBe("down");
-		hand.hold(gravityAt({ x: 0, y: 80 * DEG }, FLAT.up));
-		expect(readings.at(-1)?.side).toBe("down");
-		hand.hold(gravityAt({ x: 0, y: 50 * DEG }, FLAT.up));
-		expect(readings.at(-1)?.side).toBe("up");
-	});
-
-	it("reads the latest gravity again as soon as a pose changes", async () => {
-		const { store, hand, readings, tilt } = setup();
+	it("reads tilt from flat until a level pose is taken", () => {
+		const hand = handSensor();
+		const source = new TiltSource(hand.sensor);
+		const readings = listen(source);
+		source.start();
 		hand.hold(RECLINED);
-		expect(tilt()).toBeCloseTo(45 * DEG);
-		await calibrateTilt(RECLINED, "up", store, memoryStorage(UNSET));
-		expect(readings).toHaveLength(2);
-		expect(tilt()).toBeCloseTo(0);
+		expect(readings.at(-1)?.y).toBeCloseTo(45 * DEG);
+	});
+
+	it("takes the level pose where the phone is held, and reads from it at once", () => {
+		const hand = handSensor();
+		const source = new TiltSource(hand.sensor);
+		const readings = listen(source);
+		source.start();
+		hand.hold(RECLINED);
+		source.takeLevelPose();
+		expect(readings.at(-1)?.x).toBeCloseTo(0);
+		expect(readings.at(-1)?.y).toBeCloseTo(0);
+		hand.hold(gravityAt({ x: 0.1, y: 0 }, RECLINED));
+		expect(readings.at(-1)?.x).toBeCloseTo(0.1, 2);
+	});
+
+	it("feeds every listener the same reading", () => {
+		const hand = handSensor();
+		const source = new TiltSource(hand.sensor);
+		const a = listen(source);
+		const b = listen(source);
+		source.start();
+		hand.hold(RECLINED);
+		expect(a).toEqual(b);
+		expect(a).toHaveLength(1);
 	});
 });

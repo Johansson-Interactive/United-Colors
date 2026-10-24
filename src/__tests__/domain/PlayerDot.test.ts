@@ -2,6 +2,8 @@ import { PlayerDot } from "../../domain/entities/PlayerDot";
 
 const STEP_MS = 100;
 const SCREEN = { width: 800, height: 600 };
+/** The most tilt the dot moves by (radians, 20 degrees); see shapeTilt */
+const TOP_TILT = (20 * Math.PI) / 180;
 
 describe("PlayerDot", () => {
 	it("starts at given position", () => {
@@ -10,22 +12,29 @@ describe("PlayerDot", () => {
 		expect(player.y).toBe(400);
 	});
 
-	it("moves speed px/s per radian of tilt (linear, legacy)", () => {
+	it("moves speed px/s per radian of tilt, between the dead zone and the top tilt", () => {
 		const player = new PlayerDot(400, 300, "#E91E63", 50, 300);
-		player.updateOrientation(0.5, -0.2);
+		player.updateOrientation(0.2, -0.1);
 		player.advance(100, SCREEN);
-		expect(player.x).toBeCloseTo(415); // 0.5 rad * 300 px/s/rad * 0.1 s
-		expect(player.y).toBeCloseTo(294);
+		expect(player.x).toBeCloseTo(406); // 0.2 rad * 300 px/s/rad * 0.1 s
+		expect(player.y).toBeCloseTo(297);
 	});
 
-	it("responds to tiny tilts with no threshold", () => {
+	it("rests inside the dead zone", () => {
 		const player = new PlayerDot(400, 300, "#E91E63", 50, 300);
-		player.updateOrientation(0.001, 0);
+		player.updateOrientation(0.01, 0);
 		player.advance(1000, SCREEN);
-		expect(player.x).toBeCloseTo(400.3);
+		expect(player.x).toBe(400);
 	});
 
-	it("stands still only when exactly flat", () => {
+	it("goes no faster past the top tilt, in any direction", () => {
+		const player = new PlayerDot(400, 300, "#E91E63", 50, 300);
+		player.updateOrientation(1, 1);
+		player.advance(100, SCREEN);
+		expect(Math.hypot(player.x - 400, player.y - 300)).toBeCloseTo(TOP_TILT * 30);
+	});
+
+	it("stands still when flat", () => {
 		const player = new PlayerDot(400, 300, "#E91E63", 50, 300);
 		player.updateOrientation(0, 0);
 		player.advance(100, SCREEN);
@@ -46,28 +55,28 @@ describe("PlayerDot", () => {
 	});
 
 	it("clamps flush to the left edge instead of stopping short", () => {
-		const player = new PlayerDot(30, 300, "#E91E63", 50, 100);
+		const player = new PlayerDot(30, 300, "#E91E63", 50, 1000);
 		player.updateOrientation(-1, 0);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.x).toBe(25); // halfSize
 	});
 
 	it("clamps flush to the right edge", () => {
-		const player = new PlayerDot(770, 300, "#E91E63", 50, 100);
+		const player = new PlayerDot(770, 300, "#E91E63", 50, 1000);
 		player.updateOrientation(1, 0);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.x).toBe(775);
 	});
 
 	it("clamps flush to the top edge", () => {
-		const player = new PlayerDot(200, 30, "#E91E63", 50, 100);
+		const player = new PlayerDot(200, 30, "#E91E63", 50, 1000);
 		player.updateOrientation(0, -1);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.y).toBe(25);
 	});
 
 	it("clamps flush to the bottom edge", () => {
-		const player = new PlayerDot(200, 570, "#E91E63", 50, 100);
+		const player = new PlayerDot(200, 570, "#E91E63", 50, 1000);
 		player.updateOrientation(0, 1);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.y).toBe(575);
@@ -75,25 +84,26 @@ describe("PlayerDot", () => {
 
 	it("slides along an edge on the free axis", () => {
 		const player = new PlayerDot(25, 300, "#E91E63", 50, 100);
-		player.updateOrientation(-1, 1);
+		player.updateOrientation(-0.1, 0.1);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.x).toBe(25);
-		expect(player.y).toBeCloseTo(310);
+		expect(player.y).toBeCloseTo(301);
 	});
 
 	it("reports the speed a wall holds it back by, signed toward the wall", () => {
 		const player = new PlayerDot(30, 300, "#E91E63", 50, 100);
-		player.updateOrientation(-1, 0);
+		player.updateOrientation(-0.1, 0);
+		player.advance(STEP_MS * 10, SCREEN);
+		// Wanted 10 px left in a second; got 5
+		expect(player.push.x).toBeCloseTo(-5);
+		expect(player.push.y).toBe(0);
 		player.advance(STEP_MS, SCREEN);
-		// Wanted 10 px left in 100 ms; got 5
-		expect(player.push).toEqual({ x: -50, y: 0 });
-		player.advance(STEP_MS, SCREEN);
-		expect(player.push).toEqual({ x: -100, y: 0 });
+		expect(player.push.x).toBeCloseTo(-10);
 		player.updateOrientation(0, 1);
 		player.advance(STEP_MS, SCREEN);
 		expect(player.push).toEqual({ x: 0, y: 0 });
-		player.updateOrientation(0, 1000);
-		player.advance(STEP_MS, SCREEN);
+		player.updateOrientation(0, 1);
+		player.advance(STEP_MS * 1000, SCREEN);
 		expect(player.push.x).toBe(0);
 		expect(player.push.y).toBeGreaterThan(0);
 	});

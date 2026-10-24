@@ -1,13 +1,13 @@
 import { GAME_HERTZ, PLAYER_SPEED_PER_DEGREE } from "../domain/constants";
-import { FLAT, gravityAt } from "../domain/levelPose";
+import { FLAT_GRAVITY, gravityAt } from "../domain/tilt";
 import type { DotView, Gravity, RenderFrame, ScreenSize, TiltAngles } from "../domain/types";
 
 /**
  * The pilot: a tilt that steers the player from what the frame shows, so the capture build
  * (built with EXPO_PUBLIC_CAPTURE=1; a shipped build never sets it) plays itself for the store
  * screenshots and the app preview. It heads for the nearest dot it may eat, leaning towards
- * point dots, keeps clear of the dots it may not, and holds the phone level off play, so the
- * settle bowl settles at once and Get ready's portal widens to the walls. The rules it plays by are the game's own:
+ * point dots, keeps clear of the dots it may not, and holds the phone level off play, so Get
+ * ready's portal widens to the walls. The rules it plays by are the game's own:
  * it only reads frames and answers with a tilt, as the phone would.
  */
 
@@ -176,6 +176,6 @@ export function createPilot(
 	return () => {
 		const { frame, settings } = getState();
 		previous = pilotStep(frame, getScreen(), settings.tiltSensitivity, previous);
-		return gravityAt(previous, FLAT.up);
+		return gravityAt(previous, FLAT_GRAVITY);
 	};
 }

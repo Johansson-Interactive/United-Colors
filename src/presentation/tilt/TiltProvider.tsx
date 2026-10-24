@@ -8,8 +8,8 @@ import { smoothTowards } from "./smoothTilt";
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
  * anything that rolls on screen rolls the way the player dot would). `x`/`y` are the reading's
  * tilt, the very one the game gets (see TiltSource), smoothed on the UI thread every frame;
- * `reading` is the latest as it came, with the gravity and the level pose in use, for setting
- * that pose (one shared value, so a reading is one write to the UI thread). `available` flips
+ * `reading` is the latest as it came (one shared value, so a reading is one write to the UI
+ * thread). `available` flips
  * once the first real reading arrives (false on simulators without motion sensors, so
  * gyro-driven UI can fall back to tap).
  */

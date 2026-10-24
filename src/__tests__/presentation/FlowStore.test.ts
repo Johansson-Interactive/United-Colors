@@ -5,11 +5,10 @@ import type { GameFacts } from "../../presentation/flow/screenFlow";
 import { INK_LIFT } from "../../presentation/theme/theme";
 
 const AT = { x: 10, y: 20 };
-const ZERO = { x: 0.3, y: -0.1, z: -0.9 };
 const PINK = "#E91E63";
 const BLUE = "#2196F3";
 
-/** Game controls that do nothing, for a player with a level pose set and tilt */
+/** Game controls that do nothing, for a player with tilt */
 const IDLE: GameControls = {
 	play: () => {},
 	pause: () => {},
@@ -18,8 +17,8 @@ const IDLE: GameControls = {
 	haltKiosk: () => {},
 	runKiosk: () => {},
 	flood: () => {},
-	calibrate: () => {},
-	facts: () => ({ levelPoseSet: true, tiltPresent: true, playerColor: PINK }),
+	takeLevelPose: () => {},
+	facts: () => ({ tiltPresent: true, playerColor: PINK }),
 };
 
 /**
@@ -29,7 +28,7 @@ const IDLE: GameControls = {
 function setup() {
 	const game = createGameStore();
 	const calls: string[] = [];
-	const answers: GameFacts = { levelPoseSet: true, tiltPresent: true, playerColor: PINK };
+	const answers: GameFacts = { tiltPresent: true, playerColor: PINK };
 	let cover: (() => void) | null = null;
 	const { store: flow, follow } = createFlowStore(game, {
 		play: (color) => calls.push(`play ${color}`),
@@ -42,8 +41,7 @@ function setup() {
 			calls.push(`flood ${color} ${at.x},${at.y}`);
 			cover = onCovered;
 		},
-		calibrate: (pose, side) =>
-			calls.push(`calibrate ${pose.x},${pose.y}${side === "down" ? " down" : ""}`),
+		takeLevelPose: () => calls.push("takeLevelPose"),
 		facts: () => ({ ...answers }),
 	});
 	const unfollow = follow();
@@ -125,12 +123,12 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "pause" });
 	});
 
-	it("Get ready's hold resumes at once", () => {
+	it("Get ready's hold takes the level pose and resumes at once", () => {
 		const { flow, calls, publish } = setup();
 		publish("PAUSED");
 		flow.getState().dispatch({ type: "fieldTouched", landedAt: 0 });
 		flow.getState().dispatch({ type: "readyHeld" });
-		expect(calls).toEqual(["resume"]);
+		expect(calls).toEqual(["takeLevelPose", "resume"]);
 	});
 
 	it("Get ready's cup shutting brings the pause screen back, touching nothing", () => {
@@ -143,14 +141,6 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "pause" });
 	});
 
-	it("the pause's level button opens the bowl in the player's colour", () => {
-		const { flow, answers, publish, screen } = setup();
-		answers.playerColor = BLUE;
-		publish("PAUSED");
-		flow.getState().dispatch({ type: "levelPressed", from: "pause" });
-		expect(screen()).toEqual({ kind: "settle", color: BLUE });
-	});
-
 	it("the pause's speed button opens the speed view in the player's colour", () => {
 		const { flow, answers, publish, screen } = setup();
 		answers.playerColor = BLUE;
@@ -159,14 +149,14 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "speed", color: BLUE });
 	});
 
-	it("retry floods in the player's colour, and plays in it only once the flood covers", () => {
+	it("retry takes the level pose and floods in the player's colour, playing only once it covers", () => {
 		const { flow, calls, answers, publish, covers } = setup();
 		answers.playerColor = BLUE;
 		publish("GAME_OVER");
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
-		expect(calls).toEqual([`flood ${BLUE} 10,20`]);
+		expect(calls).toEqual(["takeLevelPose", `flood ${BLUE} 10,20`]);
 		covers();
-		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
+		expect(calls).toEqual(["takeLevelPose", `flood ${BLUE} 10,20`, `play ${BLUE}`]);
 	});
 
 	it("leaving the game over floods, and starts the kiosk only once the flood covers", () => {
@@ -178,15 +168,6 @@ describe("flow store", () => {
 		expect(calls).toEqual([`flood ${INK_LIFT} 10,20`, "startKiosk"]);
 	});
 
-	it("the bowl opened from the title halts the kiosk, and backing out runs it again", () => {
-		const { flow, calls, screen } = setup();
-		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: PINK });
-		expect(calls).toEqual(["haltKiosk"]);
-		flow.getState().dispatch({ type: "settleBacked" });
-		expect(calls).toEqual(["haltKiosk", "runKiosk"]);
-		expect(screen()).toEqual({ kind: "title" });
-	});
-
 	it("the speed view opened from the title halts the kiosk, and backing out runs it again", () => {
 		const { flow, calls, screen } = setup();
 		flow.getState().dispatch({ type: "speedPressed", from: "menu", color: PINK });
@@ -196,53 +177,26 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "title" });
 	});
 
-	it("the title's level and speed buttons open in the colour the play dot showed", () => {
+	it("the title's speed button opens in the colour the play dot showed", () => {
 		const { flow, screen } = setup();
-		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: BLUE });
-		expect(screen()).toEqual({ kind: "settle", color: BLUE });
-		flow.getState().dispatch({ type: "settleBacked" });
 		flow.getState().dispatch({ type: "speedPressed", from: "menu", color: BLUE });
 		expect(screen()).toEqual({ kind: "speed", color: BLUE });
 	});
 
-	it("PLAY with a level pose set floods, and plays only once the flood covers", () => {
+	it("PLAY takes the level pose at the press, floods, and plays only once the flood covers", () => {
 		const { flow, calls, covers } = setup();
 		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
-		expect(calls).toEqual([`flood ${PINK} 10,20`]);
+		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`]);
 		covers();
-		expect(calls).toEqual([`flood ${PINK} 10,20`, `play ${PINK}`]);
+		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`, `play ${PINK}`]);
 	});
 
-	it("the bench's auto-start floods into a run without the bowl, level pose or not", () => {
-		const { flow, calls, answers, screen, covers } = setup();
-		answers.levelPoseSet = false;
+	it("the bench's auto-start floods into a run, steered from flat with no level pose taken", () => {
+		const { flow, calls, screen, covers } = setup();
 		flow.getState().dispatch({ type: "autoStarted", color: BLUE, at: AT });
 		expect(screen()).toEqual({ kind: "title" });
 		covers();
 		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
-	});
-
-	it("PLAY with no level pose set opens the bowl; settling adopts the pose, then floods into play", () => {
-		const { flow, calls, answers, screen, covers } = setup();
-		answers.levelPoseSet = false;
-		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
-		expect(screen()).toEqual({ kind: "settle", color: PINK });
-		flow.getState().dispatch({ type: "settled", pose: ZERO, side: "down", at: AT });
-		covers();
-		expect(calls).toEqual([
-			"haltKiosk",
-			"calibrate 0.3,-0.1 down",
-			`flood ${PINK} 10,20`,
-			`play ${PINK}`,
-		]);
-	});
-
-	it("a bowl settled from the title adopts the pose, then runs the kiosk again", () => {
-		const { flow, calls, screen } = setup();
-		flow.getState().dispatch({ type: "levelPressed", from: "menu", color: PINK });
-		flow.getState().dispatch({ type: "settled", pose: ZERO, side: "up", at: AT });
-		expect(calls).toEqual(["haltKiosk", "calibrate 0.3,-0.1", "runKiosk"]);
-		expect(screen()).toEqual({ kind: "title" });
 	});
 
 	it("ignores taps while a flood is on its way", () => {
@@ -251,7 +205,7 @@ describe("flow store", () => {
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		flow.getState().dispatch({ type: "leavePressed", at: AT });
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
-		expect(calls).toEqual([`flood ${PINK} 10,20`]);
+		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`]);
 		expect(screen()).toEqual({ kind: "gameOver" });
 	});
 
@@ -272,7 +226,7 @@ describe("flow store", () => {
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		covers();
 		flow.getState().dispatch({ type: "stageLaidOut" });
-		expect(calls).toEqual(["startKiosk", `flood ${PINK} 10,20`, `play ${PINK}`]);
+		expect(calls).toEqual(["startKiosk", "takeLevelPose", `flood ${PINK} 10,20`, `play ${PINK}`]);
 	});
 
 	it("stops following the game once unfollowed, and catches up when it follows again", () => {

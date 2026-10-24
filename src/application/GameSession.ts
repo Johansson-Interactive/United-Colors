@@ -120,7 +120,7 @@ export class GameSession {
 		this.clock = null;
 	}
 
-	/** The tilt from the level pose in use (see TiltSource), which rolls the player */
+	/** The tilt from the level pose (see TiltSource), which rolls the player */
 	feedTilt(tilt: TiltAngles): void {
 		this.engine?.onSensorInput(tilt.x, tilt.y);
 	}

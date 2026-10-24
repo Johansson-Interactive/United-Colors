@@ -1,4 +1,5 @@
 import { holdInside } from "../arena";
+import { shapeTilt } from "../tilt";
 import type { ScreenSize } from "../types";
 import { Dot } from "./Dot";
 
@@ -18,10 +19,11 @@ export class PlayerDot extends Dot {
 		super("player", x, y, 0, 0, color, size, speed, "player");
 	}
 
-	/** Called when new sensor data arrives (gyro tilt in radians) */
+	/** Called when new sensor data arrives (tilt in radians), shaped as the dot moves by it */
 	updateOrientation(x: number, y: number): void {
-		this.tiltX = x;
-		this.tiltY = y;
+		const shaped = shapeTilt({ x, y });
+		this.tiltX = shaped.x;
+		this.tiltY = shaped.y;
 	}
 
 	/**
@@ -36,8 +38,8 @@ export class PlayerDot extends Dot {
 	}
 
 	/**
-	 * Move player over `dtMs` of real time. Velocity follows tilt linearly (legacy), applied
-	 * instantly with no threshold, no acceleration and no smoothing.
+	 * Move player over `dtMs` of real time. Velocity follows the shaped tilt (see shapeTilt),
+	 * applied instantly with no acceleration and no smoothing.
 	 */
 	advance(dtMs: number, screen: ScreenSize): void {
 		const scale = (this.velocity * dtMs) / 1000;

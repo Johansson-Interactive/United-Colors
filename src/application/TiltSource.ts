@@ -1,55 +1,35 @@
-import {
-	FLAT,
-	type LevelPoses,
-	type LevelTilt,
-	levelPosesOf,
-	levelTilt,
-} from "../domain/levelPose";
-import type { Gravity, MotionSample, PoseSide } from "../domain/types";
-import type { GameStore } from "./GameStore";
+import { stepTilt, TILT_START, type TiltState, takeLevelPose, tiltOf } from "../domain/tilt";
+import type { TiltAngles } from "../domain/types";
 import type { SensorPort } from "./ports";
 
-/** One reading of the tilt: the gravity it was measured on, and the tilt from the pose in use */
-export interface TiltReading extends LevelTilt {
-	gravity: Gravity;
-}
+/** One reading of the tilt from the level pose (see tiltOf) */
+export type TiltReading = TiltAngles;
 
-/** The reading before the sensor has given one: held flat, at the flat pose */
-export const FLAT_READING: TiltReading = { x: 0, y: 0, side: "up", gravity: FLAT.up };
+/** The reading before the sensor has given one: held at the level pose */
+export const FLAT_READING: TiltReading = { x: 0, y: 0 };
 
 /**
  * The player's tilt, measured once per sample for the game and the interface alike, so both
- * read it from the same level pose (see levelTilt). It wraps the motion sensor: whoever owns it
- * starts and stops it, the others only listen.
+ * read it from the same level pose. It wraps the motion sensor: whoever owns it starts and stops
+ * it, the others only listen.
  *
- * Tilt is read from gravity alone (ADR 0014), so the level poses are the gravities the settings
- * keep. Whenever they change, the latest gravity is read again, so the change shows at once.
+ * The level pose is taken afresh whenever the flow asks, as a run starts and as Get ready ends
+ * (ADR 0016); until the first, it is flat.
  */
 export class TiltSource {
 	private readonly listeners = new Set<(reading: TiltReading) => void>();
-	private poses: LevelPoses = FLAT;
-	/** The level pose the last reading was measured from */
-	private side: PoseSide = "up";
-	private latest: Gravity | null = null;
-	/** Stops following the sensor and the settings; null while stopped */
+	private state: TiltState = TILT_START;
+	/** Stops following the sensor; null while stopped */
 	private unbind: (() => void) | null = null;
 
-	constructor(
-		private readonly sensor: SensorPort,
-		private readonly store: GameStore,
-	) {}
+	constructor(private readonly sensor: SensorPort) {}
 
 	start(): void {
 		if (this.unbind) return;
-		const stopListening = this.sensor.onSample((sample) => this.read(sample));
-		const stopFollowing = this.store.subscribe((state, previous) => {
-			if (state.settings.levelPoses !== previous.settings.levelPoses) this.remake();
+		this.unbind = this.sensor.onSample((sample) => {
+			this.state = stepTilt(this.state, sample);
+			this.emit();
 		});
-		this.unbind = () => {
-			stopListening();
-			stopFollowing();
-		};
-		this.poses = this.posesNow();
 		this.sensor.start();
 	}
 
@@ -57,6 +37,12 @@ export class TiltSource {
 		this.unbind?.();
 		this.unbind = null;
 		this.sensor.stop();
+	}
+
+	/** Take the level pose where the phone is held now, and read the tilt from it at once */
+	takeLevelPose(): void {
+		this.state = takeLevelPose(this.state);
+		this.emit();
 	}
 
 	/** Returns a function that removes this listener */
@@ -67,25 +53,8 @@ export class TiltSource {
 		};
 	}
 
-	private posesNow(): LevelPoses {
-		return levelPosesOf(this.store.getState().settings.levelPoses);
-	}
-
-	/** Take up the poses as they now stand, and read the latest gravity from them */
-	private remake(): void {
-		this.poses = this.posesNow();
-		if (this.latest) this.emit(this.latest);
-	}
-
-	private read(sample: MotionSample): void {
-		this.latest = sample.gravity;
-		this.emit(sample.gravity);
-	}
-
-	private emit(gravity: Gravity): void {
-		const tilt = levelTilt(gravity, this.poses, this.side);
-		this.side = tilt.side;
-		const reading: TiltReading = { ...tilt, gravity };
+	private emit(): void {
+		const reading = tiltOf(this.state);
 		for (const listener of this.listeners) listener(reading);
 	}
 }

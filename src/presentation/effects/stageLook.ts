@@ -100,7 +100,6 @@ function playShowsOf(screen: Screen, phase: GamePhase): PlayShows {
 			return "portal";
 		case "pause":
 			return "none";
-		case "settle":
 		case "speed":
 			return phase === "PAUSED" ? "none" : "all";
 		default:
@@ -120,15 +119,13 @@ function frostOf(playShows: PlayShows, phase: GamePhase): StageMove<number> {
 }
 
 /**
- * Away from the title's kiosk the stage shows at once: over the pause the bowl and the speed
- * view leave the frozen, frosted game showing, and anywhere else it is already up. A run
- * started from the bowl is why it must be at once: the flow passes back through the title
- * under the bowl's flood (see screenFlow.ts), which starts the title's fade-in, and the
- * instant show as play starts overrides it, so the stage is up as the flood lifts.
+ * Away from the title's kiosk the stage shows at once: over the pause the speed view leaves the
+ * frozen, frosted game showing, and anywhere else it is already up. A run started from the
+ * title is why it must be at once: the flow passes back through the title under the PLAY
+ * flood (see screenFlow.ts), which starts the title's fade-in, and the instant show as play
+ * starts overrides it, so the stage is up as the flood lifts.
  */
 function opacityOf(screen: Screen, phase: GamePhase): StageMove<number> {
 	if (phase !== "KIOSK") return { to: 1, over: INSTANT };
-	return screen.kind === "settle" || screen.kind === "speed"
-		? { to: 0, over: STAGE_FADE_OUT }
-		: { to: 1, over: STAGE_FADE_IN };
+	return screen.kind === "speed" ? { to: 0, over: STAGE_FADE_OUT } : { to: 1, over: STAGE_FADE_IN };
 }

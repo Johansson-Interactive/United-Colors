@@ -8,7 +8,7 @@ import { DotMenu } from "./DotMenu";
 interface SettingsMenuProps {
 	/**
 	 * Called at the tap: returns where the tap came from and, on the title, the colour the play
-	 * dot shows then, which the level bowl or the speed view opens in
+	 * dot shows then, which the speed view opens in
 	 */
 	openingAt: () => MenuOpening;
 	/** Glyph colour of the settings and speed dots */
@@ -17,10 +17,11 @@ interface SettingsMenuProps {
 
 /**
  * The settings corner (bottom left), mirroring the sound corner: the settings dot opens into
- * the level dot, nearest it, and the speed dot above, each opening its own view
+ * the speed dot, which opens the speed view. There is no level pose to set: it is taken as each
+ * run starts and as Get ready ends (ADR 0016).
  */
 export const SettingsMenu: React.FC<SettingsMenuProps> = ({ openingAt, color = WHITE }) => {
-	const { sensitivity, openLevel, openSpeed } = useCornerMenus();
+	const { sensitivity, openSpeed } = useCornerMenus();
 	const speed = sensitivityChoice(sensitivity);
 	return (
 		<DotMenu
@@ -35,12 +36,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ openingAt, color = W
 					icon: `speed-${speed.key}`,
 					onPress: () => openSpeed(openingAt()),
 					label: `Tilt speed, ${speed.label.toLowerCase()}`,
-				},
-				{
-					key: "level",
-					icon: "level",
-					onPress: () => openLevel(openingAt()),
-					label: "Set level pose",
 				},
 			]}
 		/>

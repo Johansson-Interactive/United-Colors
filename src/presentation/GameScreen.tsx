@@ -9,8 +9,7 @@ import type { GameStore } from "../application/GameStore";
 import type { GameAudio, GameHaptics, StoragePort, WatchAppActive } from "../application/ports";
 import type { TiltReading, TiltSource } from "../application/TiltSource";
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
-import { calibrateTilt } from "../application/useCases/CalibrateTilt";
-import type { Corners, Gravity, PoseSide, ScreenSize } from "../domain/types";
+import type { Corners, ScreenSize } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
 import { FieldTouch } from "./components/FieldTouch";
@@ -40,7 +39,6 @@ import { GameOverOverlay } from "./overlays/GameOverOverlay";
 import { GetReadyOverlay } from "./overlays/GetReadyOverlay";
 import { KioskOverlay } from "./overlays/KioskOverlay";
 import { PauseOverlay } from "./overlays/PauseOverlay";
-import { SettleOverlay } from "./overlays/SettleOverlay";
 import { SpeedOverlay } from "./overlays/SpeedOverlay";
 import { BEZEL, WHITE } from "./theme/theme";
 import type { GetReadyEnd } from "./tilt/getReady";
@@ -126,9 +124,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		haltKiosk: () => session.halt(),
 		runKiosk: () => session.run(),
 		flood: (color, at, onCovered) => flood.run(color, at.x, at.y, onCovered),
-		calibrate: (pose, side) => void calibrateTilt(pose, side, store, storage),
+		takeLevelPose: () => tiltSource.takeLevelPose(),
 		facts: () => ({
-			levelPoseSet: store.getState().settings.levelPoses.up !== null,
 			tiltPresent: tilt.available.get(),
 			playerColor: playerColorOf(store.getState()),
 		}),
@@ -199,16 +196,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 		(at: PressPoint, color: string) => dispatch({ type: "startPressed", color, at }),
 		[dispatch],
 	);
-	const handleLevelPress = useCallback(
-		(opening: MenuOpening) => dispatch({ type: "levelPressed", ...opening }),
-		[dispatch],
-	);
-	const handleSettled = useCallback(
-		(pose: Gravity, side: PoseSide, at: PressPoint) =>
-			dispatch({ type: "settled", pose, side, at }),
-		[dispatch],
-	);
-	const handleSettleBack = useCallback(() => dispatch({ type: "settleBacked" }), [dispatch]);
 	const handleSnap = useCallback(() => audio.playCollect(0), [audio]);
 	// Get ready's portal cleared the field: a snap, and play picks up at once. Or its cup shut
 	const handleReadyEnd = useCallback(
@@ -251,7 +238,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 					store={store}
 					storage={storage}
 					sensitivity={sensitivity}
-					onLevel={handleLevelPress}
 					onSpeed={handleSpeedPress}
 				>
 					{pauseWorld && <PauseWorld stage={stage} />}
@@ -331,15 +317,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 									sensitivity={sensitivity}
 									onSelect={setSensitivity}
 									onBack={handleSpeedBack}
-								/>
-							)}
-
-							{screen.kind === "settle" && (
-								<SettleOverlay
-									color={screen.color}
-									onSettled={handleSettled}
-									onBack={handleSettleBack}
-									onSnap={handleSnap}
 								/>
 							)}
 
