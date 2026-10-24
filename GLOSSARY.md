@@ -36,7 +36,7 @@ How far the phone has turned from the level pose, as the hand turns it: about it
 _Avoid_: angle, orientation, attitude
 
 **Swivel**:
-A turn of the phone about the vertical, as in a swivel chair or the player turning on the spot. Gravity cannot see it. With the level pose flat or leaning it never steers; with the level pose near upright it steers like the roll it looks like there, unless it swings the phone along an arc, which is the player turning on the spot.
+A turn of the phone about the vertical, as in a swivel chair or the player turning on the spot. Gravity cannot see it. With the level pose flat or leaning it never steers; with the level pose near upright it steers like the roll it looks like there, the player turning on the spot included.
 _Avoid_: heading, yaw, compass, azimuth
 
 **Run**:

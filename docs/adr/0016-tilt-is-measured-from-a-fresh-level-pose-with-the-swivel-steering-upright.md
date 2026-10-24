@@ -1,6 +1,6 @@
 # Tilt is measured from a fresh level pose, and the swivel steers only upright
 
-Supersedes ADR 0009, ADR 0010, ADR 0013 and ADR 0014.
+Supersedes ADR 0009, ADR 0010, ADR 0013 and ADR 0014. Its arc, telling a turn on the spot apart, is superseded by ADR 0017.
 
 Gravity alone (ADR 0014) works flat, leaning and walking, but on a sofa the phone stands nearly upright, its long side vertical, and a roll about that side is a turn about the vertical: gravity cannot see it, so left and right are lost. The steering wheel that stood in for it is a second motion nobody reaches for. The whole turn (ADR 0010) sees the roll, but a turn on the spot is the same rotation, and it steered. No reading of the phone's attitude can tell the two apart, so a second signal has to.
 
