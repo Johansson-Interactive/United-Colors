@@ -4,13 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SensorPort } from "../../application/ports";
 import type { MotionSample } from "../../domain/types";
 import { glass, shade, TRIO, WHITE } from "../theme/theme";
-import {
-	EMPTY_RECORDING,
-	type MotionRecording,
-	recordedMs,
-	recordingText,
-	recordSample,
-} from "./motionRecording";
+import { MotionRecording } from "./motionRecording";
 import { describeMotion } from "./probeReadout";
 
 /** How often the readout redraws (ms); the probe itself reads every sample */
@@ -33,24 +27,26 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 	const insets = useSafeAreaInsets();
 	const latest = useRef<MotionSample | null>(null);
 	const [shown, setShown] = useState<MotionSample | null>(null);
-	const recording = useRef<MotionRecording>(EMPTY_RECORDING);
+	// The take under way or the last one; null before the first
+	const recording = useRef<MotionRecording | null>(null);
 	const recordingOn = useRef(false);
 	const [tape, setTape] = useState<Tape>(NO_TAPE);
 
 	useEffect(() => {
 		const stopListening = sensor.onSample((sample) => {
 			latest.current = sample;
-			if (recordingOn.current) {
-				recording.current = recordSample(recording.current, sample);
-				if (recording.current.full) recordingOn.current = false;
+			const take = recording.current;
+			if (recordingOn.current && take) {
+				take.record(sample);
+				if (take.full) recordingOn.current = false;
 			}
 		});
 		const redraw = setInterval(() => {
 			setShown(latest.current);
 			setTape({
 				on: recordingOn.current,
-				ms: recordedMs(recording.current),
-				samples: recording.current.rows.length,
+				ms: recording.current?.ms ?? 0,
+				samples: recording.current?.samples ?? 0,
 			});
 		}, REDRAW_MS);
 		return () => {
@@ -60,12 +56,13 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 	}, [sensor]);
 
 	const toggleRecording = () => {
-		if (!recordingOn.current) recording.current = EMPTY_RECORDING;
+		if (!recordingOn.current) recording.current = new MotionRecording();
 		recordingOn.current = !recordingOn.current;
 	};
 
 	const share = () => {
-		void Share.share({ message: recordingText(recording.current, Platform.OS) });
+		const take = recording.current;
+		if (take) void Share.share({ message: take.text(Platform.OS) });
 	};
 
 	return (
