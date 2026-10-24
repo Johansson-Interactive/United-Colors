@@ -35,7 +35,7 @@ const LONGEST_GAP_MS = 200;
  * The radius (metres) that marks a turn on the spot. Recorded upright on an iPhone, wrist rolls
  * read 5 to 6 cm and torso turns 13 to 30 cm.
  */
-export const BODY_ARC = 0.1;
+const BODY_ARC = 0.1;
 
 /**
  * How much of the radius's lever the fit needs behind it (the time integral of its square)
@@ -45,7 +45,7 @@ export const BODY_ARC = 0.1;
 const LEAST_EVIDENCE = 0.05;
 
 /** When a swivel was first read as a turn on the spot, as it went */
-export interface Decision {
+interface Decision {
 	/** How long after the swivel began (ms) */
 	afterMs: number;
 	/** How far it had turned by then (radians, unsigned) */

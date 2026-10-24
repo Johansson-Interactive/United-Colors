@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SensorPort } from "../../application/ports";
-import { shade, WHITE, whiteAt } from "../theme/theme";
+import { glass, shade, WHITE, whiteAt } from "../theme/theme";
+import { LeaningBowlPrototype } from "./LeaningBowlPrototype";
 import {
 	clearProbe,
 	describeLive,
@@ -17,13 +18,15 @@ const REDRAW_MS = 100;
 
 /**
  * The motion probe, drawn over the top of the screen in a probe build: the live motion, and each
- * finished swivel with the arc it swung the phone along. Tap it to clear the list. Each swivel is
- * also logged, for Metro's console.
+ * finished swivel with the arc it swung the phone along and whether it was called a turn on the
+ * spot. Tap it to clear the list. Each swivel is also logged, for Metro's console. Its bowl
+ * button opens the leaning bowl prototype.
  */
 export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 	const insets = useSafeAreaInsets();
 	const probe = useRef<ProbeState>(PROBE_START);
 	const [shown, setShown] = useState<ProbeState>(PROBE_START);
+	const [bowlOpen, setBowlOpen] = useState(false);
 
 	useEffect(() => {
 		const stopListening = sensor.onSample((sample) => {
@@ -43,6 +46,8 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 		setShown(probe.current);
 	};
 
+	if (bowlOpen) return <LeaningBowlPrototype sensor={sensor} onClose={() => setBowlOpen(false)} />;
+
 	return (
 		<View pointerEvents="box-none" style={[styles.anchor, { paddingTop: insets.top }]}>
 			<Pressable onPress={clear} style={styles.panel}>
@@ -53,6 +58,9 @@ export function MotionProbe({ sensor }: { sensor: SensorPort }) {
 					</Text>
 				))}
 			</Pressable>
+			<Pressable onPress={() => setBowlOpen(true)} style={styles.bowlButton}>
+				<Text style={styles.live}>bowl</Text>
+			</Pressable>
 		</View>
 	);
 }
@@ -62,4 +70,12 @@ const styles = StyleSheet.create({
 	panel: { margin: 8, padding: 8, borderRadius: 8, backgroundColor: shade(0.7) },
 	live: { color: WHITE, fontSize: 12, fontVariant: ["tabular-nums"] },
 	swivel: { color: whiteAt(0.8), fontSize: 12, fontVariant: ["tabular-nums"] },
+	bowlButton: {
+		alignSelf: "flex-end",
+		marginRight: 8,
+		paddingHorizontal: 16,
+		paddingVertical: 10,
+		borderRadius: 20,
+		backgroundColor: glass(0.15),
+	},
 });
