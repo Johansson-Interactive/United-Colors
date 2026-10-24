@@ -1,7 +1,6 @@
 import type { Disc } from "../../application/sceneRecord";
 import { PLAYER_NECK, PLAYER_PRESS, pressedRadius } from "../../application/wall";
 import { cornerExtent, holdInside } from "../../domain/arena";
-import { attitudeAt, FLAT, FLAT_ATTITUDES, levelTilt, zeroSwivel } from "../../domain/levelPose";
 import type { Corners } from "../../domain/types";
 import {
 	EDGE_GROW_MS,
@@ -41,6 +40,15 @@ const field = { width: 400, height: 800, cornerExtent: 0 };
 const seat = { x: 150, y: 300, radius: 20 };
 const LEVEL = { x: 0, y: 0 };
 const TIPPED = { x: 0.5, y: 0 };
+/**
+ * The grip turning on steadily from level, `rate` radians a second about each axis: the cup's
+ * lean trails it by a steady rate times LEAN_MS (250 ms), so the dot stays off the seat
+ */
+const drifting =
+	(rate: Point = { x: 2, y: 0 }) =>
+	(ms: number): Point => ({ x: (rate.x * ms) / 1000, y: (rate.y * ms) / 1000 });
+/** Drifting so the lean trails by TIPPED */
+const DRIFTING = drifting();
 /** The overlay's frame, as the frame steps below play it */
 const FRAME_DT = 16;
 /** Long enough for the cup to open and the hold to fill, with room to spare */
@@ -69,10 +77,13 @@ const landing = (on: Disc = seat) => openGetReady(on, field).state;
 /** A frame as stepped, with how Get ready ended on it, if it did */
 type Played = GetReadyFrame & { end: GetReadyEnd | null };
 
-/** Frames for `ms` at one tilt, as the overlay's frame callback steps them */
+/**
+ * Frames for `ms` at one tilt, or a tilt that changes with the time played (ms), as the
+ * overlay's frame callback steps them
+ */
 function play(
 	from: GetReadyFrameState,
-	tilt: Point,
+	tilt: Point | ((ms: number) => Point),
 	ms: number,
 	on: Disc = seat,
 	held = true,
@@ -83,7 +94,7 @@ function play(
 		const next = advanceGetReady(state, {
 			seat: on,
 			held,
-			tilt,
+			tilt: typeof tilt === "function" ? tilt(t) : tilt,
 			dt: FRAME_DT,
 			field,
 			sensitivity: 1,
@@ -136,26 +147,6 @@ describe("get-ready stepper", () => {
 		const held = run(INITIAL_GET_READY, 0, 0, HOLD_MS / 2);
 		expect(run(held, 0.12, 0, 100).progress).toBeLessThan(held.progress);
 		expect(run(held, 0, -0.12, 100).progress).toBeLessThan(held.progress);
-	});
-
-	it("upright, refuses to fill while the phone swivels about the vertical, and fills once still", () => {
-		const upright = attitudeAt({ x: 0, y: Math.PI / 2 }, FLAT_ATTITUDES.up);
-		const poses = zeroSwivel({ up: { x: 0, y: -1, z: 0 }, down: FLAT.down }, upright);
-		/** The level check as the game feeds it: the whole turn from the pose in use */
-		const swivelling = (s: GetReadyState, from: number, to: number, ms: number) => {
-			let state = s;
-			for (let t = 0; t < ms; t += 10) {
-				const swivel = from + ((to - from) * t) / ms;
-				const tilt = levelTilt(attitudeAt({ x: swivel, y: 0 }, upright), poses, "up");
-				state = stepGetReady(state, tilt.x, tilt.y, 10, true);
-			}
-			return state;
-		};
-		// Gravity never moves, yet the phone turns well past level and back
-		const turning = swivelling(INITIAL_GET_READY, 0.3, 0.6, PLENTY);
-		expect(turning.progress).toBe(0);
-		expect(turning.fired).toBe(false);
-		expect(swivelling(turning, 0, 0, PLENTY).fired).toBe(true);
 	});
 
 	it("fires once only", () => {
@@ -497,8 +488,8 @@ describe("get-ready cup", () => {
 		}
 	});
 
-	it("rolls the dot copy off the seat as the finger lands, inside the glass as it grows", () => {
-		const { frames } = play(landing(), TIPPED, OPENING_MS);
+	it("rolls the dot copy off the seat as the grip moves, inside the glass as it grows", () => {
+		const { frames } = play(landing(), DRIFTING, OPENING_MS);
 		const opening = frames.slice(0, OPEN_FRAMES - 1);
 		// Off the seat well before the cup is open, and further each frame as the glass lets it
 		expect(opening[Math.floor(opening.length / 2)].dot.x).toBeGreaterThan(seat.x);
@@ -532,7 +523,7 @@ describe("get-ready cup", () => {
 	});
 
 	it("pulses the rim only once open, taking over from the opening's rim with no jump", () => {
-		const { frames } = play(landing(), TIPPED, OPENING_MS + 2000);
+		const { frames } = play(landing(), DRIFTING, OPENING_MS + 2000);
 		// The dot has rolled off the seat by the time the cup is open
 		expect(Math.hypot(frames[OPEN_FRAMES - 1].dot.x - seat.x, 0)).toBeGreaterThan(seat.radius);
 		const opening = frames.slice(0, OPEN_FRAMES - 1).map((f) => f.rim);
@@ -544,7 +535,7 @@ describe("get-ready cup", () => {
 	});
 
 	it("keeps the dot inside the cup, however the phone is tilted", () => {
-		const { frames } = play(landing(), { x: 3, y: -2 }, 2000);
+		const { frames } = play(landing(), drifting({ x: 12, y: -8 }), 2000);
 		for (const f of frames) {
 			expect(Math.hypot(f.dot.x - seat.x, f.dot.y - seat.y)).toBeLessThanOrEqual(TRAVEL + 1e-9);
 		}
@@ -574,8 +565,9 @@ describe("get-ready finger lifted before the cup is open", () => {
 
 describe("get-ready finger lifted with the dot off the seat", () => {
 	it("herds the dot home inside the draining glass, onto the seat as the cup shuts", () => {
-		const away = play(landing(), TIPPED, OPENING_MS + 1000);
-		const { frames } = play(away.state, TIPPED, 1000, seat, false);
+		const away = play(landing(), DRIFTING, OPENING_MS + 1000);
+		const rest = (ms: number) => DRIFTING(OPENING_MS + 1000 + ms);
+		const { frames } = play(away.state, rest, 1000, seat, false);
 		const at = frames.findIndex((f) => f.end === "shut");
 		expect(at).toBeGreaterThan(0);
 		for (const f of frames.slice(0, at + 1)) {
@@ -620,13 +612,28 @@ describe("get-ready frame step", () => {
 		for (let i = 1; i < broken.length; i++) expect(broken[i]).toBeLessThan(broken[i - 1]);
 	});
 
-	it("rolls the dot off the seat with the tilt and back home when level", () => {
-		const first = play(landing(), LEVEL, FRAME_DT).frames[0];
-		expect(first.dot).toEqual({ x: seat.x, y: seat.y });
-		const away = play(landing(), { x: 0.2, y: 0 }, OPENING_MS + 1000);
-		expect(away.frames[away.frames.length - 1].dot.x).toBeCloseTo(seat.x + 30, 0);
-		const home = play(away.state, LEVEL, 1000).frames;
-		expect(home[home.length - 1].dot.x).toBeCloseTo(seat.x, 0);
+	it("rolls the dot off the seat as the grip changes, and home as the cup leans to it", () => {
+		const first = play(landing(), LEVEL, FRAME_DT);
+		expect(first.frames[0].dot).toEqual({ x: seat.x, y: seat.y });
+		const regripped = play(first.state, { x: 0.2, y: 0 }, 1500).frames;
+		const furthest = Math.max(...regripped.map((f) => f.dot.x - seat.x));
+		expect(furthest).toBeGreaterThan(seat.radius / 2);
+		expect(regripped[regripped.length - 1].dot.x).toBeCloseTo(seat.x, 0);
+	});
+
+	it("carries the tilt the cup reads, for the dot's shade: none in a steady grip, some as it changes", () => {
+		const opened = openGetReady(seat, field).frame;
+		expect(opened.tilt).toEqual(LEVEL);
+		const steady = play(landing(), TIPPED, 400).frames;
+		for (const f of steady) expect(f.tilt).toEqual(LEVEL);
+		const regripped = play(landing(), DRIFTING, 1000).frames;
+		expect(regripped[regripped.length - 1].tilt.x).toBeCloseTo(TIPPED.x, 1);
+	});
+
+	it("takes whatever grip the finger landed in as level, and fires from it", () => {
+		const { frames } = play(landing(), TIPPED, PLENTY);
+		for (const f of frames) expect(f.dot).toEqual({ x: seat.x, y: seat.y });
+		expect(frames.some((f) => f.end === "ready")).toBe(true);
 	});
 
 	it("breathes the portal by this frame's roll, not the last frame's", () => {
@@ -665,7 +672,7 @@ describe("get-ready frame step", () => {
 	});
 
 	it("shows the bowl's glass in full at the portal's edge from the first frame it opens", () => {
-		const { frames } = play(landing(), TIPPED, OPENING_MS + 1000);
+		const { frames } = play(landing(), DRIFTING, OPENING_MS + 1000);
 		for (const f of frames) expect(f.glass).toBe(1);
 	});
 

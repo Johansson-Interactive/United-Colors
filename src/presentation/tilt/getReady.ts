@@ -5,11 +5,12 @@
  * which a solid copy of the dot rolls around inside with the tilt from the finger's landing and
  * cannot leave: the glass holds it in as the cup grows, and herds it home as the cup drains. The
  * cup being fully open is the arming: until then the level hold doesn't count, so the jolt of
- * the finger landing can't start play. Then rolling the dot home
- * and holding the phone level widens the portal to the walls, and play resumes the instant the
- * whole field is clear. Tilt is relative to the level pose, so "level" is the pose the player
- * likes to play in. A finger lifted before the field is clear drains the portal back into the
- * seat, faster than it grew, and Get ready is over: back to the pause.
+ * the finger landing can't start play. The cup leans to match the hand (see lean.ts), so the
+ * dot rolls when the grip changes and glides home once it is steady, whatever the grip
+ * (ADR 0016). Holding it home widens the portal to the walls, and play
+ * resumes the instant the whole field is clear, from that grip as the new level pose. A finger
+ * lifted before the field is clear drains the portal back into the seat, faster than it grew,
+ * and Get ready is over: back to the pause.
  *
  * The hold (stepGetReady) is the rule; the cup, the roll and the rim are what shows it.
  * advanceGetReady puts them together into one step a frame, which is all the overlay runs.
@@ -34,6 +35,7 @@ import {
 	rimFade,
 } from "../effects/portal";
 import { BOWL_SIZE } from "../theme/theme";
+import { followLean, type Lean } from "./lean";
 
 export interface GetReadyState {
 	/** Hold progress 0..1; the field is clear and play resumes at 1 */
@@ -43,6 +45,7 @@ export interface GetReadyState {
 
 /** Tilt (radians, either axis) that still counts as level */
 const LEVEL_RAD = 0.11;
+
 /**
  * How long the device must stay level: the portal widens at the bloom's pace, and a broken hold
  * drains faster than it fills, as the bloom does
@@ -374,9 +377,14 @@ function cupRim(progress: number, seated: number, pulse: number, opened: number)
 
 // ---- The frame: one step of all of the above, as the overlay runs it each frame ----
 
+/** The tilt the cup reads before its first frame: none */
+const LEVEL: Point = { x: 0, y: 0 };
+
 /** Everything Get ready carries from one frame to the next */
 export interface GetReadyFrameState {
 	hold: GetReadyState;
+	/** The cup leaning to the hand (see lean.ts); null until the first frame */
+	lean: Lean | null;
 	/** The rolling dot */
 	roll: Roll;
 	/**
@@ -399,7 +407,7 @@ export interface GetReadyInputs {
 	seat: Disc;
 	/** Whether the finger that opened Get ready is still on the field */
 	held: boolean;
-	/** Radians, relative to the level pose */
+	/** Radians, relative to the level pose; the cup reads it from its own "down" (see lean) */
 	tilt: Point;
 	dt: number;
 	field: FieldSize;
@@ -410,6 +418,8 @@ export interface GetReadyInputs {
 export interface GetReadyFrame {
 	/** The rolling dot's centre */
 	dot: Point;
+	/** The tilt as the cup reads it, from its own "down" (see lean.ts): it rolls the dot */
+	tilt: Point;
 	/** The rolling dot as drawn, pressed into a wall the way the player is in play (see rollBody) */
 	body: RollBody;
 	/** The portal into play, the cup at rest */
@@ -436,13 +446,14 @@ export type GetReadyStep = PortalStep<GetReadyFrameState, GetReadyFrame, GetRead
  */
 function drawFrame(state: GetReadyFrameState, seat: Disc, field: FieldSize): GetReadyFrame {
 	"worklet";
-	const { hold, roll, opening, openMs } = state;
+	const { hold, lean, roll, opening, openMs } = state;
 	const dot = { x: roll.x, y: roll.y };
 	const home = seated(roll, seat);
 	const pulse = seatPulse(openMs);
 	const opened = cupOpened(opening, seat, field);
 	return {
 		dot,
+		tilt: lean?.tilt ?? LEVEL,
 		body: rollBody(dot, seat.radius, field),
 		portal: {
 			x: seat.x,
@@ -464,6 +475,7 @@ export function openGetReady(seat: Disc, field: FieldSize): GetReadyStep {
 	"worklet";
 	const state: GetReadyFrameState = {
 		hold: INITIAL_GET_READY,
+		lean: null,
 		roll: rollAt(seat),
 		opening: 0,
 		openMs: 0,
@@ -489,12 +501,15 @@ export function advanceGetReady(state: GetReadyFrameState, inputs: GetReadyInput
 	const openAt = cupOpenAt(seat, field);
 	const wasOpen = state.opening >= openAt;
 	const opening = advanceEdge(state.opening, held, dt, openAt);
-	const hold = stepGetReady(state.hold, tilt.x, tilt.y, dt, held && wasOpen);
+	// The dot starts on the seat in whatever grip the finger landed
+	const lean = followLean(state.lean, tilt, dt);
+	const hold = stepGetReady(state.hold, lean.tilt.x, lean.tilt.y, dt, held && wasOpen);
 	const shut = !held && opening === 0;
 	const opened = cupOpened(opening, seat, field);
-	const target = rollTarget(seat, tilt, sensitivity, field, opened);
+	const target = rollTarget(seat, lean.tilt, sensitivity, field, opened);
 	const next: GetReadyFrameState = {
 		hold,
+		lean,
 		roll: holdInCup(stepRoll(state.roll, target, dt), seat, opened),
 		opening,
 		openMs: wasOpen ? state.openMs + dt : state.openMs,

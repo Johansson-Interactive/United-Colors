@@ -27,7 +27,6 @@ describe("settings use cases", () => {
 				soundEnabled: false,
 				musicEnabled: true,
 				tiltSensitivity: 1,
-				levelPoses: { up: null, down: null },
 			}),
 		);
 		expect(store.getState().settings.soundEnabled).toBe(false);
@@ -38,14 +37,12 @@ describe("settings use cases", () => {
 			soundEnabled: true,
 			musicEnabled: true,
 			tiltSensitivity: 1,
-			levelPoses: { up: null, down: null },
 		});
 		await updateSettings(
 			{
 				soundEnabled: false,
 				musicEnabled: true,
 				tiltSensitivity: 1,
-				levelPoses: { up: null, down: null },
 			},
 			createGameStore(),
 			storage,
@@ -81,7 +78,6 @@ describe("settings use cases", () => {
 					soundEnabled: true,
 					musicEnabled: true,
 					tiltSensitivity: 1,
-					levelPoses: { up: null, down: null },
 				},
 				42,
 			),

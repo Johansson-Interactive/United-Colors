@@ -10,7 +10,7 @@ import { type GameFacts, INITIAL_FLOW, stepFlow } from "../../presentation/flow/
 /** Run ticks for `ms` of run time */
 const ticks = (ms: number) => Math.floor((ms * GAME_HERTZ) / 1000);
 
-const GAME: GameFacts = { levelPoseSet: true, tiltPresent: true, playerColor: "#E91E63" };
+const GAME: GameFacts = { tiltPresent: true, playerColor: "#E91E63" };
 
 describe("pause hint", () => {
 	it("shows over the HUD for the first few seconds of a run, then goes", () => {

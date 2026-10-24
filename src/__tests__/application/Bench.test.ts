@@ -2,7 +2,8 @@ import { type BenchRun, benchSessionOptions, benchTilt } from "../../application
 import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import type { Clock } from "../../application/ports";
-import { FLAT_ATTITUDES, turnBetween, wholeTilt } from "../../domain/levelPose";
+import { FLAT_GRAVITY } from "../../domain/tilt";
+import { angleBetween, tiltFrom } from "../fixtures/tiltFrom";
 
 /** A clock the test steps by hand: each step is one tick and one rendered frame */
 function manualClock() {
@@ -34,7 +35,7 @@ function benchRun(seconds: number, run: BenchRun = "steady") {
 	session.start("#E91E63");
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(wholeTilt(benchTilt(t / 30), FLAT_ATTITUDES.up));
+		session.feedTilt(tiltFrom(benchTilt(t / 30)));
 		clock.step();
 		frames.push(store.getState().frame);
 	}
@@ -66,21 +67,16 @@ describe("bench run", () => {
 	});
 
 	it("steers the player round the screen, both ways on both axes", () => {
-		const samples = Array.from({ length: 300 }, (_, i) =>
-			wholeTilt(benchTilt(i / 10), FLAT_ATTITUDES.up),
-		);
+		const samples = Array.from({ length: 300 }, (_, i) => tiltFrom(benchTilt(i / 10)));
 		expect(Math.min(...samples.map((s) => s.x))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.x))).toBeGreaterThan(0.1);
 		expect(Math.min(...samples.map((s) => s.y))).toBeLessThan(-0.1);
 		expect(Math.max(...samples.map((s) => s.y))).toBeGreaterThan(0.1);
 	});
 
-	it("tilts from flat with no swivel: at rest on its path the phone lies flat", () => {
-		expect(turnBetween(benchTilt(0), FLAT_ATTITUDES.up)).toBeCloseTo(0, 9);
-		const tilt = wholeTilt(benchTilt(1.3), FLAT_ATTITUDES.up);
-		expect(turnBetween(benchTilt(1.3), FLAT_ATTITUDES.up)).toBeCloseTo(
-			Math.hypot(tilt.x, tilt.y),
-			9,
-		);
+	it("tilts from flat: at rest on its path the phone lies flat", () => {
+		expect(angleBetween(benchTilt(0), FLAT_GRAVITY)).toBeCloseTo(0, 9);
+		const tilt = tiltFrom(benchTilt(1.3));
+		expect(angleBetween(benchTilt(1.3), FLAT_GRAVITY)).toBeCloseTo(Math.hypot(tilt.x, tilt.y), 9);
 	});
 });

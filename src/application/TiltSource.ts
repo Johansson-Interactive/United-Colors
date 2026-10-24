@@ -1,68 +1,39 @@
-import {
-	FLAT_ATTITUDES,
-	followSwivel,
-	type LevelAttitudes,
-	type LevelTilt,
-	levelPosesOf,
-	levelTilt,
-	swivelledBy,
-	zeroSwivel,
-} from "../domain/levelPose";
-import type { Attitude, PoseSide } from "../domain/types";
-import type { GameStore } from "./GameStore";
+import { stepTilt, TILT_START, type TiltState, takeLevelPose, tiltOf } from "../domain/tilt";
+import type { TiltAngles } from "../domain/types";
 import type { SensorPort } from "./ports";
 
-/** One reading of the tilt: the attitude it was measured on, and the tilt from the pose in use */
-export interface TiltReading extends LevelTilt {
-	attitude: Attitude;
-}
-
-/** The reading before the sensor has given one: held flat, at the flat pose */
-export const FLAT_READING: TiltReading = { x: 0, y: 0, side: "up", attitude: FLAT_ATTITUDES.up };
+/**
+ * Where the level pose comes from: `fresh`, taken where the phone is held whenever the flow
+ * asks (ADR 0016); or `flat` throughout, for the bench run, whose scripted tilt is measured from
+ * flat (see bench.ts)
+ */
+export type LevelPoseRule = "fresh" | "flat";
 
 /**
- * The player's tilt, measured once per sample for the game and the interface alike, so both
- * read it from the same level pose (see levelTilt). It wraps the motion sensor: whoever owns it
- * starts and stops it, the others only listen.
+ * The player's tilt from the level pose (see tiltOf), measured once per sample for the game and
+ * the interface alike, so both read it from the same pose. It wraps the motion sensor: whoever
+ * owns it starts and stops it, the others only listen.
  *
- * The settings keep each level pose as a gravity; tilt is measured from attitudes, each saved
- * gravity turned about the vertical to face the way the phone faced when the swivel was last
- * zeroed (ADR 0010). That zero lives here, in memory only: the first sample sets it, and after
- * that `zeroSwivel` moves it, and a turn on the spot drags it along (followSwivel), so poses loaded from storage keep it rather than taking
- * whatever way the phone happens to face as they land. Whenever the poses change, the latest
- * attitude is read again, so the change shows at once.
+ * The level pose is taken afresh whenever the flow asks, as a run starts and as Get ready ends;
+ * until the first, it is flat.
  */
 export class TiltSource {
-	private readonly listeners = new Set<(reading: TiltReading) => void>();
-	private poses: LevelAttitudes = FLAT_ATTITUDES;
-	/** The level pose the last reading was measured from */
-	private side: PoseSide = "up";
-	/** The latest sample, and the one the swivel was last zeroed at */
-	private latest: Attitude | null = null;
-	private zeroedAt: Attitude | null = null;
-	/** Whether the swivel zero is still catching up after a turn on the spot, and when the last sample came */
-	private catchingUp = false;
-	private sampledAt: number | null = null;
-	/** Stops following the sensor and the settings; null while stopped */
+	private readonly listeners = new Set<(tilt: TiltAngles) => void>();
+	private state: TiltState = TILT_START;
+	/** Stops following the sensor; null while stopped */
 	private unbind: (() => void) | null = null;
 
 	constructor(
 		private readonly sensor: SensorPort,
-		private readonly store: GameStore,
-		private readonly now: () => number = Date.now,
+		private readonly levelPose: LevelPoseRule = "fresh",
 	) {}
 
 	start(): void {
 		if (this.unbind) return;
-		const stopListening = this.sensor.onSample((attitude) => this.read(attitude));
-		const stopFollowing = this.store.subscribe((state, previous) => {
-			if (state.settings.levelPoses !== previous.settings.levelPoses) this.remake();
+		this.unbind = this.sensor.onSample((sample) => {
+			this.state = stepTilt(this.state, sample);
+			this.emit();
 		});
-		this.unbind = () => {
-			stopListening();
-			stopFollowing();
-		};
-		this.poses = this.posesNow();
 		this.sensor.start();
 	}
 
@@ -72,65 +43,23 @@ export class TiltSource {
 		this.sensor.stop();
 	}
 
+	/** Take the level pose where the phone is held now, and read the tilt from it at once */
+	takeLevelPose(): void {
+		if (this.levelPose === "flat") return;
+		this.state = takeLevelPose(this.state);
+		this.emit();
+	}
+
 	/** Returns a function that removes this listener */
-	onReading(listener: (reading: TiltReading) => void): () => void {
+	onReading(listener: (tilt: TiltAngles) => void): () => void {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
 		};
 	}
 
-	/**
-	 * Zero the swivel where the phone is held now, for both level poses: the player is at their
-	 * level pose by definition (see screenFlow.ts). Nothing happens before the first sample.
-	 */
-	zeroSwivel(): void {
-		if (!this.latest) return;
-		this.zeroedAt = this.latest;
-		this.catchingUp = false;
-		this.remake();
-	}
-
-	private posesNow(): LevelAttitudes {
-		const saved = levelPosesOf(this.store.getState().settings.levelPoses);
-		return zeroSwivel(saved, this.zeroedAt ?? FLAT_ATTITUDES.up);
-	}
-
-	/** Take up the poses as they now stand, and read the latest attitude from them */
-	private remake(): void {
-		this.poses = this.posesNow();
-		if (this.latest) this.emit(this.latest);
-	}
-
-	private read(attitude: Attitude): void {
-		this.latest = attitude;
-		const time = this.now();
-		const dtMs = this.sampledAt === null ? 0 : time - this.sampledAt;
-		this.sampledAt = time;
-		// The first sample zeroes the swivel, which reads it from the poses that makes
-		if (!this.zeroedAt) {
-			this.zeroSwivel();
-			return;
-		}
-		this.follow(attitude, this.zeroedAt, dtMs);
-		this.emit(attitude);
-	}
-
-	/** Drag the swivel zero along with a player turning on the spot (followSwivel) */
-	private follow(attitude: Attitude, zeroedAt: Attitude, dtMs: number): void {
-		const pose = this.poses[levelTilt(attitude, this.poses, this.side).side];
-		const step = followSwivel(attitude, pose, this.catchingUp, dtMs);
-		this.catchingUp = step.catchingUp;
-		if (step.turn === 0) return;
-		// Turning where the zero was taken turns both poses made from it alike
-		this.zeroedAt = swivelledBy(zeroedAt, step.turn);
-		this.poses = this.posesNow();
-	}
-
-	private emit(attitude: Attitude): void {
-		const tilt = levelTilt(attitude, this.poses, this.side);
-		this.side = tilt.side;
-		const reading: TiltReading = { ...tilt, attitude };
-		for (const listener of this.listeners) listener(reading);
+	private emit(): void {
+		const tilt = tiltOf(this.state);
+		for (const listener of this.listeners) listener(tilt);
 	}
 }

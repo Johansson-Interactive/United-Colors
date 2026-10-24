@@ -1,5 +1,7 @@
 # The swivel zero follows a turn on the spot
 
+Superseded by ADR 0014, and that by ADR 0016: the swivel no longer steers, so it needs no zero.
+
 ADR 0010 fixed the swivel's zero in the room for as long as a run lasts, with the pause gesture as the only recenter. Players turn on the spot while they play, in a swivel chair, in bed or walking, and that zero stayed facing the old way. A turn is not a lean, and it did more harm than a compass step: tilt is read along the level pose's axes, so with the zero half a turn behind, tipping forward read as sideways even flat, where a swivel steers nothing. The controls turned round under the player.
 
 Now the zero follows the player. Gravity cannot tell a turn on the spot from a swivel that steers, but steering has a reach: no lean goes past 45°, already far faster than anyone plays. A lean holds a swivel of its share of the turn about the vertical at the level pose, all of it upright and none of it flat, so the reach in swivel shrinks from 45° upright to nothing flat. A swivel past that reach is a turn: the zero is dragged along at once, so it never trails by more than the reach, and then it catches up the rest of the way over a fraction of a second (a fifth of a second to close all but a third) until the phone reads no swivel. Inside the reach nothing moves, so a held lean keeps its full strength in every pose for as long as it is held. Flat, the zero follows every swivel at once, and tilt is gravity's turn, as before ADR 0010.

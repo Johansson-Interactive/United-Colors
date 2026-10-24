@@ -2,9 +2,9 @@ import { GameSession } from "../../application/GameSession";
 import { createGameStore } from "../../application/GameStore";
 import { createPilot, pilotStep } from "../../application/pilot";
 import type { Clock } from "../../application/ports";
-import { FLAT_ATTITUDES, wholeTilt } from "../../domain/levelPose";
 import { seededRandom } from "../../domain/random";
 import type { DotView, RenderFrame, TiltAngles } from "../../domain/types";
+import { tiltFrom } from "../fixtures/tiltFrom";
 
 const SCREEN = { width: 402, height: 874 };
 const PINK = "#E91E63";
@@ -56,7 +56,7 @@ function pilotedRun(seconds: number, seed: number) {
 	session.start(PINK);
 	const frames = [];
 	for (let t = 0; t < seconds * 30; t++) {
-		session.feedTilt(wholeTilt(pilot(), FLAT_ATTITUDES.up));
+		session.feedTilt(tiltFrom(pilot()));
 		clock.step();
 		const frame = store.getState().frame;
 		frames.push(frame);

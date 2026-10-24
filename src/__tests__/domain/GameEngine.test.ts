@@ -24,8 +24,6 @@ import { comboBonus } from "../../domain/run";
 import type { GameEvent, RunRecord } from "../../domain/types";
 import { dripAt, STAGED_SMALL_DOT_SIZE, scriptedSpawner, smallDotAt } from "./stage";
 
-const DEGREE = Math.PI / 180;
-
 function createEngine(seed = 0.5) {
 	let callCount = 0;
 	const seededRandom = () => {
@@ -562,7 +560,8 @@ describe("GameEngine", () => {
 			for (let i = 0; i < 200; i++) engine.advancePlayer(16);
 			const push = engine.getPlayerPush();
 			expect(engine.getPlayerPosition().x).toBe((PLAYER_DOT_SIZE_RATIO * 100) / 2);
-			expect(push.x).toBeCloseTo(-engine.getPlayerSpeedPerDegree() / DEGREE);
+			// Tilted a radian, past the top tilt: pushing at the speed of 20 degrees
+			expect(push.x).toBeCloseTo(-engine.getPlayerSpeedPerDegree() * 20);
 			expect(push.y).toBe(0);
 		});
 
@@ -711,9 +710,9 @@ describe("GameEngine", () => {
 			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(PLAYER_SPEED_PER_DEGREE);
 			engine.startGame();
 			const start = engine.getPlayerPosition();
-			engine.onSensorInput((1 * Math.PI) / 180, 0); // 1 degree
-			engine.advancePlayer(1000);
-			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE);
+			engine.onSensorInput((5 * Math.PI) / 180, 0); // 5 degrees, for a tenth of a second
+			engine.advancePlayer(100);
+			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 0.5);
 		});
 
 		it("sensitivity multiplies the speed, for the current player and the games after it", () => {
@@ -721,17 +720,17 @@ describe("GameEngine", () => {
 			engine.startGame();
 			engine.setSensitivity(1.5);
 			expect(engine.getPlayerSpeedPerDegree()).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
-			const degree = Math.PI / 180;
+			const fiveDegrees = (5 * Math.PI) / 180;
 			let start = engine.getPlayerPosition();
-			engine.onSensorInput(degree, 0);
-			engine.advancePlayer(1000);
-			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
+			engine.onSensorInput(fiveDegrees, 0);
+			engine.advancePlayer(100);
+			expect(engine.getPlayerPosition().x - start.x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 0.75);
 
 			engine.startGame();
 			start = engine.getPlayerPosition();
-			engine.onSensorInput(-degree, 0);
-			engine.advancePlayer(1000);
-			expect(start.x - engine.getPlayerPosition().x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 1.5);
+			engine.onSensorInput(-fiveDegrees, 0);
+			engine.advancePlayer(100);
+			expect(start.x - engine.getPlayerPosition().x).toBeCloseTo(PLAYER_SPEED_PER_DEGREE * 0.75);
 		});
 
 		it("sensitivity is kept within its range", () => {

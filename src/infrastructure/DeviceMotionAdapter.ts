@@ -1,14 +1,15 @@
 import { DeviceMotion, Gyroscope } from "expo-sensors";
 import type { Subscription } from "expo-sensors/build/DeviceSensor";
 import type { SensorPort } from "../application/ports";
-import type { Attitude } from "../domain/types";
-import { attitudeFromRotation } from "./attitudeFromRotation";
+import type { MotionSample } from "../domain/types";
+import { type MotionPlatform, motionSampleOf } from "./motionSampleOf";
 
 /**
  * Adapter wrapping Expo DeviceMotion for gyroscope-only player input.
- * Reports the phone's attitude, swivel included (see `attitudeFromRotation`).
- * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its rotation
- * vector would lean on the compass alone for the swivel (ADR 0010).
+ * Reports gravity from the gyroscope-fused rotation (see `gravityFromRotation`), with the
+ * gyroscope's rate alongside, the same way round on both platforms (see `motionSampleOf`).
+ * A phone without a gyroscope reports nothing, so the no-tilt path takes over: its gravity would
+ * come from the accelerometer alone, which shakes as the hand moves.
  * One native subscription fans out to every listener.
  */
 export class DeviceMotionAdapter implements SensorPort {
@@ -16,7 +17,7 @@ export class DeviceMotionAdapter implements SensorPort {
 	/** True from start until stop, including while the gyroscope check is pending */
 	private running = false;
 	private hasGyroscope: Promise<boolean> | null = null;
-	private readonly listeners = new Set<(attitude: Attitude) => void>();
+	private readonly listeners = new Set<(sample: MotionSample) => void>();
 	/**
 	 * 0 = as fast as the platform allows. iOS clamps to Core Motion's max (~100 Hz);
 	 * Android dispatches every display frame. A non-zero value on Android (strict `>` vs
@@ -25,6 +26,8 @@ export class DeviceMotionAdapter implements SensorPort {
 	 * requests SENSOR_DELAY_NORMAL natively, even when this dispatch interval is zero.
 	 */
 	private updateIntervalMs = 0;
+
+	constructor(private readonly platform: MotionPlatform) {}
 
 	start(): void {
 		if (this.running) return;
@@ -44,7 +47,7 @@ export class DeviceMotionAdapter implements SensorPort {
 		}
 	}
 
-	onSample(listener: (attitude: Attitude) => void): () => void {
+	onSample(listener: (sample: MotionSample) => void): () => void {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
@@ -58,8 +61,7 @@ export class DeviceMotionAdapter implements SensorPort {
 			if (this.listeners.size === 0) return;
 			if (!data.rotation) return;
 
-			const { alpha, beta, gamma } = data.rotation;
-			const sample = attitudeFromRotation(alpha, beta, gamma);
+			const sample = motionSampleOf(data, this.platform);
 			for (const listener of this.listeners) listener(sample);
 		});
 	}

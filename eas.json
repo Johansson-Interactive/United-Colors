@@ -17,6 +17,12 @@
 		"preview": {
 			"distribution": "internal"
 		},
+		"probe": {
+			"extends": "preview",
+			"env": {
+				"EXPO_PUBLIC_MOTION_PROBE": "1"
+			}
+		},
 		"production": {
 			"autoIncrement": true
 		}

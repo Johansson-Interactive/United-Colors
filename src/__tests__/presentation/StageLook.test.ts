@@ -45,16 +45,11 @@ describe("the stage look", () => {
 		expect(look.playShows).toBe("portal");
 	});
 
-	it("keeps the pause world, frosted, under the bowl and the speed view opened from the pause", () => {
+	it("keeps the pause world, frosted, under the speed view opened from the pause", () => {
 		const pause = stageLook({ screen: { kind: "pause" }, phase: "PAUSED" });
-		for (const screen of [
-			{ kind: "settle", color: PINK },
-			{ kind: "speed", color: PINK },
-		] as const) {
-			const look = stageLook({ screen, phase: "PAUSED" });
-			expect(look.opacity.to).toBe(1);
-			expect(look).toEqual(pause);
-		}
+		const look = stageLook({ screen: { kind: "speed", color: PINK }, phase: "PAUSED" });
+		expect(look.opacity.to).toBe(1);
+		expect(look).toEqual(pause);
 	});
 
 	it("goes straight to the pause with no portal when the player leaves the app mid-run", () => {
@@ -72,12 +67,8 @@ describe("the stage look", () => {
 		expect(look.accent).toBe("player");
 	});
 
-	it("draws no pause world on the title or under the bowl and the speed view opened from it", () => {
-		for (const screen of [
-			{ kind: "title" },
-			{ kind: "settle", color: PINK },
-			{ kind: "speed", color: PINK },
-		] as const) {
+	it("draws no pause world on the title or under the speed view opened from it", () => {
+		for (const screen of [{ kind: "title" }, { kind: "speed", color: PINK }] as const) {
 			const look = stageLook({ screen, phase: "KIOSK" });
 			expect(look.playShows).toBe("all");
 		}
@@ -108,42 +99,31 @@ describe("the stage look", () => {
 		expect(look.frost).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
 	});
 
-	it("fades the stage out in 300 ms under the bowl and the speed view opened from the title", () => {
-		for (const screen of [
-			{ kind: "settle", color: PINK },
-			{ kind: "speed", color: PINK },
-		] as const) {
-			const look = stageLook({ screen, phase: "KIOSK" });
-			expect(look.opacity).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
-		}
+	it("fades the stage out in 300 ms under the speed view opened from the title", () => {
+		const look = stageLook({ screen: { kind: "speed", color: PINK }, phase: "KIOSK" });
+		expect(look.opacity).toEqual({ to: 0, over: { kind: "timed", duration: 300 } });
 	});
 
-	it("fades the stage back in over 400 ms as the bowl or the speed view opened from the title closes", () => {
-		for (const [open, close] of [
-			[{ type: "startPressed", color: PINK, at: { x: 0, y: 0 } }, { type: "settleBacked" }],
-			[{ type: "levelPressed", from: "menu", color: PINK }, { type: "settleBacked" }],
-			[{ type: "speedPressed", from: "menu", color: PINK }, { type: "speedBacked" }],
-		] satisfies [FlowEvent, FlowEvent][]) {
-			expect(walk([open, close])).toEqual([
-				{ screen: open.type === "speedPressed" ? "speed" : "settle", opacity: FADED_OUT },
-				{ screen: "title", opacity: FADING_IN },
-			]);
-		}
+	it("fades the stage back in over 400 ms as the speed view opened from the title closes", () => {
+		expect(
+			walk([{ type: "speedPressed", from: "menu", color: PINK }, { type: "speedBacked" }]),
+		).toEqual([
+			{ screen: "speed", opacity: FADED_OUT },
+			{ screen: "title", opacity: FADING_IN },
+		]);
 	});
 
-	it("follows the title's fade-in with an instant show as a run started from the bowl reaches the hud", () => {
-		// The flood covers the bowl and the flow drops back to the title before the run starts,
-		// so the hud's look comes after the title's fade-in and shows the stage at once
+	it("follows the title's fade-in with an instant show as a run started from the title reaches the hud", () => {
+		// The flood covers the title and the flow stays on it until the run starts, so the hud's
+		// look comes after the title's and shows the stage at once
 		expect(
 			walk([
 				{ type: "startPressed", color: PINK, at: { x: 0, y: 0 } },
-				{ type: "settled", pose: { x: 0, y: 0, z: -1 }, side: "up", at: { x: 0, y: 0 } },
 				{ type: "covered" },
 				{ type: "phaseChanged", phase: "RUNNING" },
 			]),
 		).toEqual([
-			{ screen: "settle", opacity: FADED_OUT },
-			{ screen: "settle", opacity: FADED_OUT },
+			{ screen: "title", opacity: FADING_IN },
 			{ screen: "title", opacity: FADING_IN },
 			{ screen: "hud", opacity: { to: 1, over: { kind: "instant" } } },
 		]);
@@ -153,8 +133,7 @@ describe("the stage look", () => {
 const FADED_OUT = { to: 0, over: { kind: "timed", duration: 300 } };
 const FADING_IN = { to: 1, over: { kind: "timed", duration: 400 } };
 
-/** A first game: no level pose yet, so PLAY on the title opens the bowl */
-const GAME: GameFacts = { levelPoseSet: false, tiltPresent: true, playerColor: PINK };
+const GAME: GameFacts = { tiltPresent: true, playerColor: PINK };
 
 /** Steps the real flow from the title through `events`, with the stage opacity after each */
 function walk(events: FlowEvent[]) {

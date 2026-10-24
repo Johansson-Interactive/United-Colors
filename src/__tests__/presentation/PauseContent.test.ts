@@ -15,7 +15,7 @@ describe("pause content", () => {
 	});
 
 	it("is not there on any other screen", () => {
-		const others: Screen["kind"][] = ["title", "hud", "speed", "settle", "gameOver"];
+		const others: Screen["kind"][] = ["title", "hud", "speed", "gameOver"];
 		for (const screen of others) expect(pauseContent(screen)).toBeNull();
 	});
 });

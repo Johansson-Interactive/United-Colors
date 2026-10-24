@@ -6,7 +6,7 @@
 
 import { createStore } from "zustand/vanilla";
 import type { GameStore } from "../../application/GameStore";
-import type { GamePhase, Gravity, PoseSide } from "../../domain/types";
+import type { GamePhase } from "../../domain/types";
 import type { PressPoint } from "../components/DotButton";
 import {
 	type FlowAction,
@@ -37,18 +37,20 @@ export interface GameControls {
 	runKiosk: () => void;
 	/** Grow a dot of `color` from `at` until it covers the screen, then call `onCovered` */
 	flood: (color: string, at: PressPoint, onCovered: () => void) => void;
-	/** Adopt `pose` as the level pose on `side` */
-	calibrate: (pose: Gravity, side: PoseSide) => void;
-	/** Zero the swivel where the phone is held now, for both level poses (see TiltSource) */
-	zeroSwivel: () => void;
+	/** Take the level pose where the phone is held now */
+	takeLevelPose: () => void;
 	/** The game's answers to what the flow asks, as they stand at this moment */
 	facts: () => GameFacts;
 }
 
-/** Carry out `action` on the game, through the control of the same name */
+/**
+ * Carry out `action` on the game, through the control of the same name. A run starts from a
+ * level pose taken as it begins (ADR 0016): under a flood that is once it covers, when the
+ * jolt of the tap has passed and the hand holds the grip it plays in.
+ */
 function perform(controls: GameControls, action: FlowAction) {
 	if (action.kind === "play") {
-		if (action.zeroSwivel) controls.zeroSwivel();
+		controls.takeLevelPose();
 		controls.play(action.color);
 	} else controls[action.kind]();
 }
@@ -56,7 +58,7 @@ function perform(controls: GameControls, action: FlowAction) {
 export interface FlowStoreState {
 	/** The screen to show */
 	screen: Screen;
-	/** Step a tap, then carry out what the step asks: calibrate, zero the swivel, act, flood */
+	/** Step a tap, then carry out what the step asks: take the level pose, act, flood */
 	dispatch: (event: FlowEvent) => void;
 }
 
@@ -81,8 +83,7 @@ export function createFlowStore(game: GameStore, controls: GameControls) {
 
 	function dispatch(event: FlowEvent) {
 		const step = apply(event);
-		if (step.calibrate) controls.calibrate(step.calibrate.pose, step.calibrate.side);
-		if (step.zeroSwivel) controls.zeroSwivel();
+		if (step.takeLevelPose) controls.takeLevelPose();
 		if (step.act) perform(controls, step.act);
 		if (step.flood) {
 			const { color, at, action } = step.flood;

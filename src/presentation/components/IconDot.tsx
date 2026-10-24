@@ -16,7 +16,6 @@ export type Icon =
 	| "pause"
 	| "sound-on"
 	| "sound-off"
-	| "level"
 	| "settings"
 	| "music"
 	| "effects"
@@ -40,13 +39,6 @@ interface GlyphProps {
 	r: number;
 	color: string;
 }
-
-const Level: React.FC<GlyphProps> = ({ c, r, color }) => (
-	<>
-		<Circle cx={c} cy={c} r={r * 0.46} color={color} style="stroke" strokeWidth={1.5} />
-		<Circle cx={c} cy={c} r={r * 0.17} color={color} />
-	</>
-);
 
 /** A slider across the dot at height `y`, its knob at `knob` */
 const Slider: React.FC<GlyphProps & { y: number; knob: number }> = ({ c, r, color, y, knob }) => (
@@ -180,7 +172,6 @@ const GLYPHS: Record<Icon, React.FC<GlyphProps>> = {
 	pause: Pause,
 	"sound-on": SoundOn,
 	"sound-off": SoundOff,
-	level: Level,
 	settings: Settings,
 	music: Music,
 	effects: Effects,

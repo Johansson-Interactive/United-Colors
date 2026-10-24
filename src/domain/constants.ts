@@ -96,10 +96,19 @@ export const COMBO_WINDOW_TICKS = 16;
 export const PLAYER_DOT_SIZE_RATIO = 0.125;
 
 /**
- * Player speed in px/s per degree of tilt at the default sensitivity. Speed follows tilt
- * linearly with no threshold.
+ * Player speed in px/s per degree of tilt at the default sensitivity, between the dead zone and
+ * the top tilt (see shapeTilt in PlayerDot.ts)
  */
 export const PLAYER_SPEED_PER_DEGREE = 40;
+
+/** Below this tilt (radians, 1 degree) the player rests */
+export const PLAYER_DEAD_ZONE_RAD = Math.PI / 180;
+
+/** From this tilt (radians, 3 degrees) the player moves as fast as the tilt says */
+export const PLAYER_FULL_TILT_FROM_RAD = (3 * Math.PI) / 180;
+
+/** Past this tilt (radians, 20 degrees) the player moves no faster */
+export const PLAYER_TOP_TILT_RAD = (20 * Math.PI) / 180;
 
 /** The range the tilt sensitivity (a multiple of the default speed) is kept within */
 export const TILT_SENSITIVITY_MIN = 0.25;
@@ -147,5 +156,4 @@ export const DEFAULT_SETTINGS: GameSettings = {
 	soundEnabled: true,
 	musicEnabled: true,
 	tiltSensitivity: 1,
-	levelPoses: { up: null, down: null },
 };

@@ -1,24 +1,24 @@
 import type React from "react";
 import { createContext, use, useEffect, useMemo } from "react";
 import { type SharedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import { FLAT_READING, type TiltReading, type TiltSource } from "../../application/TiltSource";
+import type { TiltSource } from "../../application/TiltSource";
+import type { TiltAngles } from "../../domain/types";
 import { smoothTowards } from "./smoothTilt";
 
 /**
  * Device tilt for the UI (radians, same axes and sign as the player's gyro input, so
- * anything that rolls on screen rolls the way the player dot would). `x`/`y` are the reading's
- * tilt, the very one the game gets (see TiltSource), smoothed on the UI thread every frame;
- * `reading` is the latest as it came, with the attitude and the level pose in use, for setting
- * that pose (one shared value, so a reading is one write to the UI thread). `available` flips
- * once the first real reading arrives (false on simulators without motion sensors, so
- * gyro-driven UI can fall back to tap).
+ * anything that rolls on screen rolls the way the player dot would). `x`/`y` are the tilt the
+ * game gets (see TiltSource), smoothed on the UI thread every frame. `available` flips once the
+ * first real reading arrives (false on simulators without motion sensors, so gyro-driven UI can
+ * fall back to tap).
  */
 export interface Tilt {
 	x: SharedValue<number>;
 	y: SharedValue<number>;
-	reading: SharedValue<TiltReading>;
 	available: SharedValue<boolean>;
 }
+
+const LEVEL: TiltAngles = { x: 0, y: 0 };
 
 const TiltContext = createContext<Tilt | null>(null);
 
@@ -28,15 +28,16 @@ interface TiltProviderProps {
 }
 
 export const TiltProvider: React.FC<TiltProviderProps> = ({ source, children }) => {
-	const reading = useSharedValue<TiltReading>(FLAT_READING);
+	// The latest tilt as it came, one shared value so a reading is one write to the UI thread
+	const latest = useSharedValue<TiltAngles>(LEVEL);
 	const x = useSharedValue(0);
 	const y = useSharedValue(0);
 	const available = useSharedValue(false);
 
 	// The interface tilts on every screen, so the provider owns the source; the game only listens
 	useEffect(() => {
-		const unsubscribe = source.onReading((latest) => {
-			reading.set(latest);
+		const unsubscribe = source.onReading((tilt) => {
+			latest.set(tilt);
 			if (!available.get()) available.set(true);
 		});
 		source.start();
@@ -44,26 +45,18 @@ export const TiltProvider: React.FC<TiltProviderProps> = ({ source, children }) 
 			unsubscribe();
 			source.stop();
 		};
-	}, [source, reading, available]);
+	}, [source, latest, available]);
 
 	// Once the smoothed tilt snaps onto a still target, these writes repeat the same value and
 	// Reanimated skips them, so nothing derived from the tilt re-runs while the phone rests
 	useFrameCallback((info) => {
 		const dt = info.timeSincePreviousFrame ?? 16;
-		const latest = reading.get();
-		x.set(smoothTowards(x.get(), latest.x, dt));
-		y.set(smoothTowards(y.get(), latest.y, dt));
+		const target = latest.get();
+		x.set(smoothTowards(x.get(), target.x, dt));
+		y.set(smoothTowards(y.get(), target.y, dt));
 	});
 
-	const value = useMemo<Tilt>(
-		() => ({
-			x,
-			y,
-			reading,
-			available,
-		}),
-		[x, y, reading, available],
-	);
+	const value = useMemo<Tilt>(() => ({ x, y, available }), [x, y, available]);
 	return <TiltContext value={value}>{children}</TiltContext>;
 };
 
