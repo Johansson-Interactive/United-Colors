@@ -1,6 +1,6 @@
 # Tilt is the whole turn of the phone, swivel included
 
-Superseded by ADR 0014: tilt is read from gravity again, with a steering wheel upright, because the player turning on the spot moved the dot. Amended before that by ADR 0013.
+Superseded by ADR 0014, and that by ADR 0016: tilt is read from gravity again, with a steering wheel upright, because the player turning on the spot moved the dot. Amended before that by ADR 0013.
 
 ADR 0009 measures tilt as the turn of gravity from the level pose. Gravity cannot see a turn about itself, so one axis fades as the phone nears vertical: held upright, the roll about the long axis that steers left and right is a turn about gravity and reads as nothing; lying on your side, the tip about the short axis is lost instead. Lying back at 45° half of a roll is already lost. ADR 0009 let a turn in the screen's own plane stand in for the lost axis, which gives the hand a second mapping to learn upright and nothing in between.
 

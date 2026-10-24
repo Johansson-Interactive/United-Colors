@@ -1,5 +1,7 @@
 # Tilt is measured as the turn of gravity from the level pose
 
+Superseded by ADR 0016: the level pose is taken afresh as play starts and resumes, never saved, and there is one, not two.
+
 Tilt used to be two angles from flat, one per screen axis (`atan2(gx, -gz)` and `atan2(-gy, -gz)`), and the level pose was those two angles, subtracted from each reading. Near upright that reading breaks down: as the screen nears vertical, `gz` nears zero and a small turn of the phone moves the angles a lot. Held at 88° (lying on your side), 0.3° of sensor jitter read as 8.5°. Calibration failed because its 2.3° hold never held, and steering went twitchy. Players lying down reported it on Android, whose rotation-vector sensor is noisier than Core Motion; the same arithmetic ran on iPhone too.
 
 Now the sensor reports which way gravity points. The level pose is saved as a gravity direction, and tilt is the shortest turn from it to the current gravity, read along the level pose's own axes (`domain/levelPose.ts`). The size of the reading is the angle gravity has turned, in every pose, so jitter is never magnified. The settle bowl's hold is checked on that angle too.

@@ -1,6 +1,6 @@
 # The swivel zero follows a turn on the spot
 
-Superseded by ADR 0014: the swivel no longer steers, so it needs no zero.
+Superseded by ADR 0014, and that by ADR 0016: the swivel no longer steers, so it needs no zero.
 
 ADR 0010 fixed the swivel's zero in the room for as long as a run lasts, with the pause gesture as the only recenter. Players turn on the spot while they play, in a swivel chair, in bed or walking, and that zero stayed facing the old way. A turn is not a lean, and it did more harm than a compass step: tilt is read along the level pose's axes, so with the zero half a turn behind, tipping forward read as sideways even flat, where a swivel steers nothing. The controls turned round under the player.
 

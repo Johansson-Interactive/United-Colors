@@ -98,7 +98,7 @@ Where the player dot froze when the run paused, and where Get ready's portal ope
 _Avoid_: socket, target, home position
 
 **Cup**:
-The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Its bottom slowly leans to match the hand, so the dot sloshes when the grip changes and rolls home once it is steady. Fully open, it arms Get ready: only then does settling home count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
+The title's bowl, opened as a portal into play at the seat in Get ready: it grows with the finger's hold at the bloom's speed, the bowl's glass showing at its edge, and drains back if the finger lifts first. The copy of the player dot rolls inside its glass from the first frame and cannot leave it: the glass holds it in as the cup grows and herds it home as the cup drains. Its bottom leans to match the hand within a moment, so the dot rolls off the seat when the grip changes and glides home once it is steady. Fully open, it arms Get ready: only then does settling home count. Its rim then pulses in the player's colour like a point dot while the dot is away and holds steady once it is home. The hold widens the portal from the cup to the walls.
 _Avoid_: window, hole, spotlight, bowl (that is the title's)
 
 **Run record**:
@@ -139,7 +139,7 @@ The world on the other side of the bloom's portal: the frozen field frosted, wit
 _Avoid_: pause menu, pause button, play button
 
 **Corner menu**:
-A dot in a bottom corner that opens into smaller dots, one per item (`DotMenu`). The title screen and the pause share two: the settings corner bottom left (`SettingsMenu`: level pose and tilt speed) and the sound corner bottom right (`SoundMenu`: music and effects).
+A dot in a bottom corner that opens into smaller dots, one per item (`DotMenu`). The title screen and the pause share two: the settings corner bottom left (`SettingsMenu`: tilt speed) and the sound corner bottom right (`SoundMenu`: music and effects).
 _Avoid_: settings page, popup
 
 ### Ranking

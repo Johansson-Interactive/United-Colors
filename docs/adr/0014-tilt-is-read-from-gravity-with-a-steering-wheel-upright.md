@@ -1,6 +1,6 @@
 # Tilt is read from gravity, with a steering wheel upright
 
-Supersedes ADR 0010 and ADR 0013.
+Supersedes ADR 0010 and ADR 0013. Superseded by ADR 0016: held upright, the swivel steers in place of the steering wheel, unless it swings the phone along the arc of a turn on the spot.
 
 ADR 0010 read tilt as the whole turn of the phone, swivel included, so a roll steered at full strength reclined and upright. But held reclined or upright, a roll is partly or wholly a turn about the vertical, and so is the player turning on the spot: the phone can't tell them apart. ADR 0013 let the swivel zero follow a turn past a lean's reach, which only bounded the harm. On device, a player turned 90 degrees to the left in a reclined pose and the dot ran right until the zero caught up. Flat, the same turn did nothing, and that is what players expect: turning on the spot is not steering.
 
