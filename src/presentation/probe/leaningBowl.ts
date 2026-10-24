@@ -16,7 +16,7 @@ export interface BowlTuning {
 	damping: number;
 }
 
-export const BOWL_TUNING: BowlTuning = { leanMs: 1000, damping: 0.4 };
+export const BOWL_TUNING: BowlTuning = { leanMs: 250, damping: 1 };
 
 /** Pixels the dot is pushed off the seat per radian of tilt, as Get ready's cup rolls it */
 const ROLL_GAIN = 150;
