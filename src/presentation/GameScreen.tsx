@@ -7,9 +7,9 @@ import { useStore } from "zustand";
 import type { GameSession } from "../application/GameSession";
 import type { GameStore } from "../application/GameStore";
 import type { GameAudio, GameHaptics, StoragePort, WatchAppActive } from "../application/ports";
-import type { TiltReading, TiltSource } from "../application/TiltSource";
+import type { TiltSource } from "../application/TiltSource";
 import { bindAppLeave } from "../application/useCases/BindAppLeave";
-import type { Corners, ScreenSize } from "../domain/types";
+import type { Corners, ScreenSize, TiltAngles } from "../domain/types";
 import { CornerMenusProvider } from "./components/CornerMenusProvider";
 import type { PressPoint } from "./components/DotButton";
 import { FieldTouch } from "./components/FieldTouch";
@@ -92,17 +92,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 	useGameBindings(store, audio, haptics, storage);
 
 	// Reads the latest control mode without resubscribing to the tilt when it changes
-	const handleTiltReading = useEffectEvent((reading: TiltReading) => {
+	const handleTilt = useEffectEvent((tilt: TiltAngles) => {
 		// Dev: skip feeding the game while touch is active
 		if (devTouch) return;
 		onGyroSample();
-		session.feedTilt(reading);
+		session.feedTilt(tilt);
 	});
 
 	// The game reads the same tilt as the interface, so the dot in the game and the dots on the
 	// menus rest in the same hand position. Readings arrive on every screen; the game only moves
 	// the player while a run is on.
-	useEffect(() => tiltSource.onReading((reading) => handleTiltReading(reading)), [tiltSource]);
+	useEffect(() => tiltSource.onReading((tilt) => handleTilt(tilt)), [tiltSource]);
 
 	// The arena is the laid-out stage with the glass's corners, which may arrive after it
 	const stageSizeRef = useRef<ScreenSize | null>(null);

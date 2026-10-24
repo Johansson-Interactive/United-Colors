@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { SensorPort } from "../../application/ports";
-import { type TiltReading, TiltSource } from "../../application/TiltSource";
+import { TiltSource } from "../../application/TiltSource";
 import { FLAT_GRAVITY, gravityAt } from "../../domain/tilt";
-import type { Gravity, MotionSample } from "../../domain/types";
+import type { Gravity, MotionSample, TiltAngles } from "../../domain/types";
 
 const DEG = Math.PI / 180;
 const STILL = { x: 0, y: 0, z: 0 };
@@ -40,9 +40,9 @@ function handSensor() {
 	};
 }
 
-function listen(source: TiltSource): TiltReading[] {
-	const readings: TiltReading[] = [];
-	source.onReading((reading) => readings.push(reading));
+function listen(source: TiltSource): TiltAngles[] {
+	const readings: TiltAngles[] = [];
+	source.onReading((tilt) => readings.push(tilt));
 	return readings;
 }
 
