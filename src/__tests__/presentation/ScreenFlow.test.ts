@@ -71,28 +71,20 @@ describe("score slivers at a run's end", () => {
 });
 
 describe("screen flow", () => {
-	it("PLAY takes the level pose in the grip it is pressed in, and floods into a game in that colour", () => {
+	it("PLAY floods into a game in that colour, leaving the level pose to the run it starts", () => {
 		const step = stepFlow(INITIAL_FLOW, { type: "startPressed", color: BLUE, at: AT }, GAME);
 		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
-		expect(step.flood).toEqual(START_BLUE);
-		expect(step.takeLevelPose).toBe(true);
-	});
-
-	it("the bench's auto-start floods into a game in that colour like PLAY, taking no level pose", () => {
-		const step = stepFlow(INITIAL_FLOW, { type: "autoStarted", color: BLUE, at: AT }, GAME);
-		expect(step.state).toEqual({ ...INITIAL_FLOW, flooding: true });
-		expect(step.act).toBeUndefined();
 		expect(step.flood).toEqual(START_BLUE);
 		expect(step.takeLevelPose).toBeUndefined();
 	});
 
-	it("RETRY takes the level pose and floods into a new game in the player's colour", () => {
+	it("RETRY floods into a new game in the player's colour", () => {
 		const step = stepFlow(
 			INITIAL_FLOW,
 			{ type: "retryPressed", at: AT },
 			{ ...GAME, playerColor: BLUE },
 		);
-		expect(step.takeLevelPose).toBe(true);
+		expect(step.takeLevelPose).toBeUndefined();
 		expect(step.flood).toEqual({
 			color: BLUE,
 			at: AT,

@@ -14,5 +14,5 @@ Now the swivel is the gyroscope's turn about the vertical, summed from the level
 
 ## Consequences
 
-- Upright, the hand has nothing to feel for straight ahead: a shift of the shoulders steers until the next level pose, at PLAY, RETRY or Get ready.
+- Upright, the hand has nothing to feel for straight ahead: a shift of the shoulders steers until the next level pose, as a run starts or Get ready ends.
 - The motion probe keeps recording gravity and rotation for Android traces; it no longer shows the arc.

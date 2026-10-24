@@ -75,8 +75,11 @@ const sensor = BENCH
 			)
 		: new DeviceMotionAdapter(Platform.OS === "ios" ? "ios" : "android");
 
-/** The tilt from the level pose, read once per sample for the interface and the game */
-const tiltSource = new TiltSource(sensor);
+/**
+ * The tilt from the level pose, read once per sample for the interface and the game. The bench
+ * keeps it flat, as its scripted tilt is measured from flat.
+ */
+const tiltSource = new TiltSource(sensor, BENCH ? "flat" : "fresh");
 
 const audio = new AudioService(
 	{

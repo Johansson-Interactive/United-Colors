@@ -82,6 +82,17 @@ describe("TiltSource", () => {
 		expect(readings.at(-1)?.x).toBeCloseTo(0.1, 2);
 	});
 
+	it("keeps the level pose flat for the bench, whose scripted tilt is measured from flat", () => {
+		const hand = handSensor();
+		const source = new TiltSource(hand.sensor, "flat");
+		const readings = listen(source);
+		source.start();
+		hand.hold(RECLINED);
+		source.takeLevelPose();
+		hand.hold(RECLINED);
+		expect(readings.at(-1)?.y).toBeCloseTo(45 * DEG);
+	});
+
 	it("feeds every listener the same reading", () => {
 		const hand = handSensor();
 		const source = new TiltSource(hand.sensor);

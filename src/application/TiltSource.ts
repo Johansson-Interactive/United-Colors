@@ -3,6 +3,13 @@ import type { TiltAngles } from "../domain/types";
 import type { SensorPort } from "./ports";
 
 /**
+ * Where the level pose comes from: `fresh`, taken where the phone is held whenever the flow
+ * asks (ADR 0016); or `flat` throughout, for the bench run, whose scripted tilt is measured from
+ * flat (see bench.ts)
+ */
+export type LevelPoseRule = "fresh" | "flat";
+
+/**
  * The player's tilt from the level pose (see tiltOf), measured once per sample for the game and
  * the interface alike, so both read it from the same pose. It wraps the motion sensor: whoever
  * owns it starts and stops it, the others only listen.
@@ -16,7 +23,10 @@ export class TiltSource {
 	/** Stops following the sensor; null while stopped */
 	private unbind: (() => void) | null = null;
 
-	constructor(private readonly sensor: SensorPort) {}
+	constructor(
+		private readonly sensor: SensorPort,
+		private readonly levelPose: LevelPoseRule = "fresh",
+	) {}
 
 	start(): void {
 		if (this.unbind) return;
@@ -35,6 +45,7 @@ export class TiltSource {
 
 	/** Take the level pose where the phone is held now, and read the tilt from it at once */
 	takeLevelPose(): void {
+		if (this.levelPose === "flat") return;
 		this.state = takeLevelPose(this.state);
 		this.emit();
 	}

@@ -149,14 +149,14 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "speed", color: BLUE });
 	});
 
-	it("retry takes the level pose and floods in the player's colour, playing only once it covers", () => {
+	it("retry floods in the player's colour, and takes the level pose and plays only once it covers", () => {
 		const { flow, calls, answers, publish, covers } = setup();
 		answers.playerColor = BLUE;
 		publish("GAME_OVER");
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
-		expect(calls).toEqual(["takeLevelPose", `flood ${BLUE} 10,20`]);
+		expect(calls).toEqual([`flood ${BLUE} 10,20`]);
 		covers();
-		expect(calls).toEqual(["takeLevelPose", `flood ${BLUE} 10,20`, `play ${BLUE}`]);
+		expect(calls).toEqual([`flood ${BLUE} 10,20`, "takeLevelPose", `play ${BLUE}`]);
 	});
 
 	it("leaving the game over floods, and starts the kiosk only once the flood covers", () => {
@@ -183,20 +183,13 @@ describe("flow store", () => {
 		expect(screen()).toEqual({ kind: "speed", color: BLUE });
 	});
 
-	it("PLAY takes the level pose at the press, floods, and plays only once the flood covers", () => {
-		const { flow, calls, covers } = setup();
-		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
-		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`]);
-		covers();
-		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`, `play ${PINK}`]);
-	});
-
-	it("the bench's auto-start floods into a run, steered from flat with no level pose taken", () => {
+	it("PLAY floods, then takes the level pose as the run starts, once the flood covers", () => {
 		const { flow, calls, screen, covers } = setup();
-		flow.getState().dispatch({ type: "autoStarted", color: BLUE, at: AT });
+		flow.getState().dispatch({ type: "startPressed", color: PINK, at: AT });
+		expect(calls).toEqual([`flood ${PINK} 10,20`]);
 		expect(screen()).toEqual({ kind: "title" });
 		covers();
-		expect(calls).toEqual([`flood ${BLUE} 10,20`, `play ${BLUE}`]);
+		expect(calls).toEqual([`flood ${PINK} 10,20`, "takeLevelPose", `play ${PINK}`]);
 	});
 
 	it("ignores taps while a flood is on its way", () => {
@@ -205,7 +198,7 @@ describe("flow store", () => {
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		flow.getState().dispatch({ type: "leavePressed", at: AT });
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
-		expect(calls).toEqual(["takeLevelPose", `flood ${PINK} 10,20`]);
+		expect(calls).toEqual([`flood ${PINK} 10,20`]);
 		expect(screen()).toEqual({ kind: "gameOver" });
 	});
 
@@ -226,7 +219,7 @@ describe("flow store", () => {
 		flow.getState().dispatch({ type: "retryPressed", at: AT });
 		covers();
 		flow.getState().dispatch({ type: "stageLaidOut" });
-		expect(calls).toEqual(["startKiosk", "takeLevelPose", `flood ${PINK} 10,20`, `play ${PINK}`]);
+		expect(calls).toEqual(["startKiosk", `flood ${PINK} 10,20`, "takeLevelPose", `play ${PINK}`]);
 	});
 
 	it("stops following the game once unfollowed, and catches up when it follows again", () => {

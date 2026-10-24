@@ -6,8 +6,8 @@
  * comes in as an event too, and every step answers with the one screen to show. While the speed
  * view is open over the title the kiosk halts.
  *
- * The level pose is taken wherever the phone is held as a run is started and as Get ready ends
- * (ADR 0016), so whatever grip the player is in is level.
+ * The level pose is taken wherever the phone is held as a run starts (every play does, see
+ * flowStore.ts) and as Get ready ends (ADR 0016), so whatever grip the player is in is level.
  *
  * The field itself is the way in and out of the pause (see GLOSSARY.md). A finger held on the
  * field in play freezes the game at once and opens a portal into the pause under it; the
@@ -104,13 +104,8 @@ export interface GameFacts {
  * dot showed, which the run or the speed view's dot takes
  */
 export type FlowEvent =
-	/** PLAY on the title */
+	/** PLAY on the title, or the bench run starting itself (see useAutoStart) */
 	| { type: "startPressed"; color: string; at: PressPoint }
-	/**
-	 * Not a tap: the bench run starts itself (see useAutoStart), steered by its scripted tilt
-	 * from flat, so it takes no level pose
-	 */
-	| { type: "autoStarted"; color: string; at: PressPoint }
 	/** The speed button on the title or the pause; from the pause its dot is the player's colour */
 	| ({ type: "speedPressed" } & MenuOpening)
 	/** BACK on the speed view */
@@ -152,12 +147,13 @@ export type FlowEvent =
 
 /** What the game does: straight away, or once a flood covers the screen */
 export type FlowAction =
+	/** Start a run, from a level pose taken as it starts */
 	| { kind: "play"; color: string }
 	| { kind: "pause" }
 	| { kind: "resume" }
 	/** Start the kiosk afresh */
 	| { kind: "startKiosk" }
-	/** Stop the kiosk, so only the bowl over it moves (the stage look hides it) */
+	/** Stop the kiosk, so only the speed view over it moves (the stage look hides it) */
 	| { kind: "haltKiosk" }
 	/** Run the kiosk on from where it stopped */
 	| { kind: "runKiosk" };
@@ -166,7 +162,7 @@ export interface FlowStep {
 	state: FlowState;
 	/** The screen to show for `state` */
 	screen: Screen;
-	/** Take the level pose where the phone is held now */
+	/** Take the level pose where the phone is held now: Get ready handing back to play */
 	takeLevelPose?: true;
 	/** Do this to the game now */
 	act?: FlowAction;
@@ -310,12 +306,6 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 	if (!gettingReady && !blooming && HOLD_EVENTS.has(event.type)) return { state };
 	switch (event.type) {
 		case "startPressed":
-			// The grip the player presses PLAY in is the one they play in
-			return {
-				...startFlood(state, { color: event.color, at: event.at, action: play(event.color) }),
-				takeLevelPose: true,
-			};
-		case "autoStarted":
 			return startFlood(state, { color: event.color, at: event.at, action: play(event.color) });
 		case "speedPressed":
 			return {
@@ -330,14 +320,11 @@ function bareStep(state: FlowState, event: FlowEvent, game: GameFacts): BareStep
 			return { ...closeOver(state), ...(fromMenu && { act: RUN_KIOSK }) };
 		}
 		case "retryPressed":
-			return {
-				...startFlood(state, {
-					color: game.playerColor,
-					at: event.at,
-					action: play(game.playerColor),
-				}),
-				takeLevelPose: true,
-			};
+			return startFlood(state, {
+				color: game.playerColor,
+				at: event.at,
+				action: play(game.playerColor),
+			});
 		case "leavePressed":
 			return startFlood(state, { color: INK_LIFT, at: event.at, action: { kind: "startKiosk" } });
 		case "fieldTouched": {

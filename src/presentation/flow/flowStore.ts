@@ -43,10 +43,16 @@ export interface GameControls {
 	facts: () => GameFacts;
 }
 
-/** Carry out `action` on the game, through the control of the same name */
+/**
+ * Carry out `action` on the game, through the control of the same name. A run starts from a
+ * level pose taken as it begins (ADR 0016): under a flood that is once it covers, when the
+ * jolt of the tap has passed and the hand holds the grip it plays in.
+ */
 function perform(controls: GameControls, action: FlowAction) {
-	if (action.kind === "play") controls.play(action.color);
-	else controls[action.kind]();
+	if (action.kind === "play") {
+		controls.takeLevelPose();
+		controls.play(action.color);
+	} else controls[action.kind]();
 }
 
 export interface FlowStoreState {
