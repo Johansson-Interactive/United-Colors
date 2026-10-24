@@ -1,16 +1,15 @@
 import type { MotionSample } from "../../domain/types";
 
 /**
- * A recording of raw motion samples in the probe build, shared off the phone as text so the
- * call between a turn on the spot and a wrist roll can be tuned against real motion, and the
- * traces kept as test fixtures (ADR 0016).
+ * A recording of raw motion samples in the probe build, shared off the phone as text so tilt
+ * can be checked against real motion, and the traces kept as test fixtures (ADR 0016).
  */
 
 /** The longest recording (ms of sample time); it stops itself there */
 export const LONGEST_RECORDING_MS = 60_000;
 
 /** The columns of each row, in order */
-const COLUMNS = ["t", "gx", "gy", "gz", "rx", "ry", "rz", "ax", "ay", "az"] as const;
+const COLUMNS = ["t", "gx", "gy", "gz", "rx", "ry", "rz"] as const;
 
 export interface MotionRecording {
 	/** One row per sample, in COLUMNS order; time in ms from the first sample */
@@ -34,8 +33,8 @@ export function recordSample(recording: MotionRecording, sample: MotionSample): 
 	const startMs = recording.startMs ?? sample.timeMs;
 	const t = sample.timeMs - startMs;
 	if (t > LONGEST_RECORDING_MS) return { ...recording, full: true };
-	const { gravity: g, rotationRate: r, acceleration: a } = sample;
-	const row = [t, g.x, g.y, g.z, r.x, r.y, r.z, a.x, a.y, a.z].map(rounded);
+	const { gravity: g, rotationRate: r } = sample;
+	const row = [t, g.x, g.y, g.z, r.x, r.y, r.z].map(rounded);
 	return { rows: [...recording.rows, row], startMs, full: false };
 }
 
@@ -45,13 +44,13 @@ export function recordedMs(recording: MotionRecording): number {
 }
 
 /**
- * The recording as JSON text: what it is, its columns (gravity unit, rate in radians a second,
- * push in metres a second squared, all in the phone's axes) and its rows
+ * The recording as JSON text: what it is, its columns (gravity unit and rate in radians a
+ * second, both in the phone's axes) and its rows
  */
 export function recordingText(recording: MotionRecording, platform: string): string {
 	return JSON.stringify({
 		kind: "tiltling-motion-recording",
-		version: 1,
+		version: 2,
 		platform,
 		columns: COLUMNS,
 		rows: recording.rows,

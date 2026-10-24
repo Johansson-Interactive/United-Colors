@@ -28,7 +28,7 @@ function handSensor() {
 		sensor,
 		hold: (gravity: Gravity) => {
 			timeMs += 10;
-			const sample = { gravity, rotationRate: STILL, acceleration: STILL, timeMs };
+			const sample = { gravity, rotationRate: STILL, timeMs };
 			for (const listener of listeners) listener(sample);
 		},
 		get started() {

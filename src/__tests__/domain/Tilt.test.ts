@@ -4,12 +4,14 @@ import {
 	gravityAt,
 	shapeTilt,
 	stepTilt,
+	swivelRate,
 	TILT_START,
 	type TiltState,
 	takeLevelPose,
 	tiltOf,
+	uprightness,
 } from "../../domain/tilt";
-import type { Gravity, MotionSample } from "../../domain/types";
+import type { Gravity, MotionSample, Vector3 } from "../../domain/types";
 import { trace } from "../fixtures/motion/traces";
 
 const DEG = Math.PI / 180;
@@ -28,7 +30,7 @@ const OVERHEAD: Gravity = { x: 0, y: 0, z: 1 };
 function posedAt(pose: Gravity): TiltState {
 	let state = TILT_START;
 	for (let t = 0; t <= 100; t += SAMPLE_MS) {
-		state = stepTilt(state, { gravity: pose, rotationRate: STILL, acceleration: STILL, timeMs: t });
+		state = stepTilt(state, { gravity: pose, rotationRate: STILL, timeMs: t });
 	}
 	return takeLevelPose(state);
 }
@@ -52,7 +54,6 @@ function turned(state: TiltState, pose: Gravity, axis: "x" | "y", angle: number,
 			),
 			// About the long axis is a turn about the phone's y; about the short axis, its x
 			rotationRate: axis === "x" ? { x: 0, y: turning, z: 0 } : { x: turning, y: 0, z: 0 },
-			acceleration: STILL,
 			timeMs: start + t,
 		};
 		next = stepTilt(next, sample);
@@ -97,7 +98,6 @@ describe("tilt", () => {
 			held = stepTilt(held, {
 				gravity: rolledGravity,
 				rotationRate: STILL,
-				acceleration: STILL,
 				timeMs: (rolled.timeMs ?? 0) + t * SAMPLE_MS,
 			});
 		}
@@ -121,7 +121,6 @@ describe("tilt", () => {
 			state = stepTilt(state, {
 				gravity: reclined(30),
 				rotationRate: { x: 0, y: 1, z: 1 },
-				acceleration: STILL,
 				timeMs: 100 + t * SAMPLE_MS,
 			});
 		}
@@ -136,9 +135,15 @@ describe("tilt", () => {
 		expect(tiltOf(again).y).toBeCloseTo(0);
 	});
 
-	it("never steers for a torso turn upright, and does for a wrist roll, on a real phone", () => {
+	it("comes back to the middle upright after a roll there and back", () => {
+		const there = turned(posedAt(UPRIGHT), UPRIGHT, "x", 25 * DEG);
+		const back = turned(there, gravityAt({ x: 25 * DEG, y: 0 }, UPRIGHT), "x", -25 * DEG);
+		expect(tiltOf(back).x).toBeCloseTo(0, 6);
+	});
+
+	it("steers upright for a torso turn as for a wrist roll, on a real phone", () => {
 		// iPhone held upright on a sofa: held still to 5 s, six torso turns of about 80 degrees
-		// to 18 s, then six wrist rolls
+		// to 18 s, then six wrist rolls. Upright, the two are one turn; neither locks the other.
 		let state = TILT_START;
 		let turnMost = 0;
 		let rollMost = 0;
@@ -152,9 +157,32 @@ describe("tilt", () => {
 			if (sample.timeMs < 18_000) turnMost = Math.max(turnMost, steer);
 			else rollMost = Math.max(rollMost, steer);
 		}
-		// Read 3.7 degrees at most through the turns, and 47 through the rolls
-		expect(turnMost).toBeLessThan(5 * DEG);
+		// Read 85 degrees at most through the turns, and 47 through the rolls
+		expect(turnMost).toBeGreaterThan(60 * DEG);
 		expect(rollMost).toBeGreaterThan(30 * DEG);
+	});
+});
+
+describe("swivelRate", () => {
+	it("reads the turn about the vertical, in any grip", () => {
+		const sample = (gravity: Gravity, rotationRate: Vector3): MotionSample => ({
+			gravity,
+			rotationRate,
+			timeMs: 0,
+		});
+		expect(swivelRate(sample(FLAT_GRAVITY, { x: 0, y: 0, z: 1 }))).toBe(1);
+		expect(swivelRate(sample({ x: 0, y: -1, z: 0 }, { x: 0, y: 1, z: 0 }))).toBe(1);
+		// A tip or a roll held flat turns about a level axis: no swivel
+		expect(swivelRate(sample(FLAT_GRAVITY, { x: 1, y: 1, z: 0 }))).toBeCloseTo(0);
+	});
+});
+
+describe("uprightness", () => {
+	it("reads how far the screen stands from flat, face up or down", () => {
+		expect(uprightness(FLAT_GRAVITY)).toBe(0);
+		expect(uprightness(OVERHEAD)).toBe(0);
+		expect(uprightness({ x: 0, y: -1, z: 0 })).toBeCloseTo(90 * DEG);
+		expect(uprightness({ x: 0, y: -1, z: -1 })).toBeCloseTo(45 * DEG);
 	});
 });
 

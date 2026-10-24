@@ -33,25 +33,8 @@ describe("motionSampleOf", () => {
 		}
 	});
 
-	it("reads the hand's push the same way round on both platforms", () => {
-		const push = { x: 1, y: -2, z: 3, timestamp: 0 };
-		const turned = { x: -1, y: 2, z: -3, timestamp: 0 };
-		expect(motionSampleOf(event({ acceleration: push }), "android").acceleration).toEqual({
-			x: 1,
-			y: -2,
-			z: 3,
-		});
-		expect(motionSampleOf(event({ acceleration: turned }), "ios").acceleration).toEqual({
-			x: 1,
-			y: -2,
-			z: 3,
-		});
-	});
-
-	it("reads a phone without a rate or a push yet as still", () => {
-		const sample = motionSampleOf(event({}), "android");
-		expect(sample.rotationRate).toEqual({ x: 0, y: 0, z: 0 });
-		expect(sample.acceleration).toEqual({ x: 0, y: 0, z: 0 });
+	it("reads a phone without a rate yet as still", () => {
+		expect(motionSampleOf(event({}), "android").rotationRate).toEqual({ x: 0, y: 0, z: 0 });
 	});
 
 	it("stamps the sample with the sensor's time, in ms", () => {

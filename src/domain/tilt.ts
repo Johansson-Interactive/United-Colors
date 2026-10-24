@@ -1,24 +1,16 @@
-import {
-	ARC_GAUGE_START,
-	type ArcGauge,
-	isTurnOnTheSpot,
-	stepArcGauge,
-	swivelRate,
-	uprightness,
-} from "./swivelArc";
 import type { Gravity, MotionSample, TiltAngles } from "./types";
 import { cross, dot, lengthOf, plus, rotated, scaled, turnBetween, unit } from "./vector3";
 
 /**
  * Tilt: how far the hand has turned the phone from the level pose, about the screen's own long
- * and short axes (ADR 0016).
+ * and short axes (ADR 0016, ADR 0017).
  *
  * The level pose is taken afresh, in whatever grip the player holds, when a run starts and when
  * Get ready ends. Gravity sees every turn of the phone but one, the turn about the vertical: the
  * swivel. Held flat or leaning, that is the player turning on the spot, and tilt is gravity's
  * turn alone, its share of a roll scaled back to the whole roll. Held upright, a roll about the
  * screen's upright axis is nothing but a swivel, so there the swivel the gyroscope measures
- * steers too, unless it swings the phone along the arc of a turn on the spot (see swivelArc.ts).
+ * steers too, a turn on the spot included: the two are the same turn there.
  *
  * The turn is split along two directions on the screen: across, which lies level at the level
  * pose, and downhill, square to it. A turn about across moves gravity in full. A turn about
@@ -37,13 +29,6 @@ const SWIVEL_FULL = (80 * Math.PI) / 180;
  * from flat, where the swivel takes over. Scaling it further would blow sensor jitter up.
  */
 const MOST_GRAVITY_GAIN = 1 / Math.cos(SWIVEL_FROM) ** 2;
-
-/**
- * Below this rate (radians a second) the phone is not swivelling, so the swivel is kept as it
- * stands: a turn on the spot, once called, goes back to it. It lies below the gauge's own
- * threshold, so the turn's first, slow degrees are taken back too.
- */
-const RESTING_SWIVEL_RATE = 0.1;
 
 /** A gap in the samples longer than this (ms) adds no swivel, as after a pause */
 const LONGEST_GAP_MS = 200;
@@ -66,6 +51,18 @@ export interface LevelPose {
 	swivelWeight: number;
 	/** How far gravity's share of a roll about downhill is scaled back */
 	gravityGain: number;
+}
+
+/** How fast the phone turns about the vertical (radians a second), anticlockwise seen from above */
+export function swivelRate(sample: MotionSample): number {
+	return -dot(sample.rotationRate, unit(sample.gravity));
+}
+
+/** How far the screen stands from lying flat (radians): 0 flat, face up or down, pi/2 upright */
+export function uprightness(gravity: Gravity): number {
+	const down = unit(gravity);
+	if (lengthOf(down) === 0) return 0;
+	return Math.acos(Math.min(1, Math.abs(down.z)));
 }
 
 function smoothstep(from: number, to: number, value: number): number {
@@ -95,9 +92,6 @@ export interface TiltState {
 	gravity: Gravity | null;
 	/** The swivel since the level pose (radians), anticlockwise seen from above */
 	swivel: number;
-	/** The swivel as it stood when the phone last rested, which a turn on the spot goes back to */
-	restingSwivel: number;
-	gauge: ArcGauge;
 	/** The latest sample's time (ms); null before the first */
 	timeMs: number | null;
 }
@@ -106,8 +100,6 @@ export const TILT_START: TiltState = {
 	pose: levelPoseAt(FLAT_GRAVITY),
 	gravity: null,
 	swivel: 0,
-	restingSwivel: 0,
-	gauge: ARC_GAUGE_START,
 	timeMs: null,
 };
 
@@ -117,23 +109,14 @@ export function stepTilt(state: TiltState, sample: MotionSample): TiltState {
 	const dtMs = state.timeMs === null ? 0 : sample.timeMs - state.timeMs;
 	// A sample read at the same moment again (Android resends the last) says nothing new
 	if (state.timeMs !== null && dtMs === 0) return state;
-	const { gauge } = stepArcGauge(state.gauge, sample);
-	const rate = swivelRate(sample);
-	let { swivel, restingSwivel } = state;
-	if (isTurnOnTheSpot(gauge)) {
-		// The player is turning: the swivel goes back to where it rested, and stays there
-		swivel = restingSwivel;
-	} else if (dtMs > 0 && dtMs <= LONGEST_GAP_MS) {
-		swivel += (rate * dtMs) / 1000;
-	}
-	if (Math.abs(rate) < RESTING_SWIVEL_RATE) restingSwivel = swivel;
-	return { ...state, gravity, swivel, restingSwivel, gauge, timeMs: sample.timeMs };
+	const turned = dtMs > 0 && dtMs <= LONGEST_GAP_MS ? (swivelRate(sample) * dtMs) / 1000 : 0;
+	return { ...state, gravity, swivel: state.swivel + turned, timeMs: sample.timeMs };
 }
 
 /** Tilt with its level pose taken where the phone is now held; before any sample, flat */
 export function takeLevelPose(state: TiltState): TiltState {
 	const pose = levelPoseAt(state.gravity ?? FLAT_GRAVITY);
-	return { ...state, pose, swivel: 0, restingSwivel: 0 };
+	return { ...state, pose, swivel: 0 };
 }
 
 /**

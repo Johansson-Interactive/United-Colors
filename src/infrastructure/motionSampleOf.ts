@@ -24,20 +24,6 @@ function rotationRateOf(
 	return { x: x * RADIANS_PER_DEGREE, y: y * RADIANS_PER_DEGREE, z: z * RADIANS_PER_DEGREE };
 }
 
-/**
- * The hand's push on the phone, gravity left out (metres a second squared). Android reports the
- * push itself; Core Motion reports it the other way round, as it does gravity (a phone lying
- * face up reads z = -1 g there), so iOS is turned back.
- */
-function accelerationOf(
-	acceleration: DeviceMotionMeasurement["acceleration"],
-	platform: MotionPlatform,
-): Vector3 {
-	if (!acceleration) return STILL;
-	const sense = platform === "ios" ? -1 : 1;
-	return { x: sense * acceleration.x, y: sense * acceleration.y, z: sense * acceleration.z };
-}
-
 /** One Expo device-motion event as a sample in the phone's own axes, the same on both platforms */
 export function motionSampleOf(
 	data: DeviceMotionMeasurement,
@@ -46,7 +32,6 @@ export function motionSampleOf(
 	return {
 		gravity: gravityFromRotation(data.rotation.beta, data.rotation.gamma),
 		rotationRate: rotationRateOf(data.rotationRate, platform),
-		acceleration: accelerationOf(data.acceleration, platform),
 		timeMs: data.rotation.timestamp * 1000,
 	};
 }

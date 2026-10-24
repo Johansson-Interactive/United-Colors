@@ -34,11 +34,6 @@ export function unit(v: Vector3): Vector3 {
 	return length === 0 ? ZERO : scaled(v, 1 / length);
 }
 
-/** `v` without its part along the unit direction `along` */
-export function without(v: Vector3, along: Vector3): Vector3 {
-	return plus(v, scaled(along, -dot(v, along)));
-}
-
 /** `v` turned by `turn`, an axis scaled by its angle, right-handed (Rodrigues) */
 export function rotated(v: Vector3, turn: Vector3): Vector3 {
 	const angle = lengthOf(turn);

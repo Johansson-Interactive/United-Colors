@@ -5,6 +5,7 @@ import type { MotionSample } from "../../../domain/types";
 interface Recording {
 	kind: "tiltling-motion-recording";
 	platform: string;
+	/** Version 1 also carried the hand's push, in three more columns, which nothing reads now */
 	rows: number[][];
 }
 
@@ -15,10 +16,9 @@ const RECORDINGS = import.meta.glob<Recording>("./*.json", { import: "default", 
 export function trace(name: string): MotionSample[] {
 	const recording = RECORDINGS[`./${name}`];
 	if (!recording) throw new Error(`no recorded trace ${name}`);
-	return recording.rows.map(([t, gx, gy, gz, rx, ry, rz, ax, ay, az]) => ({
+	return recording.rows.map(([t, gx, gy, gz, rx, ry, rz]) => ({
 		gravity: { x: gx, y: gy, z: gz },
 		rotationRate: { x: rx, y: ry, z: rz },
-		acceleration: { x: ax, y: ay, z: az },
 		timeMs: t,
 	}));
 }

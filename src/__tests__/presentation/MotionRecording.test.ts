@@ -13,7 +13,6 @@ function sample(timeMs: number): MotionSample {
 	return {
 		gravity: { x: 0.123456, y: -1, z: 0 },
 		rotationRate: { x: 0, y: 1.5, z: 0 },
-		acceleration: { x: 0.2, y: 0, z: -0.3 },
 		timeMs,
 	};
 }
@@ -26,7 +25,7 @@ describe("motion recording", () => {
 	it("keeps each sample as a row, timed from the first", () => {
 		const recording = recorded([5000, 5010, 5020]);
 		expect(recording.rows).toHaveLength(3);
-		expect(recording.rows[2]).toEqual([20, 0.1235, -1, 0, 0, 1.5, 0, 0.2, 0, -0.3]);
+		expect(recording.rows[2]).toEqual([20, 0.1235, -1, 0, 0, 1.5, 0]);
 		expect(recordedMs(recording)).toBe(20);
 	});
 

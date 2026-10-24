@@ -19,8 +19,6 @@ export interface MotionSample {
 	gravity: Gravity;
 	/** How fast the phone turns (radians a second), right-handed about each axis: the gyroscope */
 	rotationRate: Vector3;
-	/** The acceleration the hand gives the phone, gravity left out (metres a second squared) */
-	acceleration: Vector3;
 	/** When the sensors read it (ms), on a clock of their own; only differences count */
 	timeMs: number;
 }

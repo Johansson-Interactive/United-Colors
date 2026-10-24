@@ -9,7 +9,7 @@ const STILL = { x: 0, y: 0, z: 0 };
 /**
  * A sensor that plays a scripted tilt path instead of reading the phone, for the bench run
  * (see application/bench.ts): `path` gives the gravity `seconds` after the sensor started. As
- * far as the samples say, the phone neither turns nor moves between them.
+ * far as the samples say, the phone does not turn between them.
  */
 export class ScriptedTiltSensor implements SensorPort {
 	private timer: ReturnType<typeof setInterval> | null = null;
@@ -28,7 +28,6 @@ export class ScriptedTiltSensor implements SensorPort {
 			const sample: MotionSample = {
 				gravity: this.path((timeMs - startedAt) / 1000),
 				rotationRate: STILL,
-				acceleration: STILL,
 				timeMs,
 			};
 			for (const listener of this.listeners) listener(sample);
